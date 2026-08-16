@@ -125,7 +125,7 @@ const PAST_DATE = T.addDays(today, -2);
     weekSlug = week.slug;
     check('a new week starts as a draft, not live', week.status, 'draft');
 
-    await POST(`/admin/week/${weekId}`, { title: 'Test Week', description: 'A week for testing.' });
+    await POST(`/admin/week/${weekId}/basics`, { description: 'A week for testing.' });
     await POST(`/admin/week/${weekId}/dates`, { dates: SERVICE_DATE });
 
     const days = db.prepare('SELECT * FROM service_days WHERE week_id = ?').all(weekId);
@@ -186,7 +186,7 @@ const PAST_DATE = T.addDays(today, -2);
 
   /* --- Level 3 is gated too ---------------------------------------------- */
   {
-    // The three seeded standing items ship unreviewed, so they are invisible
+    // The seeded standing items ship unreviewed, so they are invisible
     // until the owner completes their allergen review. That is the safe
     // default, and it is worth proving rather than assuming.
     const beforeReview = await GET(`/w/${weekSlug}/${SERVICE_DATE}`);
@@ -194,10 +194,16 @@ const PAST_DATE = T.addDays(today, -2);
       !beforeReview.text.includes('Pork Schnitzel'));
 
     const A = require('../server/allergens');
+    const DESCRIPTIONS = {
+      'Chili': 'Beef chili with beans and tomato',
+      'Pork Schnitzel': 'Pork schnitzel, panko breaded',
+      'Breaded Chicken Cutlets': 'Breaded chicken cutlets, panko crusted',
+      'Pulled Pork (Reheat Bag)': 'Pulled pork in a bag, for reheating',
+      'BBQ Brisket (Reheat Bag)': 'BBQ beef brisket in a bag, for reheating',
+      'Pulled Chicken (Reheat Bag)': 'Pulled chicken in a bag, for reheating',
+    };
     for (const s of db.prepare('SELECT * FROM standing_items').all()) {
-      const desc = s.name === 'Chili' ? 'Beef chili with beans and tomato'
-        : s.name === 'Pork Schnitzel' ? 'Pork schnitzel, panko breaded'
-          : 'Breaded chicken cutlets, panko crusted';
+      const desc = DESCRIPTIONS[s.name] || `${s.name}, made in-house`;
       await POST(`/admin/other-options/${s.id}`, {
         si_name: s.name,
         si_subcategory: 'Mains',
@@ -405,7 +411,7 @@ const PAST_DATE = T.addDays(today, -2);
     check('and so was the description it was given against', copiedDays[0].ack_of, null);
 
     const standing = db.prepare('SELECT COUNT(*) n FROM standing_items').get().n;
-    check('standing items were left alone — they never belonged to a week', standing, 3);
+    check('standing items were left alone — they never belonged to a week', standing, 6);
   }
 
   /* --- Report -------------------------------------------------------------- */

@@ -13,6 +13,7 @@ function weekPage({ week, days, items, hasPrevious }) {
   const published = week.status === 'published';
   const cutoffHour = settings.getInt('cutoff_hour', 22);
   const cutoffMin = settings.getInt('cutoff_minute', 0);
+  const weekStart = week.week_start || T.mondayOf(T.todayIn(tz()));
 
   const soup = items.soup || { kind: 'soup', weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1 };
   const salad = items.salad || { kind: 'salad', weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1 };
@@ -31,27 +32,67 @@ function weekPage({ week, days, items, hasPrevious }) {
     <!-- 1. Week basics -->
     <div class="card">
       <h2>Week basics</h2>
+      <p class="also"><strong>Title:</strong> ${week.title}</p>
+      <form method="post" action="/admin/week/${week.id}/weekstart" class="dl-row" style="margin-bottom:var(--dbd-sp-4)">
+        <div style="flex:1 1 160px">
+          <label for="wstart">Week starts (Monday)</label>
+          <input type="date" id="wstart" name="week_start" value="${weekStart}">
+        </div>
+        <button class="btn btn--secondary" type="submit" style="align-self:flex-end">Move the boxes below</button>
+      </form>
+      <p class="also" style="margin-bottom:var(--dbd-sp-4)">Changing this only moves which dates the boxes below point
+        at — days you've already filled in stay exactly as they are.</p>
+
       <form method="post" action="/admin/week/${week.id}/basics" data-autosave>
-        <label for="wtitle">Title</label>
-        <input type="text" id="wtitle" name="title" value="${week.title}">
         <label for="wdesc">Description</label>
-        <textarea id="wdesc" name="description" rows="2">${week.description}</textarea>
+        <p class="also">A short blurb for customers. A good place for reminders — that Chili, Pulled Pork,
+          BBQ Brisket and Pulled Chicken are always available under Other Options, for instance.</p>
+        <textarea id="wdesc" name="description" rows="3">${week.description}</textarea>
         <input type="hidden" name="week_image" value="${week.image || ''}">
-        <button class="btn btn--secondary" type="submit">Save week details</button>
+        <button class="btn btn--secondary" type="submit">Save description</button>
         <span class="saveflag" data-saveflag></span>
       </form>
+    </div>
 
-      <h3 class="subhead">Service days</h3>
+    <!-- 2. One box per day -->
+    <div class="card">
+      <h2>This week's days</h2>
+      <p class="also">Fill in whichever days you're cooking. Leave a day blank to skip it — the full
+        details (price, photo, pickup) open up below once a day has a name.</p>
+      <form method="post" action="/admin/week/${week.id}/weekdays" data-autosave>
+        ${T.WEEKDAYS_MON_FIRST.map((wd, offset) => {
+          const date = T.addDays(weekStart, offset);
+          const existing = days.find((d) => d.service_date === date);
+          const stub = { dish_name: '', description: '', allergens: '[]', dismissed: '[]', ack: 0, ack_of: null };
+          const item = existing || stub;
+          return html`
+          <details class="daycard-edit"${existing && existing.dish_name ? '' : ' open'}>
+            <summary>${T.WEEKDAY_LABELS[wd]}, ${T.fmtMonthDay(date, tz())}
+              — ${item.dish_name || 'nothing yet'}
+              ${existing ? V.reviewFlag(item, item.dish_name || 'This dish') : ''}</summary>
+            ${V.itemEditor({
+              prefix: wd, item, nameLabel: 'Featured dish',
+              showPhoto: false, showHalal: false, showPrices: false,
+            })}
+          </details>`;
+        })}
+        <button class="btn btn--primary" type="submit">Save this week's days</button>
+        <span class="saveflag" data-saveflag></span>
+      </form>
+    </div>
+
+    <details class="daycard-edit" style="margin-bottom:var(--dbd-sp-5)">
+      <summary>Need a date outside this week?</summary>
       <form method="post" action="/admin/week/${week.id}/dates">
-        <p class="also">Add the dates you're cooking. Each one gets exactly one featured dish.</p>
+        <p class="also">For a one-off date that doesn't fit the boxes above — a holiday pop-up, say.</p>
         <div class="dl-row">
           <input type="date" name="dates" style="flex:1 1 160px">
           <button class="btn btn--secondary" type="submit">Add day</button>
         </div>
       </form>
-    </div>
+    </details>
 
-    <!-- 2. Soup & salad of the week -->
+    <!-- 3. Soup & salad of the week -->
     <div class="card">
       <h2>Soup &amp; salad of the week</h2>
       <p class="also">Entered once for the whole week. One soup, one salad — either can be left blank.
@@ -76,8 +117,10 @@ function weekPage({ week, days, items, hasPrevious }) {
       </div>
     </div>
 
-    <!-- 3. Service days -->
-    <h2>Service days</h2>
+    <!-- 4. Service day details: price, photo, pickup override -->
+    <h2>Day details</h2>
+    <p class="also" style="margin-bottom:var(--dbd-sp-4)">Price, photo and pickup overrides for
+      whichever days have a name above.</p>
     ${days.length ? days.map((d) => {
       const cutoff = T.cutoffFor(d.service_date, cutoffHour, cutoffMin, tz());
       const win = M.pickupWindowFor(d);

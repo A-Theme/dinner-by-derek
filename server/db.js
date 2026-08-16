@@ -38,8 +38,9 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS weeks (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   slug          TEXT NOT NULL UNIQUE,
-  title         TEXT NOT NULL DEFAULT '',
+  title         TEXT NOT NULL DEFAULT '',          -- computed from week_start
   description   TEXT NOT NULL DEFAULT '',
+  week_start    TEXT,                              -- Monday of the week, YYYY-MM-DD
   image         TEXT,
   status        TEXT NOT NULL DEFAULT 'draft',   -- draft | published | retired
   published_at  TEXT,
@@ -263,6 +264,26 @@ if (db.prepare('SELECT COUNT(*) n FROM standing_items').get().n === 0) {
   ins.run('Breaded Chicken Cutlets', 'Mains', '', 'every_service_day', 3, 1700);
 }
 
+/* --- Seed: standing items added after the initial release ---------------
+ * Gated per-item by name, not table emptiness, so this also backfills an
+ * install that already seeded the original three. Descriptions are left
+ * blank on purpose — same as the original seed — so each still needs its
+ * own allergen review before it can appear to customers.
+ */
+{
+  const hasItem = db.prepare('SELECT 1 FROM standing_items WHERE name = ?');
+  const insOne = db.prepare(`INSERT INTO standing_items
+    (name, subcategory, description, availability, sort, full_price, full_on)
+    VALUES (?,?,?,?,?,?,1)`);
+  const nextSort = () => (db.prepare('SELECT COALESCE(MAX(sort),0) n FROM standing_items').get().n) + 1;
+  const seedIfMissing = (name, price) => {
+    if (!hasItem.get(name)) insOne.run(name, 'Mains', '', 'every_service_day', nextSort(), price);
+  };
+  seedIfMissing('Pulled Pork (Reheat Bag)', 1600);
+  seedIfMissing('BBQ Brisket (Reheat Bag)', 1900);
+  seedIfMissing('Pulled Chicken (Reheat Bag)', 1500);
+}
+
 /* --- Seed: delivery area ------------------------------------------------- */
 if (db.prepare('SELECT COUNT(*) n FROM zones').get().n === 0) {
   const z = db.prepare('INSERT INTO zones (name, fee) VALUES (?,?)')
@@ -302,6 +323,7 @@ function addColumn(table, column, definition) {
   if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 addColumn('fb_connection', 'warned_at', 'TEXT');
+addColumn('weeks', 'week_start', 'TEXT');
 
 function renameColumn(table, from, to) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();

@@ -78,8 +78,14 @@ function reviewFlag(item, label) {
  * The item editor. Used unchanged for all three levels — the allergen gate,
  * variants and photo behave identically whether the owner is editing a
  * featured dish, the week's soup, or a standing item.
+ *
+ * The showPhoto/showHalal/showPrices flags trim it down for the This Week
+ * quick-entry boxes, which only need a name, description and allergen
+ * review — enough to pass the publish gate. Price, photo and halal are
+ * still edited in the full day card below once the day exists.
  */
-function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWeekdays = false, label }) {
+function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWeekdays = false,
+  showPhoto = true, showHalal = true, showPrices = true, label }) {
   const accepted = JSON.parse(item.allergens || '[]');
   const dismissed = JSON.parse(item.dismissed || '[]');
   const weekdays = JSON.parse(item.weekdays || '[]');
@@ -120,6 +126,7 @@ function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWee
       </label>
     </div>
 
+    ${showPhoto ? html`
     <label>Photo</label>
     <div class="dropzone" data-drop tabindex="0" role="button">
       ${item.photo ? html`<img src="/uploads/${item.photo}" alt="">` : ''}
@@ -135,12 +142,13 @@ function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWee
       <button type="button" class="btn btn--secondary" data-take>Take photo</button>
       <button type="button" class="btn btn--secondary" data-choose>Choose from library</button>
       ${item.photo ? html`<button type="button" class="btn btn--secondary" data-clearphoto>Remove photo</button>` : ''}
-    </div>
+    </div>` : ''}
 
+    ${showHalal ? html`
     <label style="display:flex;gap:var(--dbd-sp-3);align-items:center">
       <input type="checkbox" name="${prefix}_halal" value="1" style="width:24px;height:24px"${item.halal ? ' checked' : ''}>
       <span>Prepared halal — shown to customers as declared by the kitchen</span>
-    </label>
+    </label>` : ''}
 
     ${showWeekdays ? html`
       <fieldset>
@@ -151,6 +159,7 @@ function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWee
             ${T.WEEKDAY_LABELS[w].slice(0, 3)}</label>`)}
       </fieldset>` : ''}
 
+    ${showPrices ? html`
     <fieldset>
       <legend>Sizes and prices</legend>
       <div class="stack2">
@@ -175,7 +184,7 @@ function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWee
             value="${item.single_cap == null ? '' : item.single_cap}" placeholder="How many available">
         </div>
       </div>
-    </fieldset>
+    </fieldset>` : ''}
   </div>`;
 }
 

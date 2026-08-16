@@ -16,6 +16,8 @@ const WEEKDAY_LABELS = {
   sun: 'Sunday', mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday',
   thu: 'Thursday', fri: 'Friday', sat: 'Saturday',
 };
+/** Monday-first order, for laying out a week as a grid. */
+const WEEKDAYS_MON_FIRST = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 /** Offset (ms) between the given instant's wall time in `tz` and UTC. */
 function tzOffsetMs(instant, tz) {
@@ -65,6 +67,13 @@ function addDays(iso, n) {
 function weekdayOf(iso) {
   const { y, m, d } = parseDate(iso);
   return WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+}
+
+/** The Monday on or before this date. */
+function mondayOf(iso) {
+  const idx = WEEKDAYS.indexOf(weekdayOf(iso)); // sun=0 … sat=6
+  const back = idx === 0 ? 6 : idx - 1;
+  return addDays(iso, -back);
 }
 
 /**
@@ -118,6 +127,14 @@ function fmtDayShort(iso, tz) {
   }).format(new Date(Date.UTC(y, m - 1, d, 12)));
 }
 
+/** "Aug 19" — no weekday, for labels that already state the weekday. */
+function fmtMonthDay(iso, tz) {
+  const { y, m, d } = parseDate(iso);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, month: 'short', day: 'numeric',
+  }).format(new Date(Date.UTC(y, m - 1, d, 12)));
+}
+
 /** "16:30" -> "4:30 PM" */
 function fmtClock(hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
@@ -130,9 +147,30 @@ function fmtWindow(start, end) {
   return `${fmtClock(start)}–${fmtClock(end)}`;
 }
 
+/** "Aug 17–23, 2026" — a Monday-start week, formatted as a range. Handles
+ *  the week crossing a month or year boundary. */
+function fmtWeekRange(startIso, tz) {
+  const endIso = addDays(startIso, 6);
+  const s = parseDate(startIso), e = parseDate(endIso);
+  const startDate = new Date(Date.UTC(s.y, s.m - 1, s.d, 12));
+  const endDate = new Date(Date.UTC(e.y, e.m - 1, e.d, 12));
+  const fmt = (opts) => (d) => new Intl.DateTimeFormat('en-CA', { timeZone: tz, ...opts }).format(d);
+
+  if (s.y !== e.y) {
+    const full = fmt({ month: 'short', day: 'numeric', year: 'numeric' });
+    return `${full(startDate)}–${full(endDate)}`;
+  }
+  if (s.m !== e.m) {
+    return `${fmt({ month: 'short', day: 'numeric' })(startDate)}–${fmt({ month: 'short', day: 'numeric', year: 'numeric' })(endDate)}`;
+  }
+  // Intl has no clean "day + year, no month" pattern (ICU falls back to an
+  // odd disambiguated string), so that piece is built by hand instead.
+  return `${fmt({ month: 'short', day: 'numeric' })(startDate)}–${e.d}, ${e.y}`;
+}
+
 module.exports = {
-  WEEKDAYS, WEEKDAY_LABELS,
-  tzOffsetMs, zonedToUtc, addDays, weekdayOf, cutoffFor, dayState,
-  todayIn, fmtLocal, fmtDayLong, fmtDayShort,
-  fmtClock, fmtWindow, parseDate,
+  WEEKDAYS, WEEKDAY_LABELS, WEEKDAYS_MON_FIRST,
+  tzOffsetMs, zonedToUtc, addDays, weekdayOf, mondayOf, cutoffFor, dayState,
+  todayIn, fmtLocal, fmtDayLong, fmtDayShort, fmtMonthDay,
+  fmtClock, fmtWindow, fmtWeekRange, parseDate,
 };

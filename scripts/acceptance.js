@@ -105,6 +105,20 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('a shifted window reflects the shift', T.fmtWindow('17:00', '20:00'), '5:00 PM–8:00 PM');
 }
 
+/* --- Monday-of and the week-range title ------------------------------------ */
+{
+  check('a mid-week date rolls back to its Monday', T.mondayOf('2026-08-13'), '2026-08-10');
+  check('a Sunday rolls back to the Monday before it, not itself', T.mondayOf('2026-08-16'), '2026-08-10');
+  check('a Monday stays put', T.mondayOf('2026-08-10'), '2026-08-10');
+
+  // Regression: Intl.DateTimeFormat has no clean "day + year, no month"
+  // pattern — {day:'numeric', year:'numeric'} alone falls back to a mangled
+  // string like "2026 (day: 16)" in Node's ICU. fmtWeekRange must not hit it.
+  check('same-month week range', T.fmtWeekRange('2026-08-10', TZ), 'Aug 10–16, 2026');
+  check('cross-month week range', T.fmtWeekRange('2026-08-31', TZ), 'Aug 31–Sep 6, 2026');
+  check('cross-year week range', T.fmtWeekRange('2025-12-29', TZ), 'Dec 29, 2025–Jan 4, 2026');
+}
+
 /* --- Postal code normalization -------------------------------------------- */
 {
   const forms = ['N2L 3G1', 'n2l3g1', 'N2L-3G1', '  n2l 3g1  ', 'N2l3G1'];
@@ -231,8 +245,10 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
 /* --- Standing items are seeded and persist -------------------------------- */
 {
   const names = db.prepare('SELECT name FROM standing_items ORDER BY sort').all().map((r) => r.name);
-  check('the three standing items are seeded',
-    names, ['Chili', 'Pork Schnitzel', 'Breaded Chicken Cutlets']);
+  check('the standing items are seeded', names, [
+    'Chili', 'Pork Schnitzel', 'Breaded Chicken Cutlets',
+    'Pulled Pork (Reheat Bag)', 'BBQ Brisket (Reheat Bag)', 'Pulled Chicken (Reheat Bag)',
+  ]);
 }
 
 /* --- Weekday availability -------------------------------------------------- */

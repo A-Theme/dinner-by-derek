@@ -134,10 +134,19 @@ router.get('/week', (req, res) => {
                   ORDER BY CASE status WHEN 'draft' THEN 0 ELSE 1 END, id DESC LIMIT 1`).get();
 
   if (!week) {
+    const weekStart = T.mondayOf(T.todayIn(tz()));
     const slug = `week-${T.todayIn(tz())}`;
-    const id = db.prepare('INSERT INTO weeks (slug, title) VALUES (?,?)')
-      .run(slug, 'This week').lastInsertRowid;
+    const id = db.prepare('INSERT INTO weeks (slug, title, week_start) VALUES (?,?,?)')
+      .run(slug, T.fmtWeekRange(weekStart, tz()), weekStart).lastInsertRowid;
     week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(id);
+  } else if (!week.week_start) {
+    // Backfills a week created before week_start existed. Prefers its earliest
+    // service day, so an already-planned week keeps showing the right dates.
+    const earliest = db.prepare(`SELECT MIN(service_date) d FROM service_days WHERE week_id = ?`).get(week.id).d;
+    const weekStart = T.mondayOf(earliest || T.todayIn(tz()));
+    db.prepare('UPDATE weeks SET week_start=?, title=? WHERE id=?')
+      .run(weekStart, T.fmtWeekRange(weekStart, tz()), week.id);
+    week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(week.id);
   }
 
   res.type('html').send(String(W.weekPage({
@@ -150,11 +159,55 @@ router.get('/week', (req, res) => {
 
 router.post('/week/:id/basics', (req, res) => {
   const id = Number(req.params.id);
-  db.prepare('UPDATE weeks SET title=?, description=?, image=? WHERE id=?')
-    .run(String(req.body.title || '').trim(), String(req.body.description || '').trim(),
+  db.prepare('UPDATE weeks SET description=?, image=? WHERE id=?')
+    .run(String(req.body.description || '').trim(),
       String(req.body.week_image || '').trim() || null, id);
   if (req.get('X-Draft')) return res.json({ ok: true });
   back(res, req, 'Week details saved.');
+});
+
+router.post('/week/:id/weekstart', (req, res) => {
+  const id = Number(req.params.id);
+  const raw = String(req.body.week_start || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return back(res, req, null, 'That date doesn\'t look right.');
+  const weekStart = T.mondayOf(raw);
+  db.prepare('UPDATE weeks SET week_start=?, title=? WHERE id=?')
+    .run(weekStart, T.fmtWeekRange(weekStart, tz()), id);
+  back(res, req, 'Week updated. Existing service days were kept — only the boxes above moved.');
+});
+
+/* One box per weekday, Monday through Sunday. Each upserts the service day
+   for its computed date, but only touches the fields the box actually shows
+   — name, description, allergen review. Price, photo and pickup overrides
+   (set in the day cards below) are never overwritten by this route. */
+router.post('/week/:id/weekdays', (req, res) => {
+  const id = Number(req.params.id);
+  const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(id);
+  if (!week) return back(res, req, null, 'That week no longer exists.');
+  const weekStart = week.week_start || T.mondayOf(T.todayIn(tz()));
+
+  const tx = db.transaction(() => {
+    T.WEEKDAYS_MON_FIRST.forEach((wd, offset) => {
+      const item = IF.parse(req.body, wd);
+      if (!item.name && !item.description) return; // nothing entered for this day
+      const date = T.addDays(weekStart, offset);
+      const existing = db.prepare('SELECT id FROM service_days WHERE week_id = ? AND service_date = ?').get(id, date);
+      if (existing) {
+        db.prepare(`UPDATE service_days SET dish_name=?, description=?,
+            allergens=?, dismissed=?, ack=?, ack_of=? WHERE id=?`)
+          .run(item.name, item.description, item.allergens, item.dismissed,
+            item.ack, item.ack_of, existing.id);
+      } else {
+        db.prepare(`INSERT INTO service_days
+            (week_id, service_date, dish_name, description, allergens, dismissed, ack, ack_of)
+            VALUES (?,?,?,?,?,?,?,?)`)
+          .run(id, date, item.name, item.description, item.allergens, item.dismissed, item.ack, item.ack_of);
+      }
+    });
+  });
+  tx();
+  if (req.get('X-Draft')) return res.json({ ok: true });
+  back(res, req, 'This week\'s days saved.');
 });
 
 router.post('/week/:id/dates', (req, res) => {
@@ -235,10 +288,12 @@ router.post('/week/duplicate', (req, res) => {
   const srcDays = M.serviceDaysOf(src.id);
   const shift = srcDays.length ? 7 : 0;
   const slug = `week-${srcDays.length ? T.addDays(srcDays[0].service_date, shift) : T.todayIn(tz())}-${crypto.randomBytes(2).toString('hex')}`;
+  const weekStart = T.addDays(src.week_start || T.mondayOf(T.todayIn(tz())), 7);
+  const title = T.fmtWeekRange(weekStart, tz());
 
   const tx = db.transaction(() => {
-    const newId = db.prepare('INSERT INTO weeks (slug, title, description, image, status) VALUES (?,?,?,?,?)')
-      .run(slug, src.title, src.description, src.image, 'draft').lastInsertRowid;
+    const newId = db.prepare('INSERT INTO weeks (slug, title, description, image, status, week_start) VALUES (?,?,?,?,?,?)')
+      .run(slug, title, src.description, src.image, 'draft', weekStart).lastInsertRowid;
 
     for (const d of srcDays) {
       db.prepare(`INSERT INTO service_days

@@ -85,7 +85,12 @@ separately, and they are only combined when a customer looks at a day.
 **One per service day.** A service day *is* a date plus its featured dish; that
 is what makes the day worth showing up for.
 
-Authored in **This Week**, in the card for that date.
+Authored in **This Week**, one box per weekday — Monday through Sunday. Fill in
+whichever days you're cooking and leave the rest blank. Each box is name and
+description, enough to clear the allergen gate; price, photo and any pickup
+override for that day open up below once the box has a name in it. The "Week
+starts" date decides which seven calendar dates the boxes point at — moving it
+only re-labels the boxes, it never touches a day you've already filled in.
 
 ### Level 2 — soup and salad of the week
 
@@ -100,9 +105,10 @@ produce two soups in a week.
 
 ### Level 3 — standing items
 
-**Items that carry across weeks.** Ships with Chili, Pork Schnitzel and Breaded
-Chicken Cutlets. These are not part of any week — building a new week leaves
-them alone.
+**Items that carry across weeks.** Ships with Chili, Pork Schnitzel, Breaded
+Chicken Cutlets, Pulled Pork (Reheat Bag), BBQ Brisket (Reheat Bag) and Pulled
+Chicken (Reheat Bag). These are not part of any week — building a new week
+leaves them alone.
 
 Authored in **Other Options**.
 
@@ -118,7 +124,7 @@ then the week's soup and salad if they run on Wednesdays; then every standing
 item. Grouped as Soups, Salads, Mains.
 
 **Items you haven't finished reviewing are absent, not greyed out.** This is why
-the three seeded standing items don't appear on a fresh install: they have no
+the seeded standing items don't appear on a fresh install: they have no
 allergen review yet. Open **Other Options**, give each a description, review the
 allergen suggestions, and tick the box. Then they appear.
 
