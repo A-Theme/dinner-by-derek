@@ -1,0 +1,32 @@
+{
+  "name": "dinner-by-derek",
+  "version": "1.0.0",
+  "description": "Installable ordering PWA for the Dinner By Derek supper club.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "icons": "node scripts/make-icons.js",
+    "contrast": "node scripts/contrast.js",
+    "test": "node scripts/acceptance.js && node scripts/flow.js",
+    "acceptance": "node scripts/acceptance.js",
+    "flow": "node scripts/flow.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "heic-convert": "^2.1.0",
+    "multer": "^2.2.0",
+    "nodemailer": "^9.0.5",
+    "sharp": "^0.35.3"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  }
+}

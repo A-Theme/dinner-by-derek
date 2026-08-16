@@ -1,0 +1,189 @@
+'use strict';
+const { html, raw, money, jsonAttr } = require('../html');
+const { settings } = require('../db');
+const { palette } = require('../theme');
+const T = require('../time');
+const A = require('../allergens');
+
+const NAV = [
+  ['/admin', 'This Week', '/admin/week'],
+  ['/admin/week', 'This Week'],
+  ['/admin/other-options', 'Other Options'],
+  ['/admin/orders', 'Orders'],
+  ['/admin/locations', 'Locations & Delivery'],
+  ['/admin/settings', 'Settings'],
+];
+
+function shell({ title, body, current = '', extraHead = null, scripts = null }) {
+  return html`<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>${title} — Dashboard</title>
+<meta name="theme-color" content="${palette.olive}">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/admin.css">
+${extraHead || ''}
+</head><body>
+<nav class="admin-nav no-print"><ul>
+  <li><a href="/admin"${current === 'today' ? ' aria-current="page"' : ''}>Today</a></li>
+  <li><a href="/admin/week"${current === 'week' ? ' aria-current="page"' : ''}>This Week</a></li>
+  <li><a href="/admin/other-options"${current === 'other' ? ' aria-current="page"' : ''}>Other Options</a></li>
+  <li><a href="/admin/orders"${current === 'orders' ? ' aria-current="page"' : ''}>Orders</a></li>
+  <li><a href="/admin/locations"${current === 'locations' ? ' aria-current="page"' : ''}>Locations &amp; Delivery</a></li>
+  <li><a href="/admin/settings"${current === 'settings' ? ' aria-current="page"' : ''}>Settings</a></li>
+</ul></nav>
+<main class="admin-wrap">
+${body}
+</main>
+<div id="toasts" aria-live="polite"></div>
+<script src="/admin.js" defer></script>
+${scripts || ''}
+</body></html>`;
+}
+
+function login(error, next) {
+  return html`<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in</title><meta name="theme-color" content="${palette.olive}">
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/app.css">
+</head><body><main class="wrap" style="max-width:420px;margin-top:var(--dbd-sp-7)">
+<div class="card">
+<h1>Dinner By Derek</h1>
+<p>Sign in to the dashboard.</p>
+${error ? html`<div class="notice notice--strong">${error}</div>` : ''}
+<form method="post" action="/admin/login">
+<input type="hidden" name="next" value="${next || '/admin'}">
+<label for="pw">Password</label>
+<input type="password" id="pw" name="password" autocomplete="current-password" autofocus required
+  style="width:100%;min-height:var(--dbd-tap);padding:var(--dbd-sp-2) var(--dbd-sp-3);
+  border:1px solid var(--dbd-olive);border-radius:var(--dbd-radius-sm);
+  background:var(--dbd-cream-hi);margin-bottom:var(--dbd-sp-3);font:inherit">
+<button class="btn btn--primary btn--block" type="submit">Sign in</button>
+</form></div></main></body></html>`;
+}
+
+/** Plain-language review state indicator used everywhere an item is listed. */
+function reviewFlag(item, label) {
+  const st = A.reviewState(item);
+  if (st.ok) return html`<span class="flag flag--ok">Reviewed</span>`;
+  const msg = A.reviewMessage(label || 'This item', st);
+  return html`<span class="flag flag--stop" title="${msg}">Needs allergen review</span>`;
+}
+
+/**
+ * The item editor. Used unchanged for all three levels — the allergen gate,
+ * variants and photo behave identically whether the owner is editing a
+ * featured dish, the week's soup, or a standing item.
+ */
+function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWeekdays = false, label }) {
+  const accepted = JSON.parse(item.allergens || '[]');
+  const dismissed = JSON.parse(item.dismissed || '[]');
+  const weekdays = JSON.parse(item.weekdays || '[]');
+  const ackValid = item.ack && (item.ack_of || '') === (item.description || '');
+
+  return html`
+  <div class="item-editor" data-editor data-prefix="${prefix}">
+    ${showName ? html`
+      <label for="${prefix}_name">${nameLabel}</label>
+      <input type="text" id="${prefix}_name" name="${prefix}_name" value="${item.name || item.dish_name || ''}">` : ''}
+
+    <label for="${prefix}_description">Description</label>
+    <textarea id="${prefix}_description" name="${prefix}_description" rows="4"
+      data-description data-ack-of="${item.ack_of || ''}">${item.description || ''}</textarea>
+
+    <div class="suggestions" data-suggestions hidden>
+      <div class="suggestions__label">Suggested from the description — nothing is applied until you accept it</div>
+      <div data-sugg-list></div>
+    </div>
+
+    <label>Allergen tags on this dish</label>
+    <div data-tags>
+      ${accepted.map((a) => html`<span class="tag" data-tag="${a}">${a}
+        <button type="button" data-remove aria-label="Remove ${a}">✕</button></span>`)}
+    </div>
+    <input type="hidden" name="${prefix}_allergens" value="${JSON.stringify(accepted)}" data-allergens>
+    <input type="hidden" name="${prefix}_dismissed" value="${JSON.stringify(dismissed)}" data-dismissed>
+    <p><select data-add-allergen style="max-width:260px;display:inline-block">
+      <option value="">Add an allergen manually…</option>
+      ${A.HEALTH_CANADA_ORDER.map((a) => html`<option value="${a}">${a}</option>`)}
+    </select></p>
+
+    <div class="ackbox">
+      <label>
+        <input type="checkbox" name="${prefix}_ack" value="1" data-ack${ackValid ? ' checked' : ''}>
+        <span>I have reviewed the allergen information for this dish.
+        ${!ackValid && item.ack ? html`<br><span class="flag flag--warn">The description changed since you last reviewed it — please check the tags again.</span>` : ''}</span>
+      </label>
+    </div>
+
+    <label>Photo</label>
+    <div class="dropzone" data-drop tabindex="0" role="button">
+      ${item.photo ? html`<img src="/uploads/${item.photo}" alt="">` : ''}
+      <p><strong>Tap to choose a photo</strong><br>
+        <span class="variant__label">or drag one in, or paste from the clipboard. iPhone HEIC is fine.</span></p>
+      <input type="file" accept="image/*,.heic,.heif" hidden data-file>
+      <input type="file" accept="image/*" capture="environment" hidden data-camera>
+      <div class="progress" hidden><div></div></div>
+      <p class="dz-msg variant__label"></p>
+    </div>
+    <input type="hidden" name="${prefix}_photo" value="${item.photo || ''}" data-photo>
+    <div class="dl-row" style="margin-bottom:var(--dbd-sp-4)">
+      <button type="button" class="btn btn--secondary" data-take>Take photo</button>
+      <button type="button" class="btn btn--secondary" data-choose>Choose from library</button>
+      ${item.photo ? html`<button type="button" class="btn btn--secondary" data-clearphoto>Remove photo</button>` : ''}
+    </div>
+
+    <label style="display:flex;gap:var(--dbd-sp-3);align-items:center">
+      <input type="checkbox" name="${prefix}_halal" value="1" style="width:24px;height:24px"${item.halal ? ' checked' : ''}>
+      <span>Prepared halal — shown to customers as declared by the kitchen</span>
+    </label>
+
+    ${showWeekdays ? html`
+      <fieldset>
+        <legend>Available on</legend>
+        ${T.WEEKDAYS.map((w) => html`
+          <label style="display:inline-flex;gap:var(--dbd-sp-2);align-items:center;margin-right:var(--dbd-sp-4)">
+            <input type="checkbox" name="${prefix}_weekdays" value="${w}" style="width:22px;height:22px"${weekdays.includes(w) ? ' checked' : ''}>
+            ${T.WEEKDAY_LABELS[w].slice(0, 3)}</label>`)}
+      </fieldset>` : ''}
+
+    <fieldset>
+      <legend>Sizes and prices</legend>
+      <div class="stack2">
+        <div>
+          <label style="display:flex;gap:var(--dbd-sp-2);align-items:center">
+            <input type="checkbox" name="${prefix}_full_on" value="1" style="width:22px;height:22px"${item.full_on ? ' checked' : ''}>
+            Offer full size</label>
+          <input type="text" name="${prefix}_full_label" value="${item.full_label || settings.get('full_label')}" placeholder="Label">
+          <input type="text" name="${prefix}_full_price" inputmode="decimal"
+            value="${item.full_price != null ? (item.full_price / 100).toFixed(2) : ''}" placeholder="Price, e.g. 18.00">
+          <input type="number" name="${prefix}_full_cap" min="0" step="1"
+            value="${item.full_cap == null ? '' : item.full_cap}" placeholder="How many available (blank = no limit)">
+        </div>
+        <div>
+          <label style="display:flex;gap:var(--dbd-sp-2);align-items:center">
+            <input type="checkbox" name="${prefix}_single_on" value="1" style="width:22px;height:22px"${item.single_on ? ' checked' : ''}>
+            Offer meal for one</label>
+          <input type="text" name="${prefix}_single_label" value="${item.single_label || settings.get('single_label')}" placeholder="Label">
+          <input type="text" name="${prefix}_single_price" inputmode="decimal"
+            value="${item.single_price != null ? (item.single_price / 100).toFixed(2) : ''}" placeholder="Price">
+          <input type="number" name="${prefix}_single_cap" min="0" step="1"
+            value="${item.single_cap == null ? '' : item.single_cap}" placeholder="How many available">
+        </div>
+      </div>
+    </fieldset>
+  </div>`;
+}
+
+function confirmForm({ action, buttonLabel, message, hidden = {}, kind = 'secondary' }) {
+  return html`<form method="post" action="${action}" data-confirm="${message}" style="display:inline">
+    ${Object.entries(hidden).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}">`)}
+    <button type="submit" class="btn btn--${kind}">${buttonLabel}</button>
+  </form>`;
+}
+
+module.exports = { shell, login, itemEditor, reviewFlag, confirmForm };

@@ -1,0 +1,80 @@
+/* ============================================================
+   Dinner By Derek — theme
+   THE ONLY FILE IN THIS CODEBASE CONTAINING HEX COLOUR LITERALS.
+   Everything else references var(--dbd-*).
+   ============================================================ */
+
+:root {
+  /* Brand palette */
+  --dbd-olive:       #5A6643;  /* Primary brand   — Olive Green  */
+  --dbd-tan:         #BE8146;  /* Secondary brand — Saddle Tan   */
+  --dbd-umber:       #4A2A1A;  /* Accent          — Burnt Umber  */
+  --dbd-parchment:   #F4EFEB;  /* Neutral light   — Cream        */
+  --dbd-espresso:    #2C1E18;  /* Neutral dark    — Espresso     */
+  --dbd-ochre:       #D8924A;  /* Hover           — Warm Ochre   */
+
+  /* Tonal derivatives — see CONTRAST.md for the audit that produced these.
+     Every one is a darkened/lightened step of a palette colour, not a new hue. */
+  --dbd-olive-deep:  #414A2F;  /* olive darkened: AA body text on parchment  */
+  --dbd-tan-deep:    #8A5A2B;  /* tan darkened: AA body text on parchment    */
+  --dbd-umber-soft:  #6B4630;  /* umber lightened: borders, muted labels     */
+  --dbd-parchment-2: #EAE2DB;  /* parchment shaded: table stripes, wells     */
+  --dbd-espresso-2:  #1B120E;  /* espresso deepened: splash, print rules     */
+  --dbd-cream-hi:    #FBF8F6;  /* parchment lifted: card surfaces on wells   */
+
+  /* --- Two audit-driven corrections. See CONTRAST.md. ---------------------
+     Burnt Umber on Saddle Tan measured 3.92:1 — large-text only. Badge text
+     is small, so badges use umber stepped two shades darker: 4.52:1.
+     Saddle Tan on Olive measured 1.88:1 — fails even the 3:1 non-text bar,
+     so the header active indicator uses Saddle Tan lifted: 3.64:1. */
+  --dbd-umber-deep:  #3C2114;
+  --dbd-tan-lift:    #EBC08C;
+
+  /* Alpha derivatives for hairlines and scrims */
+  --dbd-rule-tan:    rgba(190, 129, 70, 0.28);
+  --dbd-rule-olive:  rgba(90, 102, 67, 0.24);
+  --dbd-scrim:       rgba(44, 30, 24, 0.55);
+  --dbd-shadow:      rgba(44, 30, 24, 0.10);
+
+  /* Semantic roles — state colours derive from the palette, never stock RGB */
+  --dbd-surface:        var(--dbd-parchment);
+  --dbd-surface-raised: var(--dbd-cream-hi);
+  --dbd-surface-sunk:   var(--dbd-parchment-2);
+  --dbd-ink:            var(--dbd-espresso);
+  --dbd-ink-muted:      var(--dbd-umber-soft);
+  --dbd-heading:        var(--dbd-umber);
+
+  --dbd-ok:      var(--dbd-olive-deep);   /* success / open / confirmed  */
+  --dbd-warn:    var(--dbd-tan-deep);     /* closing soon / needs review */
+  --dbd-danger:  var(--dbd-umber);        /* sold out / closed / error   */
+
+  /* Type — no network fetch, so the installed app never flashes unstyled */
+  --dbd-display: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino,
+                 "Book Antiqua", Georgia, "Times New Roman", serif;
+  --dbd-body:    system-ui, -apple-system, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+  --dbd-mono:    ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* Scale */
+  --dbd-step--1: 0.833rem;
+  --dbd-step-0:  1rem;
+  --dbd-step-1:  1.2rem;
+  --dbd-step-2:  1.44rem;
+  --dbd-step-3:  1.728rem;
+  --dbd-step-4:  2.074rem;
+
+  --dbd-sp-1: 0.25rem;
+  --dbd-sp-2: 0.5rem;
+  --dbd-sp-3: 0.75rem;
+  --dbd-sp-4: 1rem;
+  --dbd-sp-5: 1.5rem;
+  --dbd-sp-6: 2rem;
+  --dbd-sp-7: 3rem;
+
+  --dbd-radius:    10px;
+  --dbd-radius-sm: 6px;
+  --dbd-radius-pill: 999px;
+
+  /* 44px minimum tap target, kitchen-hands sized */
+  --dbd-tap: 44px;
+}

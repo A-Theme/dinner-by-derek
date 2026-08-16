@@ -1,0 +1,279 @@
+/* Dashboard behaviour. Designed for one thumb on a phone in a kitchen. */
+(function () {
+  'use strict';
+
+  /* --- Toasts: nothing succeeds silently -------------------------------- */
+  function toast(msg, kind) {
+    var el = document.createElement('div');
+    el.className = 'toast toast--' + (kind === 'bad' ? 'bad' : 'ok');
+    el.textContent = msg;
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(function () { el.remove(); }, kind === 'bad' ? 7000 : 3500);
+  }
+  window.dbdToast = toast;
+
+  var params = new URLSearchParams(location.search);
+  if (params.get('ok')) toast(decodeURIComponent(params.get('ok')), 'ok');
+  if (params.get('err')) toast(decodeURIComponent(params.get('err')), 'bad');
+  if (params.get('ok') || params.get('err')) {
+    params.delete('ok'); params.delete('err');
+    history.replaceState({}, '', location.pathname + (params.toString() ? '?' + params : ''));
+  }
+
+  /* --- Confirms name exactly what will happen --------------------------- */
+  document.querySelectorAll('[data-confirm]').forEach(function (f) {
+    f.addEventListener('submit', function (e) {
+      if (!window.confirm(f.dataset.confirm)) e.preventDefault();
+    });
+  });
+
+  /* --- Live cutoff countdown -------------------------------------------- */
+  document.querySelectorAll('[data-countdown]').forEach(function (el) {
+    var target = new Date(el.dataset.countdown).getTime();
+    function tick() {
+      var ms = target - Date.now();
+      if (ms <= 0) { el.textContent = 'closed'; return; }
+      var h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60;
+      el.textContent = (h > 0 ? h + 'h ' : '') + m + 'm ' + s + 's';
+      setTimeout(tick, 1000);
+    }
+    tick();
+  });
+
+  /* --- Allergen suggestions --------------------------------------------- */
+  document.querySelectorAll('[data-editor]').forEach(function (ed) {
+    var desc = ed.querySelector('[data-description]');
+    var box = ed.querySelector('[data-suggestions]');
+    var list = ed.querySelector('[data-sugg-list]');
+    var tags = ed.querySelector('[data-tags]');
+    var hiddenA = ed.querySelector('[data-allergens]');
+    var hiddenD = ed.querySelector('[data-dismissed]');
+    var ack = ed.querySelector('[data-ack]');
+    var timer = null;
+
+    function accepted() { try { return JSON.parse(hiddenA.value || '[]'); } catch (e) { return []; } }
+    function dismissed() { try { return JSON.parse(hiddenD.value || '[]'); } catch (e) { return []; } }
+
+    function renderTags() {
+      tags.innerHTML = '';
+      accepted().forEach(function (a) {
+        var s = document.createElement('span');
+        s.className = 'tag';
+        s.textContent = a + ' ';
+        var b = document.createElement('button');
+        b.type = 'button'; b.textContent = '✕';
+        b.setAttribute('aria-label', 'Remove ' + a);
+        b.addEventListener('click', function () {
+          hiddenA.value = JSON.stringify(accepted().filter(function (x) { return x !== a; }));
+          renderTags(); suggest();
+        });
+        s.appendChild(b);
+        tags.appendChild(s);
+      });
+    }
+
+    function suggest() {
+      if (!desc) return;
+      fetch('/admin/api/suggest', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: desc.value, accepted: accepted(), dismissed: dismissed(),
+        }),
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        list.innerHTML = '';
+        box.hidden = !d.pending.length;
+        d.pending.forEach(function (p) {
+          var w = document.createElement('span');
+          w.className = 'sugg';
+          w.innerHTML = '<span>' + p.allergen + ' <span style="opacity:.7">(' + p.terms.join(', ') + ')</span></span>';
+          var yes = document.createElement('button');
+          yes.type = 'button'; yes.dataset.accept = '1'; yes.textContent = '✓';
+          yes.setAttribute('aria-label', 'Accept ' + p.allergen);
+          yes.addEventListener('click', function () {
+            var a = accepted(); a.push(p.allergen);
+            hiddenA.value = JSON.stringify(a);
+            renderTags(); suggest();
+          });
+          var no = document.createElement('button');
+          no.type = 'button'; no.textContent = '✕';
+          no.setAttribute('aria-label', 'Dismiss ' + p.allergen);
+          no.addEventListener('click', function () {
+            var d2 = dismissed(); d2.push(p.allergen);
+            hiddenD.value = JSON.stringify(d2);
+            suggest();
+          });
+          w.appendChild(yes); w.appendChild(no);
+          list.appendChild(w);
+        });
+      }).catch(function () { /* suggestions are advisory; silence is fine */ });
+    }
+
+    if (desc) {
+      desc.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(suggest, 400);
+        // Editing the description invalidates a previous review.
+        if (ack && ack.checked && desc.value !== desc.dataset.ackOf) {
+          ack.checked = false;
+          toast('Description changed — please review the allergens again.', 'bad');
+        }
+      });
+      suggest();
+    }
+
+    var add = ed.querySelector('[data-add-allergen]');
+    if (add) {
+      add.addEventListener('change', function () {
+        if (!add.value) return;
+        var a = accepted();
+        if (a.indexOf(add.value) === -1) a.push(add.value);
+        hiddenA.value = JSON.stringify(a);
+        add.value = '';
+        renderTags(); suggest();
+      });
+    }
+    renderTags();
+
+    /* --- Photo upload --------------------------------------------------- */
+    var drop = ed.querySelector('[data-drop]');
+    if (drop) {
+      var file = ed.querySelector('[data-file]');
+      var cam = ed.querySelector('[data-camera]');
+      var photo = ed.querySelector('[data-photo]');
+      var bar = drop.querySelector('.progress');
+      var fill = bar.querySelector('div');
+      var msg = drop.querySelector('.dz-msg');
+
+      function setPhoto(name) {
+        photo.value = name;
+        var img = drop.querySelector('img') || document.createElement('img');
+        img.src = '/uploads/' + name;
+        img.alt = '';
+        if (!img.parentNode) drop.insertBefore(img, drop.firstChild);
+      }
+
+      /* Downscale in the browser so a 12MP phone photo doesn't fail on a
+         slow connection. HEIC can't be drawn to a canvas outside Safari, so
+         on failure we send the original and let the server convert it. */
+      function shrink(f) {
+        return new Promise(function (resolve) {
+          if (f.size < 1.5 * 1024 * 1024) return resolve(f);
+          var url = URL.createObjectURL(f);
+          var img = new Image();
+          img.onload = function () {
+            var max = 2000;
+            var scale = Math.min(1, max / Math.max(img.width, img.height));
+            if (scale === 1) { URL.revokeObjectURL(url); return resolve(f); }
+            var c = document.createElement('canvas');
+            c.width = Math.round(img.width * scale);
+            c.height = Math.round(img.height * scale);
+            c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+            c.toBlob(function (b) {
+              URL.revokeObjectURL(url);
+              resolve(b || f);
+            }, 'image/jpeg', 0.9);
+          };
+          img.onerror = function () { URL.revokeObjectURL(url); resolve(f); };
+          img.src = url;
+        });
+      }
+
+      function upload(f) {
+        if (!f) return;
+        msg.textContent = 'Uploading…';
+        bar.hidden = false; fill.style.width = '10%';
+        shrink(f).then(function (blob) {
+          var xhr = new XMLHttpRequest();
+          xhr.open('POST', '/admin/api/upload');
+          xhr.upload.onprogress = function (e) {
+            if (e.lengthComputable) fill.style.width = (10 + 85 * e.loaded / e.total) + '%';
+          };
+          xhr.onload = function () {
+            bar.hidden = true; fill.style.width = '0';
+            var d = {};
+            try { d = JSON.parse(xhr.responseText); } catch (e) {}
+            if (xhr.status === 200 && d.photo) {
+              setPhoto(d.photo);
+              msg.textContent = '';
+              toast('Photo added.', 'ok');
+            } else {
+              // A failed upload leaves any previous image in place.
+              msg.textContent = d.error || "That photo didn't upload. Try another one.";
+              toast(msg.textContent, 'bad');
+            }
+          };
+          xhr.onerror = function () {
+            bar.hidden = true;
+            msg.textContent = "That photo didn't upload. Check your connection and try again.";
+            toast(msg.textContent, 'bad');
+          };
+          var fd = new FormData();
+          fd.append('photo', blob, (f.name || 'photo') + '');
+          xhr.send(fd);
+        });
+      }
+
+      drop.addEventListener('click', function (e) {
+        if (e.target.tagName !== 'BUTTON') file.click();
+      });
+      drop.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); }
+      });
+      ['dragenter', 'dragover'].forEach(function (n) {
+        drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.add('dropzone--over'); });
+      });
+      ['dragleave', 'drop'].forEach(function (n) {
+        drop.addEventListener(n, function (e) { e.preventDefault(); drop.classList.remove('dropzone--over'); });
+      });
+      drop.addEventListener('drop', function (e) { upload(e.dataTransfer.files[0]); });
+      file.addEventListener('change', function () { upload(file.files[0]); });
+      cam.addEventListener('change', function () { upload(cam.files[0]); });
+
+      var take = ed.querySelector('[data-take]');
+      var choose = ed.querySelector('[data-choose]');
+      var clear = ed.querySelector('[data-clearphoto]');
+      if (take) take.addEventListener('click', function () { cam.click(); });
+      if (choose) choose.addEventListener('click', function () { file.click(); });
+      if (clear) clear.addEventListener('click', function () {
+        photo.value = '';
+        var img = drop.querySelector('img');
+        if (img) img.remove();
+        toast('Photo removed.', 'ok');
+      });
+
+      window.addEventListener('paste', function (e) {
+        if (!drop.closest('details') || drop.closest('details').open) {
+          var items = (e.clipboardData || {}).items || [];
+          for (var i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') === 0) { upload(items[i].getAsFile()); break; }
+          }
+        }
+      });
+    }
+  });
+
+  /* --- Autosave: closing the tab mid-build must never lose work ---------- */
+  document.querySelectorAll('form[data-autosave]').forEach(function (form) {
+    var flag = form.querySelector('[data-saveflag]');
+    var timer = null;
+    function save() {
+      var fd = new FormData(form);
+      fd.append('draft', '1');
+      if (flag) flag.textContent = 'Saving…';
+      fetch(form.action, { method: 'POST', body: fd, headers: { 'X-Draft': '1' } })
+        .then(function (r) {
+          if (flag) flag.textContent = r.ok ? 'Saved' : 'Not saved — check your connection';
+        })
+        .catch(function () { if (flag) flag.textContent = 'Not saved — check your connection'; });
+    }
+    form.addEventListener('input', function () {
+      if (flag) flag.textContent = 'Unsaved changes';
+      clearTimeout(timer);
+      timer = setTimeout(save, 1200);
+    });
+    form.addEventListener('change', function () {
+      clearTimeout(timer);
+      timer = setTimeout(save, 400);
+    });
+  });
+})();
