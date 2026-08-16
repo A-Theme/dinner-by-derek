@@ -49,7 +49,7 @@ ${extraHead || ''}
 <div id="install-slot"></div>
 <header class="site-header">
   <div class="wrap">
-    <a href="/"><img src="/icons/icon-192.png" alt="" class="brandmark"></a>
+    <a href="/"><img src="/icons/header-mark.png" alt="" class="brandmark"></a>
     <div>
       <p class="site-title"><a href="/">${name}</a></p>
       <span class="site-tag">Kitchener &amp; Waterloo</span>

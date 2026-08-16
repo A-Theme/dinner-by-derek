@@ -41,18 +41,19 @@ a { color: var(--dbd-olive-deep); }
 .site-header {
   background: var(--dbd-olive);
   color: var(--dbd-parchment);
-  padding: var(--dbd-sp-3) 0;
+  padding: var(--dbd-sp-4) 0;
   border-bottom: 3px solid var(--dbd-umber);
 }
-.site-header .wrap { display: flex; align-items: center; gap: var(--dbd-sp-3); }
+.site-header .wrap { display: flex; align-items: center; gap: var(--dbd-sp-4); }
 .site-header a { color: var(--dbd-parchment); text-decoration: none; }
 .brandmark {
-  width: 46px; height: 46px; border-radius: var(--dbd-radius-sm);
-  object-fit: cover; background: var(--dbd-parchment); flex: none;
+  width: 84px; height: 84px; border-radius: 50%;
+  object-fit: contain; flex: none;
+  box-shadow: 0 2px 8px var(--dbd-shadow);
 }
 .site-title {
   font-family: var(--dbd-display);
-  font-size: var(--dbd-step-2);
+  font-size: var(--dbd-step-3);
   color: var(--dbd-parchment);
   margin: 0; line-height: 1.1;
 }
