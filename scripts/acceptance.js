@@ -111,6 +111,14 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('a Sunday rolls back to the Monday before it, not itself', T.mondayOf('2026-08-16'), '2026-08-10');
   check('a Monday stays put', T.mondayOf('2026-08-10'), '2026-08-10');
 
+  // The default for a brand-new draft: the menu is posted ahead of time
+  // (Saturday, for the week starting the following Monday), so a new week
+  // should default to the upcoming week, not the one already underway.
+  check('Saturday rolls forward to the Monday after it', T.mondayOnOrAfter('2026-08-15'), '2026-08-17');
+  check('Sunday rolls forward to the very next day', T.mondayOnOrAfter('2026-08-16'), '2026-08-17');
+  check('a mid-week date rolls forward to next Monday', T.mondayOnOrAfter('2026-08-12'), '2026-08-17');
+  check('a Monday stays put going forward too', T.mondayOnOrAfter('2026-08-10'), '2026-08-10');
+
   // Regression: Intl.DateTimeFormat has no clean "day + year, no month"
   // pattern — {day:'numeric', year:'numeric'} alone falls back to a mangled
   // string like "2026 (day: 16)" in Node's ICU. fmtWeekRange must not hit it.

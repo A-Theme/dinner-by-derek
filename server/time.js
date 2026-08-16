@@ -76,6 +76,12 @@ function mondayOf(iso) {
   return addDays(iso, -back);
 }
 
+/** The Monday on or after this date — today counts if today is already Monday. */
+function mondayOnOrAfter(iso) {
+  const m = mondayOf(iso);
+  return m === iso ? iso : addDays(m, 7);
+}
+
 /**
  * Cutoff instant for a service date.
  * Monday service + hour 22 + America/Toronto => Sunday 22:00 EST/EDT.
@@ -170,7 +176,7 @@ function fmtWeekRange(startIso, tz) {
 
 module.exports = {
   WEEKDAYS, WEEKDAY_LABELS, WEEKDAYS_MON_FIRST,
-  tzOffsetMs, zonedToUtc, addDays, weekdayOf, mondayOf, cutoffFor, dayState,
+  tzOffsetMs, zonedToUtc, addDays, weekdayOf, mondayOf, mondayOnOrAfter, cutoffFor, dayState,
   todayIn, fmtLocal, fmtDayLong, fmtDayShort, fmtMonthDay,
   fmtClock, fmtWindow, fmtWeekRange, parseDate,
 };

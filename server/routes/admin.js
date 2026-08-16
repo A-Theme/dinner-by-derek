@@ -134,7 +134,10 @@ router.get('/week', (req, res) => {
                   ORDER BY CASE status WHEN 'draft' THEN 0 ELSE 1 END, id DESC LIMIT 1`).get();
 
   if (!week) {
-    const weekStart = T.mondayOf(T.todayIn(tz()));
+    // Defaults to the upcoming week, not the current one — the menu is
+    // planned and posted ahead of time (Saturday, for the week starting the
+    // following Monday), so "today" is rarely the week being built.
+    const weekStart = T.mondayOnOrAfter(T.todayIn(tz()));
     const slug = `week-${T.todayIn(tz())}`;
     const id = db.prepare('INSERT INTO weeks (slug, title, week_start) VALUES (?,?,?)')
       .run(slug, T.fmtWeekRange(weekStart, tz()), weekStart).lastInsertRowid;
@@ -143,7 +146,7 @@ router.get('/week', (req, res) => {
     // Backfills a week created before week_start existed. Prefers its earliest
     // service day, so an already-planned week keeps showing the right dates.
     const earliest = db.prepare(`SELECT MIN(service_date) d FROM service_days WHERE week_id = ?`).get(week.id).d;
-    const weekStart = T.mondayOf(earliest || T.todayIn(tz()));
+    const weekStart = earliest ? T.mondayOf(earliest) : T.mondayOnOrAfter(T.todayIn(tz()));
     db.prepare('UPDATE weeks SET week_start=?, title=? WHERE id=?')
       .run(weekStart, T.fmtWeekRange(weekStart, tz()), week.id);
     week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(week.id);
@@ -184,7 +187,7 @@ router.post('/week/:id/weekdays', (req, res) => {
   const id = Number(req.params.id);
   const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(id);
   if (!week) return back(res, req, null, 'That week no longer exists.');
-  const weekStart = week.week_start || T.mondayOf(T.todayIn(tz()));
+  const weekStart = week.week_start || T.mondayOnOrAfter(T.todayIn(tz()));
 
   const tx = db.transaction(() => {
     T.WEEKDAYS_MON_FIRST.forEach((wd, offset) => {
@@ -288,7 +291,7 @@ router.post('/week/duplicate', (req, res) => {
   const srcDays = M.serviceDaysOf(src.id);
   const shift = srcDays.length ? 7 : 0;
   const slug = `week-${srcDays.length ? T.addDays(srcDays[0].service_date, shift) : T.todayIn(tz())}-${crypto.randomBytes(2).toString('hex')}`;
-  const weekStart = T.addDays(src.week_start || T.mondayOf(T.todayIn(tz())), 7);
+  const weekStart = T.addDays(src.week_start || T.mondayOnOrAfter(T.todayIn(tz())), 7);
   const title = T.fmtWeekRange(weekStart, tz());
 
   const tx = db.transaction(() => {
