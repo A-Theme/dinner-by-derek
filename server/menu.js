@@ -116,11 +116,6 @@ function pickupWindowFor(day) {
   };
 }
 
-function slotsFor(day) {
-  const w = pickupWindowFor(day);
-  return T.generateSlots(w.start, w.end, settings.getInt('slot_minutes', 30));
-}
-
 function deliveryOnFor(day) {
   if (day && day.delivery_on !== null && day.delivery_on !== undefined) return !!day.delivery_on;
   return settings.getInt('delivery_enabled', 1) === 1;
@@ -187,7 +182,6 @@ function menuForDay(week, day) {
     grouped,
     allItems: featured ? [featured, ...others] : others,
     window: pickupWindowFor(day),
-    slots: slotsFor(day),
     deliveryOn: deliveryOnFor(day),
     ...state,
   };
@@ -211,7 +205,7 @@ function activeLocations() {
 
 module.exports = {
   SUBCATEGORY_ORDER, activeWeek, weekBySlug, serviceDaysOf, weekItemsOf,
-  standingItems, standingRunsOn, weekItemRunsOn, pickupWindowFor, slotsFor,
+  standingItems, standingRunsOn, weekItemRunsOn, pickupWindowFor,
   deliveryOnFor, menuForDay, findItem, alsoAvailableLine, activeLocations,
   soldOn, toRenderItem,
 };

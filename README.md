@@ -158,12 +158,13 @@ consecutive cutoffs is genuinely 23 hours, and the tests check this.
 
 **Locations & Delivery.**
 
-Set a start time, an end time, and a slot length. Slots are generated from those
-three numbers — `16:00`, `19:00` and `30` produce 4:00, 4:30, 5:00, 5:30, 6:00
-and 6:30. There is no list of times to maintain by hand, and the page previews
-the slots as you change them.
+Set a start time and an end time — that's the whole window, like `4:00` to
+`7:00 PM`. There's no time slot to book: a customer who orders for Wednesday
+can walk in any time in that window, whenever suits them.
 
-A single day can override the window from its card in This Week.
+A single day can override the window from its card in This Week. The window
+in effect when an order is placed is frozen onto that order, so changing the
+window later never rewrites a pickup time someone already has.
 
 Pickup locations are managed on the same page. The name and address are copied
 onto each order when it is placed, so renaming a location later never rewrites
@@ -402,7 +403,7 @@ Photos are files on disk, not part of the JSON — so a full backup is the JSON
 file **plus** the `UPLOAD_DIR` folder.
 
 There are also two CSV exports for spreadsheets: orders (with the source level
-and pickup slot in their own columns) and a contact list.
+and pickup window in their own columns) and a contact list.
 
 ---
 
@@ -481,7 +482,7 @@ Toronto postal code is refused.
 
 `flow` starts the real server and drives it like a browser: sign in, build a
 week, get blocked by the allergen gate, clear it, publish, order as a customer,
-then try to cheat — a forged price, a pickup time outside the window, a faked
+then try to cheat — a forged price, a nonexistent pickup location, a faked
 delivery eligibility flag — and confirms each is refused.
 
 Both run against a scratch database. Neither touches real orders.

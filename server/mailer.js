@@ -49,7 +49,7 @@ function fulfilBlock(order) {
   const tz = settings.get('timezone');
   if (order.method === 'pickup') {
     return `<p><strong>Pickup</strong><br>${esc(order.location_name)}<br>
-      ${esc(order.location_addr)}<br>At ${T.fmtClock(order.pickup_slot)}</p>`;
+      ${esc(order.location_addr)}<br>Anytime ${esc(order.pickup_window)}</p>`;
   }
   return `<p><strong>Delivery</strong><br>${esc(order.addr_line)}
     ${order.addr_unit ? `, ${esc(order.addr_unit)}` : ''}<br>
@@ -69,7 +69,7 @@ function plain(order, lines, heading) {
   if (order.method === 'delivery') parts.push(`Delivery: ${money(order.delivery_fee)}`);
   parts.push(`Total: ${money(order.total)}`, '');
   parts.push(order.method === 'pickup'
-    ? `Pickup: ${order.location_name}, ${order.location_addr} at ${T.fmtClock(order.pickup_slot)}`
+    ? `Pickup: ${order.location_name}, ${order.location_addr}, anytime ${order.pickup_window}`
     : `Delivery: ${order.addr_line}${order.addr_unit ? ', ' + order.addr_unit : ''}, ${order.postal_norm}`);
   if (order.allergy_notes) parts.push('', `Allergy notes: ${order.allergy_notes}`);
   parts.push('', settings.get('payment_instructions'));

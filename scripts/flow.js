@@ -266,7 +266,6 @@ const PAST_DATE = T.addDays(today, -2);
       email: 'test@example.com',
       method: 'pickup',
       location_id: String(db.prepare('SELECT id FROM locations LIMIT 1').get().id),
-      pickup_slot: '16:30',
     });
     if (res.status !== 200) {
       const m = res.text.match(/<p>([^<]{5,300})<\/p>/);
@@ -284,6 +283,8 @@ const PAST_DATE = T.addDays(today, -2);
     check('both lines were kept', lines.length, 2);
     ok('the pickup location was frozen onto the order, not just referenced',
       !!order.location_name);
+    ok('the pickup window was frozen onto the order too',
+      !!order.pickup_window);
     ok('the price came from the database, frozen onto the line',
       lines.every((l) => l.unit_price > 0));
     check('the total is the sum of the lines',
@@ -302,19 +303,19 @@ const PAST_DATE = T.addDays(today, -2);
       week: weekSlug, date: SERVICE_DATE,
       lines: JSON.stringify([{ key: featuredKey, variant: 'full', qty: 1, price: 1 }]),
       name: 'Chancer', phone: '519-555-0100', email: 'c@example.com',
-      method: 'pickup', location_id: '1', pickup_slot: '16:30',
+      method: 'pickup', location_id: '1',
     });
     const order = db.prepare('SELECT * FROM orders ORDER BY id DESC LIMIT 1').get();
     ok('a price sent by the browser is ignored', order.subtotal >= 2200,
       `subtotal came out as ${order.subtotal}`);
 
-    const outOfWindow = await POST('/order', {
+    const badLocation = await POST('/order', {
       week: weekSlug, date: SERVICE_DATE,
       lines: JSON.stringify([{ key: featuredKey, variant: 'full', qty: 1 }]),
       name: 'Early Bird', phone: '519-555-0101', email: 'e@example.com',
-      method: 'pickup', location_id: '1', pickup_slot: '03:00',
+      method: 'pickup', location_id: '999999',
     });
-    check('a pickup slot outside the window is refused', outOfWindow.status, 400);
+    check('a nonexistent pickup location is refused', badLocation.status, 400);
 
     const forgedDelivery = await POST('/order', {
       week: weekSlug, date: SERVICE_DATE,
@@ -329,7 +330,7 @@ const PAST_DATE = T.addDays(today, -2);
       week: weekSlug, date: PAST_DATE,
       lines: JSON.stringify([{ key: featuredKey, variant: 'full', qty: 1 }]),
       name: 'Time Traveller', phone: '519-555-0103', email: 't@example.com',
-      method: 'pickup', location_id: '1', pickup_slot: '16:30',
+      method: 'pickup', location_id: '1',
     });
     check('an order for a day not on the menu is refused', pastDay.status, 400);
 
@@ -337,7 +338,7 @@ const PAST_DATE = T.addDays(today, -2);
       week: weekSlug, date: SERVICE_DATE,
       lines: JSON.stringify([{ key: featuredKey, variant: 'full', qty: 40 }]),
       name: 'Bulk Buyer', phone: '519-555-0104', email: 'b@example.com',
-      method: 'pickup', location_id: '1', pickup_slot: '16:30',
+      method: 'pickup', location_id: '1',
     });
     check('ordering past the cap is refused', overCap.status, 400);
     ok('and the refusal is a sentence, not a stack trace',
@@ -346,7 +347,7 @@ const PAST_DATE = T.addDays(today, -2);
     const empty = await POST('/order', {
       week: weekSlug, date: SERVICE_DATE, lines: '[]',
       name: 'Nobody', phone: '519-555-0105', email: 'n@example.com',
-      method: 'pickup', location_id: '1', pickup_slot: '16:30',
+      method: 'pickup', location_id: '1',
     });
     check('an empty order is refused', empty.status, 400);
   }

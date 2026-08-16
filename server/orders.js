@@ -13,13 +13,12 @@ const D = require('./delivery');
  *     chosen variant is enabled
  *   - the unit price (taken from the database, never from the form)
  *   - remaining availability for the day
- *   - the pickup slot is inside that day's actual window
  *   - delivery eligibility and the fee (recomputed from the postal code)
  *   - the delivery minimum
  *   - whether the cutoff has passed, which decides confirmed vs late_request
  *
- * A forged eligibility flag, an edited fee, an out-of-window slot, or an item
- * posted against a day it does not run on are all rejected here.
+ * A forged eligibility flag, an edited fee, or an item posted against a day
+ * it does not run on are all rejected here.
  */
 
 class OrderError extends Error {}
@@ -109,7 +108,7 @@ function create(payload) {
   const o = {
     ref: ref(), week_id: week.id, service_date: day.service_date, status,
     name, phone, email, allergy_notes: allergyNotes, method,
-    location_id: null, location_name: null, location_addr: null, pickup_slot: null,
+    location_id: null, location_name: null, location_addr: null, pickup_window: null,
     addr_line: null, addr_unit: null, postal_raw: null, postal_norm: null,
     fsa: null, zone_name: null, addr_notes: null,
     subtotal, delivery_fee: 0, total: subtotal,
@@ -119,14 +118,10 @@ function create(payload) {
     const loc = db.prepare('SELECT * FROM locations WHERE id = ? AND active = 1')
       .get(Number(payload.location_id));
     if (!loc) throw new OrderError('Please choose a pickup location.');
-    const slot = String(payload.pickup_slot || '');
-    if (!menu.slots.includes(slot)) {
-      throw new OrderError(`Please pick a time inside the pickup window, ${T.fmtWindow(menu.window.start, menu.window.end)}.`);
-    }
     o.location_id = loc.id;
     o.location_name = loc.name;     // frozen: renaming a location later must
     o.location_addr = loc.address;  // not rewrite this order
-    o.pickup_slot = slot;
+    o.pickup_window = T.fmtWindow(menu.window.start, menu.window.end); // frozen too
   } else {
     if (!menu.deliveryOn) throw new OrderError('Delivery isn\'t running on that day.');
 

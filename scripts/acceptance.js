@@ -99,18 +99,10 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('consecutive days are exactly 24h apart', tue - mon, 24 * 60 * 60 * 1000);
 }
 
-/* --- Pickup slots are generated, not hand-built --------------------------- */
+/* --- Pickup window formatting ---------------------------------------------- */
 {
-  const slots = T.generateSlots('16:00', '19:00', 30);
-  check('16:00–19:00 in 30s gives six slots', slots.length, 6);
-  check('first slot', slots[0], '16:00');
-  check('last slot', slots[slots.length - 1], '18:30');
-
-  const fifteen = T.generateSlots('16:00', '19:00', 15);
-  check('changing the interval changes the slots', fifteen.length, 12);
-
-  const shifted = T.generateSlots('17:00', '20:00', 30);
-  check('changing the window changes the slots', shifted[0], '17:00');
+  check('the window reads as a range', T.fmtWindow('16:00', '19:00'), '4:00 PM–7:00 PM');
+  check('a shifted window reflects the shift', T.fmtWindow('17:00', '20:00'), '5:00 PM–8:00 PM');
 }
 
 /* --- Postal code normalization -------------------------------------------- */

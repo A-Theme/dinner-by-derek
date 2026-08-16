@@ -118,21 +118,6 @@ function fmtDayShort(iso, tz) {
   }).format(new Date(Date.UTC(y, m - 1, d, 12)));
 }
 
-/** "16:00"+"19:00"+30 -> ['16:00','16:30',…,'18:30'] */
-function generateSlots(windowStart, windowEnd, slotMinutes) {
-  const toMin = (s) => {
-    const [h, m] = s.split(':').map(Number);
-    return h * 60 + m;
-  };
-  const start = toMin(windowStart), end = toMin(windowEnd);
-  const step = Math.max(5, Number(slotMinutes) || 30);
-  const out = [];
-  for (let t = start; t + step <= end; t += step) {
-    out.push(`${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`);
-  }
-  return out;
-}
-
 /** "16:30" -> "4:30 PM" */
 function fmtClock(hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
@@ -149,5 +134,5 @@ module.exports = {
   WEEKDAYS, WEEKDAY_LABELS,
   tzOffsetMs, zonedToUtc, addDays, weekdayOf, cutoffFor, dayState,
   todayIn, fmtLocal, fmtDayLong, fmtDayShort,
-  generateSlots, fmtClock, fmtWindow, parseDate,
+  fmtClock, fmtWindow, parseDate,
 };

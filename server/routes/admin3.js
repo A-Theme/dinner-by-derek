@@ -125,34 +125,31 @@ strict.get('/sheet/kitchen/:date', auth.requiredStrict, (req, res) => {
 strict.get('/sheet/pickup/:date', auth.requiredStrict, (req, res) => {
   const date = req.params.date;
   const orders = db.prepare(`SELECT * FROM orders WHERE service_date=? AND method='pickup'
-    AND status='confirmed' ORDER BY location_name, pickup_slot, name`).all(date);
+    AND status='confirmed' ORDER BY location_name, name`).all(date);
 
-  // Grouped by location, then by time slot — how many bags go where at 4:30.
+  // Grouped by location only — customers can arrive any time in the window,
+  // so there is no time-slot sub-grouping to print.
   const byLoc = new Map();
   for (const o of orders) {
     const l = o.location_name || 'Unassigned';
-    if (!byLoc.has(l)) byLoc.set(l, new Map());
-    const slots = byLoc.get(l);
-    if (!slots.has(o.pickup_slot)) slots.set(o.pickup_slot, []);
-    slots.get(o.pickup_slot).push(o);
+    if (!byLoc.has(l)) byLoc.set(l, []);
+    byLoc.get(l).push(o);
   }
 
   const body = html`
     <h1>Pickups — ${T.fmtDayLong(date, tz())}</h1>
-    ${[...byLoc.entries()].map(([loc, slots]) => html`
-      <h2>${loc} — ${[...slots.values()].reduce((n, a) => n + a.length, 0)} bags</h2>
-      ${[...slots.entries()].map(([slot, list]) => html`
-        <h3 class="subhead">${T.fmtClock(slot)} — ${list.length}</h3>
-        <table class="dtable">
-          <thead><tr><th>✓</th><th>Customer</th><th>Phone</th><th>Items</th><th>Owed</th></tr></thead>
-          <tbody>${list.map((o) => html`<tr>
-            <td data-label="✓">☐</td>
-            <td data-label="Customer">${o.name}</td>
-            <td data-label="Phone">${o.phone}</td>
-            <td data-label="Items">${O.linesOf(o.id).map((l) => `${l.qty}× ${l.item_name}`).join(', ')}</td>
-            <td data-label="Owed">${money(o.total)}${o.paid ? ' (paid)' : ''}</td>
-          </tr>`)}</tbody>
-        </table>`)}`)}
+    ${[...byLoc.entries()].map(([loc, list]) => html`
+      <h2>${loc} — ${list.length} bags, anytime ${list[0].pickup_window}</h2>
+      <table class="dtable">
+        <thead><tr><th>✓</th><th>Customer</th><th>Phone</th><th>Items</th><th>Owed</th></tr></thead>
+        <tbody>${list.map((o) => html`<tr>
+          <td data-label="✓">☐</td>
+          <td data-label="Customer">${o.name}</td>
+          <td data-label="Phone">${o.phone}</td>
+          <td data-label="Items">${O.linesOf(o.id).map((l) => `${l.qty}× ${l.item_name}`).join(', ')}</td>
+          <td data-label="Owed">${money(o.total)}${o.paid ? ' (paid)' : ''}</td>
+        </tr>`)}</tbody>
+      </table>`)}
     ${orders.length ? '' : html`<p>No pickups for this day.</p>`}`;
 
   res.type('html').send(String(sheetShell('Pickup sheet', body)));

@@ -252,7 +252,7 @@ router.get('/orders', (req, res) => {
 
         <p class="variant__label">Food ${money(o.subtotal)}${o.method === 'delivery' ? ` · Delivery ${money(o.delivery_fee)}` : ''}</p>
         <p>${o.method === 'pickup'
-          ? html`<strong>Pickup</strong> ${o.location_name} at ${T.fmtClock(o.pickup_slot)}`
+          ? html`<strong>Pickup</strong> ${o.location_name}, anytime ${o.pickup_window}`
           : html`<strong>Delivery</strong> ${o.addr_line}${o.addr_unit ? `, ${o.addr_unit}` : ''}, ${o.postal_norm}
               ${o.addr_notes ? html`<br><span class="variant__label">${o.addr_notes}</span>` : ''}`}</p>
 
@@ -339,19 +339,15 @@ router.get('/locations', (req, res) => {
 
     <div class="card">
       <h2>Pickup window</h2>
-      <p class="also">Time slots are generated from this window — you never build a slot list by hand.</p>
+      <p class="also">Customers can come any time within this window — there's no time slot to book.</p>
       <form method="post" action="/admin/settings/pickup"
-        data-confirm="Change the pickup window? New slots are generated for every future service day. Orders already placed keep the time they booked.">
+        data-confirm="Change the pickup window? It applies to every future service day. Orders already placed keep the window they were given.">
         <div class="stack2">
           <div><label for="pstart">Starts</label>
             <input type="time" id="pstart" name="pickup_start" value="${settings.get('pickup_start')}"></div>
           <div><label for="pend">Ends</label>
             <input type="time" id="pend" name="pickup_end" value="${settings.get('pickup_end')}"></div>
         </div>
-        <label for="slotmin">Slot length in minutes</label>
-        <input type="number" id="slotmin" name="slot_minutes" min="5" step="5" value="${settings.get('slot_minutes')}">
-        <p class="also">Right now that gives:
-          ${T.generateSlots(settings.get('pickup_start'), settings.get('pickup_end'), settings.getInt('slot_minutes', 30)).map(T.fmtClock).join(', ')}</p>
         <button class="btn btn--primary" type="submit">Save pickup window</button>
       </form>
     </div>
@@ -444,8 +440,7 @@ router.post('/fsa/remove', (req, res) => {
 router.post('/settings/pickup', (req, res) => {
   settings.set('pickup_start', String(req.body.pickup_start || '16:00'));
   settings.set('pickup_end', String(req.body.pickup_end || '19:00'));
-  settings.set('slot_minutes', Math.max(5, Number(req.body.slot_minutes) || 30));
-  back(res, req, 'Pickup window saved. Future days use the new slots; orders already placed keep their times.');
+  back(res, req, 'Pickup window saved. Future days use the new window; orders already placed keep the window they were given.');
 });
 
 router.post('/settings/delivery', (req, res) => {

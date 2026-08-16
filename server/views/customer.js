@@ -172,15 +172,8 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
                   <span class="variant__label">${l.address}${l.notes ? ` — ${l.notes}` : ''}</span></span>
               </label>`)}
           </fieldset>
-          <fieldset>
-            <legend>Pickup time</legend>
-            <p class="notice" style="margin-bottom:var(--dbd-sp-3)">
-              Pickup ${T.fmtWindow(menu.window.start, menu.window.end)}</p>
-            <div class="slotgrid">
-              ${menu.slots.map((s, i) => html`
-                <label><input type="radio" name="pickup_slot" value="${s}"${i === 0 ? ' checked' : ''}>${T.fmtClock(s)}</label>`)}
-            </div>
-          </fieldset>
+          <p class="notice">
+            Pickup anytime ${T.fmtWindow(menu.window.start, menu.window.end)} — no time to book, just come by.</p>
         </div>
 
         ${menu.deliveryOn ? html`
@@ -287,7 +280,7 @@ function confirmationView({ order, lines, late }) {
       <h3 class="subhead">${order.method === 'pickup' ? 'Pickup' : 'Delivery'}</h3>
       ${order.method === 'pickup'
         ? html`<p><strong>${order.location_name}</strong><br>${order.location_addr}<br>
-            At ${T.fmtClock(order.pickup_slot)}</p>`
+            Anytime ${order.pickup_window}</p>`
         : html`<p>${order.addr_line}${order.addr_unit ? `, ${order.addr_unit}` : ''}<br>
             ${order.postal_norm}<br>${settings.get('delivery_window')}</p>`}
 

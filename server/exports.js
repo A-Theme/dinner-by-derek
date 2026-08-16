@@ -49,7 +49,7 @@ function ordersCsv(filters = {}) {
 
   const out = [[
     'Service day', 'Customer', 'Phone', 'Email', 'Item', 'Source level', 'Section',
-    'Size', 'Quantity', 'Line total', 'Fulfillment', 'Pickup location', 'Pickup slot',
+    'Size', 'Quantity', 'Line total', 'Fulfillment', 'Pickup location', 'Pickup window',
     'Delivery address', 'Postal code', 'Delivery fee', 'Order total', 'Allergy notes',
     'Status', 'Reference',
   ]];
@@ -57,7 +57,7 @@ function ordersCsv(filters = {}) {
     out.push([
       r.service_date, r.name, r.phone, r.email, r.item_name, r.source_level,
       r.subcategory, r.variant_label, r.qty, money(r.unit_price * r.qty),
-      r.method, r.location_name || '', r.pickup_slot ? T.fmtClock(r.pickup_slot) : '',
+      r.method, r.location_name || '', r.pickup_window || '',
       r.method === 'delivery' ? [r.addr_line, r.addr_unit].filter(Boolean).join(', ') : '',
       r.postal_norm || '', money(r.delivery_fee), money(r.total),
       r.allergy_notes, r.status, r.ref,

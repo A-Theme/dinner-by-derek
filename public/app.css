@@ -239,16 +239,6 @@ legend { font-weight: 700; font-size: var(--dbd-step--1); padding: 0 var(--dbd-s
 .radio-card input { margin: 0; }
 .radio-card:has(input:checked) { background: var(--dbd-tan); color: var(--dbd-espresso); border-color: var(--dbd-umber); }
 
-.slotgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--dbd-sp-2); }
-.slotgrid label {
-  display: flex; align-items: center; justify-content: center;
-  min-height: var(--dbd-tap); margin: 0; font-weight: 600;
-  border: 1px solid var(--dbd-olive); border-radius: var(--dbd-radius-sm);
-  cursor: pointer; background: var(--dbd-parchment);
-}
-.slotgrid label:has(input:checked) { background: var(--dbd-tan); border-color: var(--dbd-umber); }
-.slotgrid input { position: absolute; opacity: 0; pointer-events: none; }
-
 /* --- Notices ------------------------------------------------------------ */
 .notice {
   border-left: 4px solid var(--dbd-tan);

@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS orders (
   location_id   INTEGER REFERENCES locations(id),
   location_name TEXT,
   location_addr TEXT,
-  pickup_slot   TEXT,
+  pickup_window TEXT,                            -- frozen window text, e.g. "4:00–7:00 PM"
   addr_line     TEXT,
   addr_unit     TEXT,
   postal_raw    TEXT,
@@ -239,7 +239,6 @@ const DEFAULTS = {
   cutoff_minute: '0',
   pickup_start: '16:00',
   pickup_end: '19:00',
-  slot_minutes: '30',
   delivery_enabled: '1',
   delivery_fee: '500',
   delivery_min: '0',
@@ -303,6 +302,15 @@ function addColumn(table, column, definition) {
   if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 addColumn('fb_connection', 'warned_at', 'TEXT');
+
+function renameColumn(table, from, to) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (cols.some((c) => c.name === from) && !cols.some((c) => c.name === to)) {
+    db.exec(`ALTER TABLE ${table} RENAME COLUMN ${from} TO ${to}`);
+  }
+}
+// Pickup stopped being slot-based; the window itself is frozen onto the order.
+renameColumn('orders', 'pickup_slot', 'pickup_window');
 
 /* --- Settings accessors -------------------------------------------------- */
 const getRow = db.prepare('SELECT value FROM settings WHERE key = ?');
