@@ -239,6 +239,12 @@ const DEFAULTS = {
   timezone: 'America/Toronto',
   cutoff_hour: '22',
   cutoff_minute: '0',
+  // The late window closes at 06:00 on the morning of service. Between the
+  // cutoff and this, a customer may send a late REQUEST, which is not an order
+  // until it is confirmed. After it, nothing: the shopping is done and the
+  // cooking has started, and a request that arrives then cannot be met.
+  late_cutoff_hour: '6',
+  late_cutoff_minute: '0',
   pickup_start: '16:00',
   pickup_end: '19:00',
   // Whole-day ceiling on the featured dish, counted across both size

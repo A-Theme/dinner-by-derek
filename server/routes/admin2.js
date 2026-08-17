@@ -513,7 +513,13 @@ router.get('/settings', (req, res) => {
         <label for="ch">Orders close at (the evening before each service day)</label>
         <input type="time" id="ch" name="cutoff_time"
           value="${String(settings.getInt('cutoff_hour', 22)).padStart(2, '0')}:${String(settings.getInt('cutoff_minute', 0)).padStart(2, '0')}">
-        <p class="also">Monday service closes Sunday at this time.</p>
+        <p class="also">Monday service closes Sunday at this time. There are no same-day orders:
+          past this, an order can only arrive as a late request, and only until the time below.</p>
+        <label for="lc">Late requests stop at (the morning of each service day)</label>
+        <input type="time" id="lc" name="late_cutoff_time"
+          value="${String(settings.getInt('late_cutoff_hour', 6)).padStart(2, '0')}:${String(settings.getInt('late_cutoff_minute', 0)).padStart(2, '0')}">
+        <p class="also">After this, nothing at all is taken for that day — the order form comes off
+          the page and the server refuses it. Set it to when the shopping is done.</p>
         <label for="pay">Payment instructions shown to customers</label>
         <textarea id="pay" name="payment_instructions" rows="3">${settings.get('payment_instructions')}</textarea>
         <label for="oc">How customers reach you</label>
@@ -680,11 +686,18 @@ function facebookPanel(conn) {
 
 router.post('/settings', (req, res) => {
   const t = String(req.body.cutoff_time || '22:00').split(':');
+  const l = String(req.body.late_cutoff_time || '06:00').split(':');
   for (const k of ['business_name', 'timezone', 'payment_instructions', 'owner_contact', 'notify_email']) {
     if (req.body[k] !== undefined) settings.set(k, String(req.body[k]).trim());
   }
   settings.set('cutoff_hour', Number(t[0]) || 22);
   settings.set('cutoff_minute', Number(t[1]) || 0);
+  // Number(x) || fallback would turn a legitimate 0 into the fallback, which
+  // for an hour is the difference between midnight and six in the morning.
+  const hour = Number(l[0]);
+  const minute = Number(l[1]);
+  settings.set('late_cutoff_hour', Number.isFinite(hour) && hour >= 0 && hour <= 23 ? hour : 6);
+  settings.set('late_cutoff_minute', Number.isFinite(minute) && minute >= 0 && minute <= 59 ? minute : 0);
   back(res, req, 'Settings saved.');
 });
 

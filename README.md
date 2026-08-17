@@ -307,8 +307,16 @@ week — a day you were shut last week opens again in the new one.
 
 ## The cutoff
 
-**22:00 local time on the calendar day before the service date.** Orders for
-Monday close Sunday at 22:00.
+**There are no same-day orders.** Two deadlines say so:
+
+| From | Until | What a customer can do |
+|---|---|---|
+| — | **22:00** the night before | Place an order. It holds stock. |
+| 22:00 the night before | **06:00** the morning of service | Send a *late request*. Holds nothing, and is not an order until you confirm it. |
+| 06:00 the morning of service | — | **Nothing.** No form on the page, and the server refuses the post. |
+
+Both boundaries belong to the tighter side: at 22:00 exactly it is already a
+request, and at 06:00 exactly it is already refused.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'fontFamily':'Georgia, serif','lineColor':'#BE8146'}}}%%
@@ -316,11 +324,14 @@ flowchart LR
   OPEN["<b>Open</b><br/>ordinary orders<br/>hold stock"]
   CUT(["<b>22:00</b><br/>the night before"])
   LATE["<b>Late requests</b><br/>hold nothing"]
+  SIX(["<b>06:00</b><br/>the morning of"])
+  SHUT["<b>Nothing taken</b><br/>form gone,<br/>post refused"]
   YOU{"You decide"}
   YES["Confirmed<br/><i>customer emailed</i>"]
   NO["Declined<br/><i>customer emailed</i>"]
 
-  OPEN --> CUT --> LATE --> YOU
+  OPEN --> CUT --> LATE --> SIX --> SHUT
+  LATE --> YOU
   YOU -- confirm --> YES
   YOU -- decline --> NO
 
@@ -329,13 +340,15 @@ flowchart LR
   classDef late fill:#BE8146,stroke:#4A2A1A,stroke-width:2px,color:#2C1E18
   classDef out fill:#F4EFEB,stroke:#BE8146,stroke-width:2px,color:#2C1E18
   class OPEN open
-  class CUT cut
+  class CUT,SIX cut
   class LATE,YOU late
-  class YES,NO out
+  class YES,NO,SHUT out
 ```
 
-Change the hour in **Settings**. The "day before" part is fixed and not
-configurable — it is the rule the whole app is built around.
+Both times are in **Settings**. Which *day* each falls on is fixed and not
+configurable — the cutoff is always the evening before, the late deadline
+always the morning of. That is the rule the whole app is built around, and it
+means the late window can never invert however the two clocks are set.
 
 The timezone is also in Settings, defaulting to `America/Toronto`. The server's
 own clock setting is never used, so the app behaves the same wherever it is
@@ -343,11 +356,22 @@ hosted.
 
 Each day closes on its own. Monday closing does not affect Tuesday.
 
-**After the cutoff a day does not vanish.** It switches to late-request mode.
-Customers can still submit, clearly labelled as a request, and those land in
-**Orders** pinned to the top with Confirm and Decline buttons. Confirming or
-declining emails the customer. A pending late request holds no stock, so it can
-never sell out a dish ahead of a real order.
+**After the cutoff a day does not vanish.** It switches to late-request mode
+until six the next morning. Customers can still submit, clearly labelled as a
+request, and those land in **Orders** pinned to the top with Confirm and
+Decline buttons. Confirming or declining emails the customer. A pending late
+request holds no stock, so it can never sell out a dish ahead of a real order.
+
+**After the late deadline the day is still shown, but it is read-only.** The
+menu stays up so someone reading at breakfast can see what they missed and what
+the rest of the week holds; the order form is gone and every quantity stepper
+is disabled. The refusal is enforced on the server too, so a saved page or a
+crafted post gets the same answer as the screen shows.
+
+One consequence worth knowing: confirming a late request does not re-check the
+day's ceiling. If Wednesday is capped at 12 and full, confirming one more makes
+it 13. That is you overriding your own limit deliberately — but it is silent
+about it.
 
 Daylight saving is handled by doing the arithmetic on the calendar date rather
 than by subtracting 24 hours. On the spring-forward weekend the gap between two

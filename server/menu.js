@@ -144,6 +144,18 @@ function deliveryOnFor(day) {
   return settings.getInt('delivery_enabled', 1) === 1;
 }
 
+/** The clock rules, read once from settings, in the shape dayState wants. */
+function clock(now = new Date()) {
+  return {
+    cutoffHour: settings.getInt('cutoff_hour', 22),
+    cutoffMinute: settings.getInt('cutoff_minute', 0),
+    lateHour: settings.getInt('late_cutoff_hour', 6),
+    lateMinute: settings.getInt('late_cutoff_minute', 0),
+    tz: settings.get('timezone', 'America/Toronto'),
+    now,
+  };
+}
+
 /**
  * Is the kitchen shut for this day — either the day itself, or the whole week?
  * The day's own note is preferred over the week's, being the more specific.
@@ -180,12 +192,7 @@ function menuForDay(week, day) {
       featuredCap: null,
       window: pickupWindowFor(day),
       deliveryOn: false,
-      ...T.dayState(
-        day.service_date,
-        settings.getInt('cutoff_hour', 22),
-        settings.getInt('cutoff_minute', 0),
-        settings.get('timezone', 'America/Toronto')
-      ),
+      ...T.dayState(day.service_date, clock()),
     };
   }
   const { soup, salad } = weekItemsOf(week.id);
@@ -244,12 +251,7 @@ function menuForDay(week, day) {
     .map((sub) => ({ subcategory: sub, items: others.filter((i) => i.subcategory === sub) }))
     .filter((g) => g.items.length);
 
-  const state = T.dayState(
-    day.service_date,
-    settings.getInt('cutoff_hour', 22),
-    settings.getInt('cutoff_minute', 0),
-    settings.get('timezone', 'America/Toronto')
-  );
+  const state = T.dayState(day.service_date, clock());
 
   return {
     day,
@@ -284,7 +286,7 @@ function activeLocations() {
 
 module.exports = {
   SUBCATEGORY_ORDER, activeWeek, weekBySlug, serviceDaysOf, weekItemsOf,
-  standingItems, standingRunsOn, weekItemRunsOn, pickupWindowFor,
+  standingItems, standingRunsOn, weekItemRunsOn, pickupWindowFor, clock,
   deliveryOnFor, closureFor, menuForDay, findItem, alsoAvailableLine, activeLocations,
   soldOn, soldOnAll, featuredCapFor, toRenderItem,
 };

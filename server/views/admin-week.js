@@ -14,6 +14,8 @@ function weekPage({ week, days, items, hasPrevious }) {
   const published = week.status === 'published';
   const cutoffHour = settings.getInt('cutoff_hour', 22);
   const cutoffMin = settings.getInt('cutoff_minute', 0);
+  const lateHour = settings.getInt('late_cutoff_hour', 6);
+  const lateMin = settings.getInt('late_cutoff_minute', 0);
   const weekStart = week.week_start || T.mondayOf(T.todayIn(tz()));
   const globalCap = M.featuredCapFor({});   // null when the setting is 0
 
@@ -161,6 +163,8 @@ function weekPage({ week, days, items, hasPrevious }) {
 
         <p class="also">Also available that day: ${M.alsoAvailableLine(week, d)}</p>
         <p class="variant__label">Orders close ${T.fmtLocal(cutoff, tz(), { weekday: 'long', month: 'short', day: 'numeric' })}
+           · Late requests until ${T.fmtLocal(T.lateCutoffFor(d.service_date, lateHour, lateMin, tz()), tz())}
+           that morning, then nothing
            · Pickup ${T.fmtWindow(win.start, win.end)}</p>
 
         <form method="post" action="/admin/week/${week.id}/day/${d.id}" data-autosave>

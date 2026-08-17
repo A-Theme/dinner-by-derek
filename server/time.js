@@ -92,15 +92,48 @@ function cutoffFor(serviceDate, cutoffHour, cutoffMinute, tz) {
   return zonedToUtc(y, m, d, cutoffHour, cutoffMinute, tz);
 }
 
-/** 'open' before cutoff, 'closed' after. Purely a function of `now`. */
-function dayState(serviceDate, cutoffHour, cutoffMinute, tz, now = new Date()) {
+/**
+ * The end of the late window: HH:MM local ON the service date, 06:00 by
+ * default. After it nothing can be ordered for that day at all — not an order,
+ * not a request.
+ *
+ * It cannot invert with the cutoff no matter how the two are configured: the
+ * cutoff is always on the day BEFORE, this is always on the day itself, so the
+ * window between them is always a real span of hours.
+ */
+function lateCutoffFor(serviceDate, lateHour, lateMinute, tz) {
+  const { y, m, d } = parseDate(serviceDate);
+  return zonedToUtc(y, m, d, lateHour, lateMinute, tz);
+}
+
+/**
+ * Where a service day stands right now. Five states, in order:
+ *
+ *   open     ordering normally
+ *   closing  ordering normally, but the cutoff is within 12 hours
+ *   late     past the cutoff — LATE REQUESTS ONLY, until the late cutoff
+ *   closed   past the late cutoff — nothing at all, though the day is still to come
+ *   past     the service day is over
+ *
+ * Taken as an options object rather than a run of positional arguments: two
+ * times, a zone and a clock is exactly the shape where the wrong argument in
+ * the wrong slot reads as valid and quietly moves a deadline.
+ */
+function dayState(serviceDate, {
+  cutoffHour = 22, cutoffMinute = 0,
+  lateHour = 6, lateMinute = 0,
+  tz = 'America/Toronto', now = new Date(),
+} = {}) {
   const cutoff = cutoffFor(serviceDate, cutoffHour, cutoffMinute, tz);
+  const lateCutoff = lateCutoffFor(serviceDate, lateHour, lateMinute, tz);
   const next = parseDate(addDays(serviceDate, 1));
   const endOfService = zonedToUtc(next.y, next.m, next.d, 0, 0, tz);
-  if (now >= endOfService) return { state: 'past', cutoff };
-  if (now >= cutoff) return { state: 'closed', cutoff };
+
+  if (now >= endOfService) return { state: 'past', cutoff, lateCutoff };
+  if (now >= lateCutoff) return { state: 'closed', cutoff, lateCutoff };
+  if (now >= cutoff) return { state: 'late', cutoff, lateCutoff };
   const hoursLeft = (cutoff - now) / 36e5;
-  return { state: hoursLeft <= 12 ? 'closing' : 'open', cutoff };
+  return { state: hoursLeft <= 12 ? 'closing' : 'open', cutoff, lateCutoff };
 }
 
 /** Today's calendar date in `tz`. */
@@ -176,7 +209,8 @@ function fmtWeekRange(startIso, tz) {
 
 module.exports = {
   WEEKDAYS, WEEKDAY_LABELS, WEEKDAYS_MON_FIRST,
-  tzOffsetMs, zonedToUtc, addDays, weekdayOf, mondayOf, mondayOnOrAfter, cutoffFor, dayState,
+  tzOffsetMs, zonedToUtc, addDays, weekdayOf, mondayOf, mondayOnOrAfter,
+  cutoffFor, lateCutoffFor, dayState,
   todayIn, fmtLocal, fmtDayLong, fmtDayShort, fmtMonthDay,
   fmtClock, fmtWindow, fmtWeekRange, parseDate,
 };

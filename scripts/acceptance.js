@@ -48,31 +48,74 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false,
 }).format(instant);
 
-/* --- Cutoff: 22:00 the calendar day BEFORE the service date -------------- */
+/* --- Cutoff: 22:00 the calendar day BEFORE the service date --------------
+   THERE ARE NO SAME-DAY ORDERS. The rule, in full:
+
+     up to 22:00 the night before   an order
+     22:00 → 06:00 that morning     a late request, which Derek must confirm
+     after 06:00                    nothing at all
+
+   Both boundaries are inclusive of the tighter side: at 22:00 exactly it is
+   already a request, and at 06:00 exactly it is already refused. */
 {
   // Service on Monday 2026-08-17. Cutoff is Sunday 2026-08-16 at 22:00 local.
   const service = '2026-08-17';
   const cutoff = T.cutoffFor(service, CUT_H, CUT_M, TZ);
-  const sunday2159 = T.zonedToUtc(2026, 8, 16, 21, 59, TZ);
-  const sunday2201 = T.zonedToUtc(2026, 8, 16, 22, 1, TZ);
+  const at = (m, d, hh, mm) => T.zonedToUtc(2026, m, d, hh, mm, TZ);
+  const state = (now) => T.dayState(service, { cutoffHour: CUT_H, cutoffMinute: CUT_M, tz: TZ, now }).state;
 
   check('the cutoff lands on the day before, at 22:00 local', localClock(cutoff), '22:00');
-  ok('21:59 the night before is still open', sunday2159 < cutoff);
-  ok('22:01 the night before is past cutoff', sunday2201 > cutoff);
-  check('state at 21:59 is orderable',
-    T.dayState(service, CUT_H, CUT_M, TZ, sunday2159).state, 'closing');
-  check('state at 22:01 is closed to normal orders',
-    T.dayState(service, CUT_H, CUT_M, TZ, sunday2201).state, 'closed');
+  ok('21:59 the night before is still open', at(8, 16, 21, 59) < cutoff);
+  ok('22:01 the night before is past cutoff', at(8, 16, 22, 1) > cutoff);
+  check('state at 21:59 is orderable', state(at(8, 16, 21, 59)), 'closing');
+  check('22:00 on the dot is already too late for an order', state(at(8, 16, 22, 0)), 'late');
+  check('and so is 22:01', state(at(8, 16, 22, 1)), 'late');
 
   // The gap between the two states is two minutes, not an hour: proves the
   // cutoff is not being computed in UTC.
-  ok('cutoff sits between them', sunday2201 - sunday2159 === 2 * 60 * 1000);
+  ok('cutoff sits between them', at(8, 16, 22, 1) - at(8, 16, 21, 59) === 2 * 60 * 1000);
+
+  // The late window runs through the small hours and stops at six.
+  check('midnight on the day itself is still a late request', state(at(8, 17, 0, 1)), 'late');
+  check('05:59 is the last minute of it', state(at(8, 17, 5, 59)), 'late');
+  check('06:00 on the dot takes nothing', state(at(8, 17, 6, 0)), 'closed');
+  check('and neither does 09:00', state(at(8, 17, 9, 0)), 'closed');
+  check('nor the pickup window itself', state(at(8, 17, 16, 0)), 'closed');
+  check('nor the last minute of the day', state(at(8, 17, 23, 59)), 'closed');
 
   // The day itself stays visible until it is genuinely over.
-  check('the service day is past only after it ends',
-    T.dayState(service, CUT_H, CUT_M, TZ, T.zonedToUtc(2026, 8, 18, 0, 1, TZ)).state, 'past');
-  check('a far-off day reads as open',
-    T.dayState(service, CUT_H, CUT_M, TZ, T.zonedToUtc(2026, 8, 14, 9, 0, TZ)).state, 'open');
+  check('the service day is past only after it ends', state(at(8, 18, 0, 1)), 'past');
+  check('a far-off day reads as open', state(at(8, 14, 9, 0)), 'open');
+
+  // The late cutoff is on the service date, the cutoff on the day before, so
+  // the window between them cannot invert however the two are configured.
+  const lateEarly = T.dayState(service, {
+    cutoffHour: 23, cutoffMinute: 59, lateHour: 0, lateMinute: 1, tz: TZ, now: at(8, 16, 23, 58),
+  });
+  ok('a one-minute late window is still a window',
+    lateEarly.lateCutoff > lateEarly.cutoff, JSON.stringify(lateEarly));
+
+  // Moving the late cutoff moves the wall, and 0 means midnight, not six.
+  const midnight = (now) => T.dayState(service,
+    { cutoffHour: CUT_H, cutoffMinute: CUT_M, lateHour: 0, lateMinute: 0, tz: TZ, now }).state;
+  check('a midnight late cutoff shuts the door at midnight', midnight(at(8, 17, 0, 1)), 'closed');
+  check('while 23:59 the night before is still a request', midnight(at(8, 16, 23, 59)), 'late');
+}
+
+/* --- The late window survives the clocks changing ------------------------ */
+{
+  // 06:00 on a spring-forward morning is 06:00, not 05:00 or 07:00 — the hour
+  // that goes missing that night is 02:00, before the window closes.
+  const springState = (now) => T.dayState('2027-03-14',
+    { cutoffHour: 22, cutoffMinute: 0, tz: 'America/Toronto', now }).state;
+  const lateCut = T.lateCutoffFor('2027-03-14', 6, 0, TZ);
+  check('the late cutoff reads 06:00 local on a 23-hour day', localClock(lateCut), '06:00');
+  check('05:59 that morning still takes a request',
+    springState(T.zonedToUtc(2027, 3, 14, 5, 59, TZ)), 'late');
+  check('06:01 does not', springState(T.zonedToUtc(2027, 3, 14, 6, 1, TZ)), 'closed');
+
+  const fallCut = T.lateCutoffFor('2026-11-01', 6, 0, TZ);
+  check('and 06:00 local on a 25-hour day', localClock(fallCut), '06:00');
 }
 
 /* --- Cutoff survives the DST boundary ------------------------------------ */

@@ -92,9 +92,20 @@ function quote(payload) {
   }
   if (menu.state === 'past') throw new OrderError('That service day has already passed.');
 
-  // Cutoff decides the status. Standing items get no exemption: the cutoff
-  // governs the whole order for that day, at every level.
-  const status = menu.state === 'closed' ? 'late_request' : 'confirmed';
+  // Past the late cutoff — 06:00 on the morning of service — nothing is taken
+  // for that day at all. The shopping is done and the cooking has started, so
+  // a request that arrives now cannot be met, and taking it would only give
+  // someone the impression that it might be.
+  if (menu.state === 'closed') {
+    throw new OrderError(
+      `Ordering for ${T.fmtDayLong(day.service_date, tz)} closed at `
+      + `${T.fmtLocal(menu.lateCutoff, tz)} this morning. ${settings.get('owner_contact')}`
+    );
+  }
+
+  // The two cutoffs decide the status. Standing items get no exemption: they
+  // govern the whole order for that day, at every level.
+  const status = menu.state === 'late' ? 'late_request' : 'confirmed';
 
   /* --- Lines ----------------------------------------------------------- */
   const requested = parseLines(payload.lines);

@@ -560,38 +560,99 @@ const PAST_DATE = T.addDays(today, -2);
       copiedDays[0].daily_cap, db.prepare('SELECT daily_cap FROM service_days WHERE id = ?').get(dayId).daily_cap);
   }
 
-  /* --- A late request reserves nothing, so no ceiling applies -------------
+  /* --- The two cutoffs, over HTTP ----------------------------------------
+     No same-day orders: past 22:00 the night before, only a late request;
+     past 06:00 on the morning itself, nothing at all.
+
+     Driven by moving the two settings rather than by waiting for a particular
+     hour — a test that only proves the rule between midnight and six in the
+     morning proves it for nobody. Both states are reached deterministically at
+     any hour the suite is run, because the cutoff is always on the day before
+     the service date and the late cutoff always on the day itself.
+
      Last, because it adds a service day dated today — earlier than the rest
      of the week — and the duplicate check above reads the first day it finds. */
   {
-    cookie = '';
+    const { settings } = require('../server/db');
     const A = require('../server/allergens');
     const desc = 'Slow braised beef with buttered mash';
-    // Today is past its cutoff (22:00 yesterday) but not past the service day
-    // itself, which is the one state that produces a late request.
     const today = T.todayIn(TZ);
-    db.prepare(`INSERT INTO service_days
-      (week_id, service_date, dish_name, description, allergens, dismissed, ack, ack_of,
-       full_on, full_price, daily_cap)
-      VALUES (?,?,?,?,?,'[]',1,?,1,2200,1)`)
-      .run(weekId, today, 'Cutoff Test Dish', desc,
-        JSON.stringify(A.detect(A.reviewedText({ name: 'Cutoff Test Dish', description: desc }))
-          .map((h) => h.allergen)),
-        A.reviewedText({ name: 'Cutoff Test Dish', description: desc }));
+    const tomorrow = T.addDays(today, 1);
 
-    const lateDay = db.prepare('SELECT id FROM service_days WHERE week_id=? AND service_date=?')
-      .get(weekId, today);
-    const late = await POST('/order', {
-      week: weekSlug, date: today,
-      lines: JSON.stringify([{ key: `service_days:${lateDay.id}`, variant: 'full', qty: 5 }]),
-      name: 'After Hours', phone: '519-555-0110', email: 'ah@example.com',
+    const addDay = (date) => {
+      const reviewed = A.reviewedText({ name: 'Cutoff Test Dish', description: desc });
+      db.prepare(`INSERT INTO service_days
+        (week_id, service_date, dish_name, description, allergens, dismissed, ack, ack_of,
+         full_on, full_price, daily_cap)
+        VALUES (?,?,?,?,?,'[]',1,?,1,2200,1)`)
+        .run(weekId, date, 'Cutoff Test Dish', desc,
+          JSON.stringify(A.detect(reviewed).map((h) => h.allergen)), reviewed);
+      return db.prepare('SELECT id FROM service_days WHERE week_id=? AND service_date=?')
+        .get(weekId, date).id;
+    };
+    const order = (date, dayId, name, qty = 1) => POST('/order', {
+      week: weekSlug, date,
+      lines: JSON.stringify([{ key: `service_days:${dayId}`, variant: 'full', qty }]),
+      name, phone: '519-555-0110', email: 'ah@example.com',
       method: 'pickup', payment_method: 'etransfer', location_id: '1',
     });
-    check('a late request past the ceiling is still accepted', late.status, 200);
-    const row = db.prepare('SELECT status FROM orders ORDER BY id DESC LIMIT 1').get();
-    check('and it is held as a request, not a confirmed order', row.status, 'late_request');
+
+    /* 1. Inside the late window: cutoff already gone by, late cutoff still to
+          come. A request is taken, and it reserves nothing — the day's ceiling
+          is 1 and it asks for 5. */
+    require('../server/ratelimit').reset();   // see the note at the first reset
+
+    settings.set('cutoff_hour', 0);       // 00:00 today: passed, whatever the hour
+    settings.set('cutoff_minute', 0);
+    settings.set('late_cutoff_hour', 23); // 23:59 tomorrow: still to come
+    settings.set('late_cutoff_minute', 59);
+    const lateDay = addDay(tomorrow);
+
+    cookie = '';
+    const late = await order(tomorrow, lateDay, 'After Hours', 5);
+    check('inside the late window a request is accepted', late.status, 200);
+    check('and it is held as a request, not a confirmed order',
+      db.prepare('SELECT status FROM orders ORDER BY id DESC LIMIT 1').get().status, 'late_request');
     check('so it consumes none of the ceiling',
-      M.soldOnAll('service_days', lateDay.id, today), 0);
+      M.soldOnAll('service_days', lateDay, tomorrow), 0);
+    ok('the page says when the requests stop',
+      /late request until/i.test((await GET(`/w/${weekSlug}/${tomorrow}`)).text));
+
+    /* 2. Past the late cutoff, on the morning of service: nothing at all. */
+    settings.set('late_cutoff_hour', 0);  // 00:00 today: passed, whatever the hour
+    settings.set('late_cutoff_minute', 0);
+    const shutDay = addDay(today);
+
+    const page = await GET(`/w/${weekSlug}/${today}`);
+    ok('the day page says ordering has closed', /Ordering has closed/i.test(page.text));
+    ok('and carries no order form at all', !/id="orderform"/.test(page.text));
+    const steppers = page.text.match(/<button[^>]*data-step[^>]*>/g) || [];
+    ok('while every stepper on the menu is dead, not merely pointless',
+      steppers.length > 0 && steppers.every((s) => /\sdisabled/.test(s)),
+      `${steppers.length} steppers, first: ${steppers[0]}`);
+    ok('while still showing the dish, so the reader knows what they missed',
+      /Cutoff Test Dish/.test(page.text));
+
+    const refused = await order(today, shutDay, 'Too Late');
+    check('and the server refuses the order outright', refused.status, 400);
+    ok('saying when it closed', /closed at .*(a\.m\.|AM)/i.test(refused.text),
+      refused.text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 240));
+    check('nothing was stored',
+      db.prepare(`SELECT COUNT(*) n FROM orders WHERE name='Too Late'`).get().n, 0);
+
+    /* 3. The same day, one minute inside the window, is taken — proving the
+          refusal above is the clock and not the day being unorderable. */
+    settings.set('late_cutoff_hour', 23);
+    settings.set('late_cutoff_minute', 59);
+    const allowed = await order(today, shutDay, 'Just In Time');
+    check('moving the late cutoff opens the same day again', allowed.status, 200);
+    check('as a request, never a confirmed order',
+      db.prepare(`SELECT status FROM orders WHERE name='Just In Time'`).get().status, 'late_request');
+
+    settings.set('cutoff_hour', 22);
+    settings.set('cutoff_minute', 0);
+    settings.set('late_cutoff_hour', 6);
+    settings.set('late_cutoff_minute', 0);
   }
 
   /* --- Closing a day, and closing the week --------------------------------
@@ -600,6 +661,7 @@ const PAST_DATE = T.addDays(today, -2);
      Run against the week that is currently live, so what is checked is what a
      customer would actually be served. */
   {
+    require('../server/ratelimit').reset();   // see the note at the first reset
     await POST('/admin/login', { password: 'flow-test-password', next: '/admin' });
 
     // The weekday box owns the dish, so the closure is saved alongside it —

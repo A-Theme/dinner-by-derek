@@ -155,7 +155,9 @@ a { color: var(--dbd-olive-deep); }
 
 .state { font-weight: 700; font-size: var(--dbd-step--1); }
 .state--open { color: var(--dbd-ok); }
-.state--closing { color: var(--dbd-warn); }
+/* Closing tonight and the late-request window are both amber: something can
+   still be done, with a deadline on it. Everything past that is danger. */
+.state--closing, .state--late { color: var(--dbd-warn); }
 .state--closed, .state--past, .state--shut { color: var(--dbd-danger); }
 
 /* --- Featured dish ------------------------------------------------------ */

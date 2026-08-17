@@ -14,15 +14,17 @@ const tz = () => settings.get('timezone', 'America/Toronto');
 const STATE_LABEL = {
   open: 'Open',
   closing: 'Closing tonight',
-  closed: 'Ordering closed — late requests only',
+  late: 'Ordering closed — late requests only',
+  closed: 'Ordering closed',
   past: 'This day is over',
 };
 
-function stateLine(st, cutoff) {
+function stateLine(st, cutoff, lateCutoff) {
   const when = T.fmtLocal(cutoff, tz(), { weekday: 'short' });
   if (st === 'open') return `Orders close ${when}`;
   if (st === 'closing') return `Orders close tonight at ${T.fmtLocal(cutoff, tz())}`;
-  if (st === 'closed') return `Closed ${when} — late requests need confirmation`;
+  if (st === 'late') return `Closed ${when} — late requests until ${T.fmtLocal(lateCutoff, tz())}`;
+  if (st === 'closed') return 'Nothing more can be ordered for this day';
   return 'Past service day';
 }
 
@@ -65,7 +67,7 @@ function weekView({ week, days }) {
             <div class="daycard__dish">${menu.featured ? menu.featured.name : 'Menu coming soon'}</div>
             <div class="daycard__meta">
               <span class="state state--${menu.state}">${STATE_LABEL[menu.state]}</span>
-              · ${stateLine(menu.state, menu.cutoff)}
+              · ${stateLine(menu.state, menu.cutoff, menu.lateCutoff)}
               · Pickup ${T.fmtWindow(menu.window.start, menu.window.end)}
               · ${menu.deliveryOn ? 'Delivery available' : 'Pickup only'}
             </div>
@@ -108,7 +110,7 @@ function variantRows(item, disabled) {
     </div>`)}`;
 }
 
-function featuredBlock(item, cap) {
+function featuredBlock(item, cap, readOnly) {
   // The day's ceiling across both sizes. Only worth saying out loud once it is
   // close enough to change what someone does.
   const capNote = cap && cap.remaining === 0
@@ -127,12 +129,12 @@ function featuredBlock(item, cap) {
       ${capNote}
       ${item.description ? html`<p>${item.description}</p>` : ''}
       ${L.allergenChips(item.allergens)}
-      ${variantRows(item)}
+      ${variantRows(item, readOnly)}
     </div>
   </section>`;
 }
 
-function optionCard(item) {
+function optionCard(item, readOnly) {
   return html`
   <article class="optioncard">
     ${item.photo ? html`<img class="optioncard__photo" src="/uploads/${item.photo}" alt="${item.name}">` : ''}
@@ -141,14 +143,18 @@ function optionCard(item) {
       ${item.halal ? html`<p style="margin:var(--dbd-sp-1) 0">${L.halalBadge(true)}</p>` : ''}
       ${item.description ? html`<p class="optioncard__desc">${item.description}</p>` : ''}
       ${L.allergenChips(item.allergens)}
-      ${variantRows(item)}
+      ${variantRows(item, readOnly)}
     </div>
   </article>`;
 }
 
 /* --- Day view + checkout ------------------------------------------------ */
 function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedAreas }) {
-  const late = menu.state === 'closed';
+  const late = menu.state === 'late';
+  // Past the late cutoff but the day itself still to come. The menu is worth
+  // showing — someone reading it at breakfast should see what they missed and
+  // what the rest of the week holds — but there is nothing to fill in.
+  const shut = menu.state === 'closed';
   const past = menu.state === 'past';
   const dayLabel = T.fmtDayLong(day.service_date, tz());
 
@@ -178,14 +184,24 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
   const banner = past
     ? html`<div class="notice notice--strong"><strong>This day has closed.</strong>
         ${dayLabel} is in the past and is shown for reference only.</div>`
-    : late
-      ? html`<div class="notice notice--late"><strong>Ordering has closed for ${dayLabel}.</strong>
-          You can still send a late request, but it is <strong>not confirmed</strong> until
-          Derek confirms it. ${settings.get('owner_contact')}</div>`
-      : menu.state === 'closing'
-        ? html`<div class="notice"><strong>Closing tonight at ${T.fmtLocal(menu.cutoff, tz())}.</strong>
-            Get your order in before then.</div>`
-        : '';
+    : shut
+      ? html`<div class="notice notice--strong">
+          <strong>Ordering has closed for ${dayLabel}.</strong>
+          Late requests were taken until ${T.fmtLocal(menu.lateCutoff, tz())} this morning;
+          after that the shopping is done and the cooking has started. The menu below is
+          shown so you can see what's on — nothing on it can be ordered for today.
+          ${settings.get('owner_contact')}</div>`
+      : late
+        ? html`<div class="notice notice--late"><strong>Ordering has closed for ${dayLabel}.</strong>
+            You can still send a late request until
+            <strong>${T.fmtLocal(menu.lateCutoff, tz())} on the morning of
+            ${T.fmtDayShort(day.service_date, tz())}</strong>, but it is
+            <strong>not confirmed</strong> until Derek confirms it.
+            ${settings.get('owner_contact')}</div>`
+        : menu.state === 'closing'
+          ? html`<div class="notice"><strong>Closing tonight at ${T.fmtLocal(menu.cutoff, tz())}.</strong>
+              Get your order in before then.</div>`
+          : '';
 
   const body = html`
     <p><a href="/w/${week.slug}">← All days</a></p>
@@ -193,15 +209,15 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
     ${banner}
     ${L.allergenDisclaimer()}
 
-    ${menu.featured ? featuredBlock(menu.featured, menu.featuredCap) : html`<div class="notice">No featured dish is set for this day yet.</div>`}
+    ${menu.featured ? featuredBlock(menu.featured, menu.featuredCap, past || shut) : html`<div class="notice">No featured dish is set for this day yet.</div>`}
 
     ${menu.grouped.length ? html`
       <div class="section-rule"><h2>Other Options</h2></div>
       ${menu.grouped.map((g) => html`
         <h3 class="subhead">${g.subcategory}</h3>
-        ${g.items.map(optionCard)}`)}` : ''}
+        ${g.items.map((i) => optionCard(i, past || shut))}`)}` : ''}
 
-    ${past ? '' : html`
+    ${past || shut ? '' : html`
     <form id="orderform" method="post" action="/order" novalidate>
       <input type="hidden" name="week" value="${week.slug}">
       <input type="hidden" name="date" value="${day.service_date}">
