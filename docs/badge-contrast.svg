@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 234 30" width="234" height="30"
+  role="img" aria-label="Contrast: WCAG AA, measured">
+  <defs>
+    <clipPath id="r"><rect width="234" height="30" rx="6"/></clipPath>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="83" height="30" fill="#5A6643"/>
+    <rect x="83" width="151" height="30" fill="#BE8146"/>
+  </g>
+  <text x="41.5" y="19.5" font-family="'Segoe UI',Roboto,'Helvetica Neue',Arial,Helvetica,sans-serif" font-size="13" font-weight="600"
+    fill="#F4EFEB" text-anchor="middle">Contrast</text>
+  <text x="158.5" y="19.5" font-family="'Segoe UI',Roboto,'Helvetica Neue',Arial,Helvetica,sans-serif" font-size="13" font-weight="700"
+    fill="#2C1E18" text-anchor="middle">WCAG AA, measured</text>
+</svg>

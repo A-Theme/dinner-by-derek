@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 98 30" width="98" height="30"
+  role="img" aria-label="Node: 20+">
+  <defs>
+    <clipPath id="r"><rect width="98" height="30" rx="6"/></clipPath>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="53" height="30" fill="#5A6643"/>
+    <rect x="53" width="45" height="30" fill="#BE8146"/>
+  </g>
+  <text x="26.5" y="19.5" font-family="'Segoe UI',Roboto,'Helvetica Neue',Arial,Helvetica,sans-serif" font-size="13" font-weight="600"
+    fill="#F4EFEB" text-anchor="middle">Node</text>
+  <text x="75.5" y="19.5" font-family="'Segoe UI',Roboto,'Helvetica Neue',Arial,Helvetica,sans-serif" font-size="13" font-weight="700"
+    fill="#2C1E18" text-anchor="middle">20+</text>
+</svg>

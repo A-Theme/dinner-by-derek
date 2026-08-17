@@ -1,4 +1,16 @@
-# Dinner By Derek
+<p align="center">
+  <img src="docs/banner.svg" width="840"
+    alt="Dinner By Derek — supper club, Kitchener &amp; Waterloo">
+</p>
+
+<p align="center">
+  <img src="docs/badge-node.svg" alt="Node 20+">
+  <img src="docs/badge-build.svg" alt="Build step: none">
+  <img src="docs/badge-data.svg" alt="Database: one file">
+  <img src="docs/badge-install.svg" alt="Installs to a home screen">
+  <img src="docs/badge-contrast.svg" alt="Contrast: WCAG AA, measured">
+  <img src="docs/badge-print.svg" alt="Card: 300 DPI, bleed">
+</p>
 
 An installable web app for taking supper-club orders. Customers open a link,
 pick a day, order, and choose pickup or delivery. You run the week from a phone.
@@ -6,27 +18,33 @@ pick a day, order, and choose pickup or delivery. You run the week from a phone.
 There is no app store, no customer accounts, and no online payment. It is a
 website that installs to a home screen and works like an app.
 
+> [!TIP]
+> **New here? Three commands and you're serving.** `npm install`, fill in
+> `.env`, `npm start`. Everything else in this file is detail you can come
+> back for.
+
 ---
 
 ## Contents
 
-- [Running it](#running-it)
-- [Environment variables](#environment-variables)
-- [The three-level menu](#the-three-level-menu)
-- [The cutoff](#the-cutoff)
-- [Pickup window and locations](#pickup-window-and-locations)
-- [Delivery area](#delivery-area)
-- [Allergens](#allergens)
-- [Payment instructions](#payment-instructions)
-- [Colours and the theme file](#colours-and-the-theme-file)
-- [Icons](#icons)
-- [Social graphics](#social-graphics)
-- [Business card](#business-card)
-- [Facebook](#facebook)
-- [Backup and restore](#backup-and-restore)
-- [Deployment](#deployment)
-- [Tests](#tests)
-- [Dependencies](#dependencies)
+- 🔥 [Running it](#running-it)
+- 🔑 [Environment variables](#environment-variables)
+- 🍲 [The three-level menu](#the-three-level-menu)
+- ⏰ [The cutoff](#the-cutoff)
+- 🚪 [Pickup window and locations](#pickup-window-and-locations)
+- 🚗 [Delivery area](#delivery-area)
+- ⚠️ [Allergens](#allergens)
+- 💵 [Payment instructions](#payment-instructions)
+- 🎨 [Colours and the theme file](#colours-and-the-theme-file)
+- 📱 [Icons](#icons)
+- 📣 [Social graphics](#social-graphics)
+- 💳 [Business card](#business-card)
+- ✨ [README artwork](#readme-artwork)
+- 👍 [Facebook](#facebook)
+- 💾 [Backup and restore](#backup-and-restore)
+- 🚀 [Deployment](#deployment)
+- ✅ [Tests](#tests)
+- 📦 [Dependencies](#dependencies)
 
 ---
 
@@ -84,6 +102,32 @@ checkout — a redeploy that discards them takes the only copy with it.
 
 This is the most important section. The menu has three levels, they are stored
 separately, and they are only combined when a customer looks at a day.
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'Georgia, serif','lineColor':'#BE8146'}}}%%
+flowchart LR
+  L1["<b>1 · Featured dish</b><br/>one per service day<br/><i>This Week</i>"]
+  L2["<b>2 · Soup &amp; salad</b><br/>one each, whole week<br/><i>This Week</i>"]
+  L3["<b>3 · Standing items</b><br/>carry across weeks<br/><i>Other Options</i>"]
+  GATE{"Allergen review<br/>ticked?"}
+  DAY["<b>Wednesday's menu</b><br/>grouped as Soups,<br/>Salads, Mains"]
+  GONE["Absent from the menu<br/><i>— not greyed out</i>"]
+
+  L1 --> GATE
+  L2 --> GATE
+  L3 --> GATE
+  GATE -- yes --> DAY
+  GATE -- no --> GONE
+
+  classDef lvl fill:#5A6643,stroke:#4A2A1A,stroke-width:2px,color:#F4EFEB
+  classDef gate fill:#BE8146,stroke:#4A2A1A,stroke-width:2px,color:#2C1E18
+  classDef out fill:#F4EFEB,stroke:#BE8146,stroke-width:2px,color:#2C1E18
+  classDef gone fill:#4A2A1A,stroke:#4A2A1A,stroke-width:2px,color:#F4EFEB
+  class L1,L2,L3 lvl
+  class GATE gate
+  class DAY out
+  class GONE gone
+```
 
 ### Level 1 — the featured dish
 
@@ -144,10 +188,11 @@ leaves them alone.
 
 Authored in **Other Options**.
 
-⚠️ **Changes here go live immediately.** There is no draft state for standing
-items. Editing the price of Chili changes it on the live menu the moment you
-save. Orders already placed are not affected — they keep the price they were
-placed at.
+> [!WARNING]
+> **Changes here go live immediately.** There is no draft state for standing
+> items. Editing the price of Chili changes it on the live menu the moment you
+> save. Orders already placed are not affected — they keep the price they were
+> placed at.
 
 ### How they combine
 
@@ -170,6 +215,30 @@ cutoff.
 
 **22:00 local time on the calendar day before the service date.** Orders for
 Monday close Sunday at 22:00.
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'Georgia, serif','lineColor':'#BE8146'}}}%%
+flowchart LR
+  OPEN["<b>Open</b><br/>ordinary orders<br/>hold stock"]
+  CUT(["<b>22:00</b><br/>the night before"])
+  LATE["<b>Late requests</b><br/>hold nothing"]
+  YOU{"You decide"}
+  YES["Confirmed<br/><i>customer emailed</i>"]
+  NO["Declined<br/><i>customer emailed</i>"]
+
+  OPEN --> CUT --> LATE --> YOU
+  YOU -- confirm --> YES
+  YOU -- decline --> NO
+
+  classDef open fill:#5A6643,stroke:#4A2A1A,stroke-width:2px,color:#F4EFEB
+  classDef cut fill:#4A2A1A,stroke:#4A2A1A,stroke-width:2px,color:#F4EFEB
+  classDef late fill:#BE8146,stroke:#4A2A1A,stroke-width:2px,color:#2C1E18
+  classDef out fill:#F4EFEB,stroke:#BE8146,stroke-width:2px,color:#2C1E18
+  class OPEN open
+  class CUT cut
+  class LATE,YOU late
+  class YES,NO out
+```
 
 Change the hour in **Settings**. The "day before" part is fixed and not
 configurable — it is the rule the whole app is built around.
@@ -239,7 +308,10 @@ and a bill, so it stays out until you actually want it.
 
 ## Allergens
 
-**The allergen tool makes suggestions. It does not make decisions. You do.**
+> [!IMPORTANT]
+> **The allergen tool makes suggestions. It does not make decisions. You do.**
+> Nothing reaches a customer until you tick the review box, and editing a
+> description takes the tick back off.
 
 When you type a description, the app matches it against a dictionary of
 ingredient words and suggests allergens. It reads "buttered mash" and suggests
@@ -299,23 +371,38 @@ e-transfer to a specific address, whatever it is.
 
 Every colour is defined once, in `public/theme.css`, as a CSS custom property.
 
-| Name | Hex | Used for |
-|---|---|---|
-| Olive Green | `#5A6643` | Header and footer |
-| Saddle Tan | `#BE8146` | Buttons, badges |
-| Burnt Umber | `#4A2A1A` | Headings |
-| Parchment | `#F4EFEB` | Backgrounds, cards |
-| Espresso | `#2C1E18` | Body text |
-| Warm Ochre | `#D8924A` | Button hover |
+| | Name | Hex | Used for |
+|---|---|---|---|
+| <img src="docs/swatch-olive.svg" alt=""> | Olive Green | `#5A6643` | Header and footer |
+| <img src="docs/swatch-tan.svg" alt=""> | Saddle Tan | `#BE8146` | Buttons, badges |
+| <img src="docs/swatch-umber.svg" alt=""> | Burnt Umber | `#4A2A1A` | Headings |
+| <img src="docs/swatch-parchment.svg" alt=""> | Parchment | `#F4EFEB` | Backgrounds, cards |
+| <img src="docs/swatch-espresso.svg" alt=""> | Espresso | `#2C1E18` | Body text |
+| <img src="docs/swatch-ochre.svg" alt=""> | Warm Ochre | `#D8924A` | Button hover |
+
+Eight more tones are derived from those six — never a new hue, always a step
+lighter or darker. Six are surfaces and text that needed one; the last two
+exist because the audit in `CONTRAST.md` found pairings that were not readable
+enough, and the ratios they fixed are in the table:
+
+| | Name | Hex | Why it exists |
+|---|---|---|---|
+| <img src="docs/swatch-olive-deep.svg" alt=""> | `--dbd-olive-deep` | `#414A2F` | Olive as body text on parchment |
+| <img src="docs/swatch-tan-deep.svg" alt=""> | `--dbd-tan-deep` | `#8A5A2B` | Tan as body text on parchment |
+| <img src="docs/swatch-umber-soft.svg" alt=""> | `--dbd-umber-soft` | `#6B4630` | Borders and muted labels |
+| <img src="docs/swatch-parchment-2.svg" alt=""> | `--dbd-parchment-2` | `#EAE2DB` | Table stripes and wells |
+| <img src="docs/swatch-espresso-2.svg" alt=""> | `--dbd-espresso-2` | `#1B120E` | Splash screen, print rules |
+| <img src="docs/swatch-cream-hi.svg" alt=""> | `--dbd-cream-hi` | `#FBF8F6` | Card surfaces on wells |
+| <img src="docs/swatch-umber-deep.svg" alt=""> | `--dbd-umber-deep` | `#3C2114` | Badge text: 3.92:1 → **4.52:1** |
+| <img src="docs/swatch-tan-lift.svg" alt=""> | `--dbd-tan-lift` | `#EBC08C` | Active nav bar: 1.88:1 → **3.64:1** |
 
 Changing a value there changes it everywhere — including the emails, the browser
 theme colour, and the generated icons, which all read from this one file rather
 than repeating the hex codes.
 
-Three extra tones are derived from the palette because two of the original
-pairings were not readable enough. Saddle Tan on Olive scored 1.88:1 as an
-active-tab indicator, well under the 3:1 needed for a UI element, so
-`--dbd-tan-lift` exists at 3.64:1. `CONTRAST.md` documents all of it.
+Saddle Tan on Olive scored 1.88:1 as an active-tab indicator, well under the
+3:1 needed for a UI element, which is why `--dbd-tan-lift` exists at 3.64:1.
+`CONTRAST.md` documents all of it.
 
 After changing any colour:
 
@@ -436,11 +523,12 @@ this again, and the next card carries the new one. Colours come from
 
 ### The QR
 
-It points at `BASE_URL`. **Set that in `.env` before printing** — without it
-the code points at a placeholder. The command says so loudly, the Graphics page
-carries the same warning where you can't miss it, and the address is printed in
-readable type under the code, so a wrong one is visible on the card rather than
-hidden in it.
+> [!WARNING]
+> It points at `BASE_URL`. **Set that in `.env` before printing.** Without it
+> the code points at a placeholder — the command says so loudly, the Graphics
+> page carries the same warning where you can't miss it, and the address is
+> printed in readable type under the code, so a wrong one is visible on the
+> card rather than hidden in it.
 
 The code is drawn by `scripts/qr.js`, written here rather than installed:
 byte mode, error correction level Q, versions 1 through 6, which is four times
@@ -462,6 +550,44 @@ as *Not generated yet*.
 
 Everything here is generated. Edit `scripts/card.js` or the theme, never the
 PNGs.
+
+---
+
+## README artwork
+
+The banner at the top of this file, the badges under it, and the colour chips
+in the table above:
+
+```bash
+npm run readme-art
+```
+
+Writes SVGs to `docs/`. **These are committed**, unlike the social graphics and
+the card — GitHub renders this file straight out of the repository and cannot
+run a script first.
+
+The banner is animated: steam off the mark, a warm bloom behind it, and a shine
+travelling along both hairlines. GitHub serves README images through a proxy
+that strips scripts, so the motion is SMIL `<animate>` elements, which are
+declarative and survive being loaded as an `<img>`. The lockup is embedded as a
+data URI in the same file, because a relative image reference inside an SVG
+that is itself loaded as an image does not resolve on GitHub — link it and the
+banner renders as an empty olive box.
+
+No shields.io, no CDN, no webfont. The README of a codebase whose argument is
+*no build step, no external service* should not need three network round-trips
+to draw its own title, so the badges are made here from `theme.css` like
+everything else. Both of their colour pairings are ones `CONTRAST.md` already
+measures: Parchment on Olive at 5.38:1 for the label, Espresso on Saddle Tan at
+4.91:1 for the value.
+
+The two diagrams are Mermaid, which GitHub renders natively, coloured from the
+same palette.
+
+> [!NOTE]
+> Section headings are deliberately plain — the emoji live in the Contents list
+> instead. GitHub builds heading anchors from heading text, so an emoji in a
+> heading would quietly change its anchor and break every link in that list.
 
 ---
 
