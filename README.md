@@ -86,11 +86,17 @@ separately, and they are only combined when a customer looks at a day.
 is what makes the day worth showing up for.
 
 Authored in **This Week**, one box per weekday — Monday through Sunday. Fill in
-whichever days you're cooking and leave the rest blank. Each box is name and
-description, enough to clear the allergen gate; price, photo and any pickup
-override for that day open up below once the box has a name in it. The "Week
-starts" date decides which seven calendar dates the boxes point at — moving it
-only re-labels the boxes, it never touches a day you've already filled in.
+whichever days you're cooking and leave the rest blank. Each box is the same
+full editor the soup and salad get: name, description, photo, halal flag,
+allergen review, and both size variants with their own labels, prices and
+counts. The "Week starts" date decides which seven calendar dates the boxes
+point at — moving it only re-labels the boxes, it never touches a day you've
+already filled in.
+
+**Day details**, below, is not a second copy of that editor. It holds only the
+things that belong to the date rather than the dish: a pickup-window override
+for that one day, delivery on or off for it, and removing the day. Saving it
+cannot overwrite what the box above holds.
 
 ### Level 2 — soup and salad of the week
 
@@ -98,7 +104,7 @@ only re-labels the boxes, it never touches a day you've already filled in.
 appear Tuesday, Wednesday and Thursday, and you can change that per week. Either
 one can be left blank.
 
-Authored in **This Week**, in the two editors above the day cards.
+Authored in **This Week**, in the two editors below the weekday boxes.
 
 The database enforces the "one each" rule directly, so no amount of clicking can
 produce two soups in a week.

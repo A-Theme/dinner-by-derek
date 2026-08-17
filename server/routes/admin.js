@@ -180,9 +180,9 @@ router.post('/week/:id/weekstart', (req, res) => {
 });
 
 /* One box per weekday, Monday through Sunday. Each upserts the service day
-   for its computed date, but only touches the fields the box actually shows
-   — name, description, allergen review. Price, photo and pickup overrides
-   (set in the day cards below) are never overwritten by this route. */
+   for its computed date with everything the box shows — name, description,
+   photo, halal, allergen review, sizes and prices. Only the per-day pickup
+   override (set below in Day details) is left untouched by this route. */
 router.post('/week/:id/weekdays', (req, res) => {
   const id = Number(req.params.id);
   const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(id);
@@ -196,15 +196,23 @@ router.post('/week/:id/weekdays', (req, res) => {
       const date = T.addDays(weekStart, offset);
       const existing = db.prepare('SELECT id FROM service_days WHERE week_id = ? AND service_date = ?').get(id, date);
       if (existing) {
-        db.prepare(`UPDATE service_days SET dish_name=?, description=?,
-            allergens=?, dismissed=?, ack=?, ack_of=? WHERE id=?`)
-          .run(item.name, item.description, item.allergens, item.dismissed,
-            item.ack, item.ack_of, existing.id);
+        db.prepare(`UPDATE service_days SET dish_name=?, description=?, photo=?, halal=?,
+            allergens=?, dismissed=?, ack=?, ack_of=?, full_on=?, full_label=?, full_price=?,
+            full_cap=?, single_on=?, single_label=?, single_price=?, single_cap=? WHERE id=?`)
+          .run(item.name, item.description, item.photo, item.halal, item.allergens,
+            item.dismissed, item.ack, item.ack_of, item.full_on, item.full_label,
+            item.full_price, item.full_cap, item.single_on, item.single_label,
+            item.single_price, item.single_cap, existing.id);
       } else {
         db.prepare(`INSERT INTO service_days
-            (week_id, service_date, dish_name, description, allergens, dismissed, ack, ack_of)
-            VALUES (?,?,?,?,?,?,?,?)`)
-          .run(id, date, item.name, item.description, item.allergens, item.dismissed, item.ack, item.ack_of);
+            (week_id, service_date, dish_name, description, photo, halal, allergens, dismissed,
+             ack, ack_of, full_on, full_label, full_price, full_cap, single_on, single_label,
+             single_price, single_cap)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+          .run(id, date, item.name, item.description, item.photo, item.halal, item.allergens,
+            item.dismissed, item.ack, item.ack_of, item.full_on, item.full_label,
+            item.full_price, item.full_cap, item.single_on, item.single_label,
+            item.single_price, item.single_cap);
       }
     });
   });
@@ -228,22 +236,18 @@ router.post('/week/:id/dates', (req, res) => {
   back(res, req, dates.length ? 'Service days added.' : 'No dates to add.');
 });
 
+/* The dish itself (name, description, photo, halal, allergens, prices) is
+   edited in the weekday box above — this route only ever touches the
+   per-day pickup override, so it can never clobber what that box saved. */
 router.post('/week/:id/day/:dayId', (req, res) => {
-  const item = IF.parse(req.body, 'day');
-  db.prepare(`UPDATE service_days SET dish_name=?, description=?, photo=?, halal=?,
-      allergens=?, dismissed=?, ack=?, ack_of=?, full_on=?, full_label=?, full_price=?,
-      full_cap=?, single_on=?, single_label=?, single_price=?, single_cap=?,
-      pickup_start=?, pickup_end=?, delivery_on=? WHERE id=? AND week_id=?`)
-    .run(item.name, item.description, item.photo, item.halal, item.allergens,
-      item.dismissed, item.ack, item.ack_of, item.full_on, item.full_label,
-      item.full_price, item.full_cap, item.single_on, item.single_label,
-      item.single_price, item.single_cap,
-      String(req.body.pickup_start || '').trim() || null,
+  db.prepare(`UPDATE service_days SET pickup_start=?, pickup_end=?, delivery_on=?
+      WHERE id=? AND week_id=?`)
+    .run(String(req.body.pickup_start || '').trim() || null,
       String(req.body.pickup_end || '').trim() || null,
       req.body.delivery_override === '' ? null : (req.body.delivery_override === '1' ? 1 : 0),
       Number(req.params.dayId), Number(req.params.id));
   if (req.get('X-Draft')) return res.json({ ok: true });
-  back(res, req, 'Service day saved.');
+  back(res, req, 'Pickup override saved.');
 });
 
 router.post('/week/:id/day/:dayId/delete', (req, res) => {

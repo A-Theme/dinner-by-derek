@@ -126,6 +126,10 @@ const PAST_DATE = T.addDays(today, -2);
     check('a new week starts as a draft, not live', week.status, 'draft');
 
     await POST(`/admin/week/${weekId}/basics`, { description: 'A week for testing.' });
+
+    // Point the weekday boxes at the week containing the service date, so the
+    // box for that weekday writes to the date the rest of this test uses.
+    await POST(`/admin/week/${weekId}/weekstart`, { week_start: T.mondayOf(SERVICE_DATE) });
     await POST(`/admin/week/${weekId}/dates`, { dates: SERVICE_DATE });
 
     const days = db.prepare('SELECT * FROM service_days WHERE week_id = ?').all(weekId);
@@ -136,15 +140,19 @@ const PAST_DATE = T.addDays(today, -2);
   const { db } = require('../server/db');
   const dayId = db.prepare('SELECT id FROM service_days WHERE week_id = ?').get(weekId).id;
   const DISH_DESC = 'Slow braised beef with buttered mash';
+  // The featured dish is authored in that weekday's box, not the day card.
+  const WD = T.weekdayOf(SERVICE_DATE);
+  const dish = (extra) => ({
+    [`${WD}_name`]: 'Braised Beef',
+    [`${WD}_description`]: DISH_DESC,
+    [`${WD}_full_on`]: '1', [`${WD}_full_price`]: '22.00', [`${WD}_full_cap`]: '2',
+    [`${WD}_single_on`]: '1', [`${WD}_single_price`]: '14.00',
+    ...extra,
+  });
 
   {
     // Featured dish saved WITHOUT the allergen acknowledgement.
-    await POST(`/admin/week/${weekId}/day/${dayId}`, {
-      day_name: 'Braised Beef',
-      day_description: DISH_DESC,
-      day_full_on: '1', day_full_price: '22.00', day_full_cap: '2',
-      day_single_on: '1', day_single_price: '14.00',
-    });
+    await POST(`/admin/week/${weekId}/weekdays`, dish());
 
     const blocked = await POST(`/admin/week/${weekId}/publish`, {});
     const week = db.prepare('SELECT status FROM weeks WHERE id = ?').get(weekId);
@@ -155,13 +163,7 @@ const PAST_DATE = T.addDays(today, -2);
     ok('and says what to do about it', /allergen review/i.test(msg));
 
     // Tick the box, but leave the suggested allergens unanswered.
-    await POST(`/admin/week/${weekId}/day/${dayId}`, {
-      day_name: 'Braised Beef',
-      day_description: DISH_DESC,
-      day_ack: '1',
-      day_full_on: '1', day_full_price: '22.00', day_full_cap: '2',
-      day_single_on: '1', day_single_price: '14.00',
-    });
+    await POST(`/admin/week/${weekId}/weekdays`, dish({ [`${WD}_ack`]: '1' }));
     await POST(`/admin/week/${weekId}/publish`, {});
     check('ticking the box is not enough while suggestions are unanswered',
       db.prepare('SELECT status FROM weeks WHERE id = ?').get(weekId).status, 'draft');
@@ -171,17 +173,29 @@ const PAST_DATE = T.addDays(today, -2);
     const suggested = A.detect(DISH_DESC).map((h) => h.allergen);
     ok('the dictionary did flag the butter', suggested.includes('milk'));
 
-    await POST(`/admin/week/${weekId}/day/${dayId}`, {
-      day_name: 'Braised Beef',
-      day_description: DISH_DESC,
-      day_ack: '1',
-      day_allergens: JSON.stringify(suggested),
-      day_full_on: '1', day_full_price: '22.00', day_full_cap: '2',
-      day_single_on: '1', day_single_price: '14.00',
-    });
+    await POST(`/admin/week/${weekId}/weekdays`, dish({
+      [`${WD}_ack`]: '1',
+      [`${WD}_allergens`]: JSON.stringify(suggested),
+    }));
     await POST(`/admin/week/${weekId}/publish`, {});
     check('a reviewed week publishes',
       db.prepare('SELECT status FROM weeks WHERE id = ?').get(weekId).status, 'published');
+
+    // The day card owns only the pickup override now. Saving it must not
+    // blank the dish the weekday box above authored.
+    await POST(`/admin/week/${weekId}/day/${dayId}`, {
+      pickup_start: '17:00', pickup_end: '20:00', delivery_override: '',
+    });
+    const afterOverride = db.prepare('SELECT * FROM service_days WHERE id = ?').get(dayId);
+    check('the per-day pickup override saves', afterOverride.pickup_start, '17:00');
+    check('and it leaves the dish name alone', afterOverride.dish_name, 'Braised Beef');
+    check('and the price', afterOverride.full_price, 2200);
+    check('and the allergen acknowledgement', afterOverride.ack, 1);
+
+    // Put it back so the rest of the test sees the standard window.
+    await POST(`/admin/week/${weekId}/day/${dayId}`, {
+      pickup_start: '', pickup_end: '', delivery_override: '',
+    });
   }
 
   /* --- Level 3 is gated too ---------------------------------------------- */

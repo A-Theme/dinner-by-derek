@@ -57,23 +57,24 @@ function weekPage({ week, days, items, hasPrevious }) {
     <!-- 2. One box per day -->
     <div class="card">
       <h2>This week's days</h2>
-      <p class="also">Fill in whichever days you're cooking. Leave a day blank to skip it — the full
-        details (price, photo, pickup) open up below once a day has a name.</p>
+      <p class="also">Fill in whichever days you're cooking. Leave a day blank to skip it. A pickup-window
+        override for just that day, and removing it, are below in Day details once it has a name.</p>
       <form method="post" action="/admin/week/${week.id}/weekdays" data-autosave>
         ${T.WEEKDAYS_MON_FIRST.map((wd, offset) => {
           const date = T.addDays(weekStart, offset);
           const existing = days.find((d) => d.service_date === date);
-          const stub = { dish_name: '', description: '', allergens: '[]', dismissed: '[]', ack: 0, ack_of: null };
+          const stub = {
+            dish_name: '', description: '', allergens: '[]', dismissed: '[]', ack: 0, ack_of: null,
+            photo: null, halal: 0, full_on: 1, full_label: '', full_price: null, full_cap: null,
+            single_on: 0, single_label: '', single_price: null, single_cap: null,
+          };
           const item = existing || stub;
           return html`
           <details class="daycard-edit"${existing && existing.dish_name ? '' : ' open'}>
             <summary>${T.WEEKDAY_LABELS[wd]}, ${T.fmtMonthDay(date, tz())}
               — ${item.dish_name || 'nothing yet'}
               ${existing ? V.reviewFlag(item, item.dish_name || 'This dish') : ''}</summary>
-            ${V.itemEditor({
-              prefix: wd, item, nameLabel: 'Featured dish',
-              showPhoto: false, showHalal: false, showPrices: false,
-            })}
+            ${V.itemEditor({ prefix: wd, item, nameLabel: 'Featured dish' })}
           </details>`;
         })}
         <button class="btn btn--primary" type="submit">Save this week's days</button>
@@ -117,10 +118,11 @@ function weekPage({ week, days, items, hasPrevious }) {
       </div>
     </div>
 
-    <!-- 4. Service day details: price, photo, pickup override -->
+    <!-- 4. Service day details: pickup override, and removing a day -->
     <h2>Day details</h2>
-    <p class="also" style="margin-bottom:var(--dbd-sp-4)">Price, photo and pickup overrides for
-      whichever days have a name above.</p>
+    <p class="also" style="margin-bottom:var(--dbd-sp-4)">A pickup-window override for just this day, and
+      removing a day, for whichever days have a name above. Name, description, photo, halal and price are
+      all edited in the box above — this is not a second copy of them.</p>
     ${days.length ? days.map((d) => {
       const cutoff = T.cutoffFor(d.service_date, cutoffHour, cutoffMin, tz());
       const win = M.pickupWindowFor(d);
@@ -134,7 +136,6 @@ function weekPage({ week, days, items, hasPrevious }) {
            · Pickup ${T.fmtWindow(win.start, win.end)}</p>
 
         <form method="post" action="/admin/week/${week.id}/day/${d.id}" data-autosave>
-          ${V.itemEditor({ prefix: 'day', item: d, nameLabel: 'Featured dish' })}
           <fieldset>
             <legend>Just for this day (optional)</legend>
             <div class="stack2">
