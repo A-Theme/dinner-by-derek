@@ -43,6 +43,7 @@
   /* --- Allergen suggestions --------------------------------------------- */
   document.querySelectorAll('[data-editor]').forEach(function (ed) {
     var desc = ed.querySelector('[data-description]');
+    var nameEl = ed.querySelector('[data-item-name]');
     var box = ed.querySelector('[data-suggestions]');
     var list = ed.querySelector('[data-sugg-list]');
     var tags = ed.querySelector('[data-tags]');
@@ -53,6 +54,11 @@
 
     function accepted() { try { return JSON.parse(hiddenA.value || '[]'); } catch (e) { return []; } }
     function dismissed() { try { return JSON.parse(hiddenD.value || '[]'); } catch (e) { return []; } }
+
+    /** Mirrors reviewedText() on the server. Both halves, both trimmed. */
+    function reviewedText() {
+      return (nameEl ? nameEl.value : '').trim() + '\n' + (desc ? desc.value : '').trim();
+    }
 
     function renderTags() {
       tags.innerHTML = '';
@@ -77,6 +83,7 @@
       fetch('/admin/api/suggest', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          name: nameEl ? nameEl.value : '',
           description: desc.value, accepted: accepted(), dismissed: dismissed(),
         }),
       }).then(function (r) { return r.json(); }).then(function (d) {
@@ -109,15 +116,21 @@
     }
 
     if (desc) {
-      desc.addEventListener('input', function () {
-        clearTimeout(timer);
-        timer = setTimeout(suggest, 400);
-        // Editing the description invalidates a previous review.
-        if (ack && ack.checked && desc.value !== desc.dataset.ackOf) {
-          ack.checked = false;
-          toast('Description changed — please review the allergens again.', 'bad');
-        }
-      });
+      // Editing either half invalidates a previous review, because the
+      // suggestions are read from both. Renaming "Chicken Pie" to "Salmon Pie"
+      // has to reopen the review exactly as rewriting the description does.
+      var edited = function (what) {
+        return function () {
+          clearTimeout(timer);
+          timer = setTimeout(suggest, 400);
+          if (ack && ack.checked && reviewedText() !== desc.dataset.ackOf) {
+            ack.checked = false;
+            toast(what + ' changed — please review the allergens again.', 'bad');
+          }
+        };
+      };
+      desc.addEventListener('input', edited('Description'));
+      if (nameEl) nameEl.addEventListener('input', edited('Name'));
       suggest();
     }
 

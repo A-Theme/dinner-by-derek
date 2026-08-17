@@ -341,6 +341,31 @@ function renameColumn(table, from, to) {
 // Pickup stopped being slot-based; the window itself is frozen onto the order.
 renameColumn('orders', 'pickup_slot', 'pickup_window');
 
+/* The allergen review used to be recorded against the description alone. It is
+ * now recorded against the name and the description together, because the
+ * suggestions read both — see reviewedText() in allergens.js.
+ *
+ * Acknowledgements that were valid under the old rule are carried forward
+ * rather than voided, which would have pulled reviewed dishes off the menu on
+ * deploy for a reason the owner never saw. Carrying them forward is safe: the
+ * gate still recomputes suggestions over the new text, so any allergen the
+ * name introduces comes back as an undecided suggestion and blocks publishing
+ * with a message naming it. The tick survives; the new information does not
+ * get waved through.
+ *
+ * Only rows whose ack_of still equals the description are touched — those are
+ * the ones that were valid. Rows already stale stay stale. Idempotent, since
+ * the rewritten value always contains a newline and can never equal the
+ * description again.
+ */
+for (const [table, nameCol] of [
+  ['service_days', 'dish_name'], ['week_items', 'name'], ['standing_items', 'name'],
+]) {
+  db.prepare(`UPDATE ${table}
+    SET ack_of = TRIM(${nameCol}) || char(10) || TRIM(description)
+    WHERE ack = 1 AND ack_of IS NOT NULL AND ack_of = description`).run();
+}
+
 /* --- Settings accessors -------------------------------------------------- */
 const getRow = db.prepare('SELECT value FROM settings WHERE key = ?');
 const setRow = db.prepare('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');

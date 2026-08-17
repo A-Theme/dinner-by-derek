@@ -30,7 +30,25 @@ function dictionary() {
 }
 
 /**
- * Detect allergens in a free-text description.
+ * The text an item is reviewed against: its name and its description together.
+ *
+ * The name is not decoration — it is where the allergen usually is. "Beer-
+ * Battered Haddock", described as "hand-cut chips and mushy peas", contains
+ * fish and gluten in the title and nothing detectable in the body. Reading the
+ * description alone found nothing, the owner ticked the box in good faith, and
+ * a fish dish reached the menu with no fish tag. The dictionary knew both words
+ * perfectly well; it was never shown them.
+ *
+ * Level 1 stores the name as `dish_name` and levels 2 and 3 as `name`, so both
+ * are accepted here rather than making three callers remember which is which.
+ */
+function reviewedText(item) {
+  const name = item.name != null ? item.name : item.dish_name;
+  return `${String(name || '').trim()}\n${String(item.description || '').trim()}`;
+}
+
+/**
+ * Detect allergens in free text — a name and description together, in practice.
  * Returns [{ allergen, terms: [matched words] }] ordered by the Health Canada list.
  */
 function detect(description) {
@@ -68,12 +86,13 @@ function detect(description) {
 
 /**
  * Split detection into pending suggestions vs already-decided.
- * `accepted` and `dismissed` are the item's stored arrays.
+ * `text` is the reviewed text — name and description — not the description
+ * alone. `accepted` and `dismissed` are the item's stored arrays.
  */
-function pendingFor(description, accepted, dismissed) {
+function pendingFor(text, accepted, dismissed) {
   const acc = new Set(accepted || []);
   const dis = new Set(dismissed || []);
-  return detect(description)
+  return detect(text)
     .filter((d) => !acc.has(d.allergen) && !dis.has(d.allergen));
 }
 
@@ -82,22 +101,28 @@ function pendingFor(description, accepted, dismissed) {
  *
  * An item may go live only when:
  *   1. the owner has ticked the acknowledgement, AND
- *   2. the description has not changed since that tick, AND
+ *   2. neither the name nor the description has changed since that tick, AND
  *   3. no suggestion is still sitting undecided.
  *
  * An empty detection result does NOT satisfy this. A dish whose description
  * trips no dictionary term still requires the acknowledgement — absence of a
  * match is absence of information, never a clean bill of health.
+ *
+ * Rule 2 covers the name as well as the description because rule 3 now reads
+ * both. Renaming "Chicken Pie" to "Salmon Pie" changes what the dictionary
+ * finds, so it has to put the review back on the owner's desk exactly as an
+ * edit to the description does.
  */
 function reviewState(item) {
   const accepted = JSON.parse(item.allergens || '[]');
   const dismissed = JSON.parse(item.dismissed || '[]');
-  const pending = pendingFor(item.description, accepted, dismissed);
+  const text = reviewedText(item);
+  const pending = pendingFor(text, accepted, dismissed);
 
   if (!item.ack) {
     return { ok: false, reason: 'not_acknowledged', pending };
   }
-  if ((item.ack_of || '') !== (item.description || '')) {
+  if ((item.ack_of || '') !== text) {
     return { ok: false, reason: 'description_changed', pending };
   }
   if (pending.length) {
@@ -112,7 +137,7 @@ function reviewMessage(itemLabel, state) {
     case 'not_acknowledged':
       return `${itemLabel} still needs its allergen review. Open it and tick "I have reviewed the allergen information for this dish."`;
     case 'description_changed':
-      return `${itemLabel} was edited after its allergen review. Open it, check the tags still match the new description, and tick the review box again.`;
+      return `${itemLabel} was edited after its allergen review. Open it, check the tags still match the name and description, and tick the review box again.`;
     case 'pending_suggestions':
       return `${itemLabel} has suggested allergens waiting on you: ${state.pending.map((p) => p.allergen).join(', ')}. Accept or dismiss each one.`;
     default:
@@ -121,6 +146,6 @@ function reviewMessage(itemLabel, state) {
 }
 
 module.exports = {
-  detect, pendingFor, reviewState, reviewMessage, dictionary,
+  detect, pendingFor, reviewState, reviewMessage, dictionary, reviewedText,
   HEALTH_CANADA_ORDER,
 };

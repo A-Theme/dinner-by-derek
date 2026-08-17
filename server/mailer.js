@@ -155,8 +155,8 @@ async function customerOrderEmail(order, lines) {
     <p><strong>Paying:</strong> ${esc(settings.get('payment_instructions'))}</p>
     ${tags ? `<p><strong>Allergen information as shown when you ordered</strong></p><ul>${tags}</ul>` : ''}
     <p style="font-size:13px;color:${palette['umber-soft']}">Allergen information is a guide only.
-      Dishes are prepared in a shared home kitchen where cross-contamination is possible.
-      ${esc(settings.get('owner_contact'))}</p>`);
+      Every necessary precaution is taken in the kitchen, but cross-contamination remains a
+      small possibility. ${esc(settings.get('owner_contact'))}</p>`);
 
   return send({
     to: order.email,

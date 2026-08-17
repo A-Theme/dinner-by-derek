@@ -91,20 +91,21 @@ function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWee
   const accepted = JSON.parse(item.allergens || '[]');
   const dismissed = JSON.parse(item.dismissed || '[]');
   const weekdays = JSON.parse(item.weekdays || '[]');
-  const ackValid = item.ack && (item.ack_of || '') === (item.description || '');
+  const ackValid = item.ack && (item.ack_of || '') === A.reviewedText(item);
 
   return html`
   <div class="item-editor" data-editor data-prefix="${prefix}">
     ${showName ? html`
       <label for="${prefix}_name">${nameLabel}</label>
-      <input type="text" id="${prefix}_name" name="${prefix}_name" value="${item.name || item.dish_name || ''}">` : ''}
+      <input type="text" id="${prefix}_name" name="${prefix}_name" data-item-name
+        value="${item.name || item.dish_name || ''}">` : ''}
 
     <label for="${prefix}_description">Description</label>
     <textarea id="${prefix}_description" name="${prefix}_description" rows="4"
       data-description data-ack-of="${item.ack_of || ''}">${item.description || ''}</textarea>
 
     <div class="suggestions" data-suggestions hidden>
-      <div class="suggestions__label">Suggested from the description — nothing is applied until you accept it</div>
+      <div class="suggestions__label">Suggested from the name and description — nothing is applied until you accept it</div>
       <div data-sugg-list></div>
     </div>
 

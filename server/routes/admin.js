@@ -108,8 +108,12 @@ router.get('/', (req, res) => {
 
 /* --- Allergen suggestion API -------------------------------------------- */
 router.post('/api/suggest', (req, res) => {
-  const { description, accepted, dismissed } = req.body || {};
-  res.json({ pending: A.pendingFor(description, accepted, dismissed) });
+  const { name, description, accepted, dismissed } = req.body || {};
+  // Suggestions are read from the name and the description together, the same
+  // pair the publish gate stores the acknowledgement against.
+  res.json({
+    pending: A.pendingFor(A.reviewedText({ name, description }), accepted, dismissed),
+  });
 });
 
 /* --- Upload -------------------------------------------------------------- */

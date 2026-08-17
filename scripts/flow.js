@@ -242,7 +242,8 @@ const PAST_DATE = T.addDays(today, -2);
     ok('the standing items are merged in', day.text.includes('Pork Schnitzel'));
     ok('the accepted allergen is shown', day.text.toLowerCase().includes('milk'));
     ok('the suggestion-only disclaimer is present',
-      /guide only/i.test(day.text) && /shared home kitchen/i.test(day.text));
+      /guide only/i.test(day.text)
+      && /cross-contamination\s+remains\s+a\s+small\s+possibility/i.test(day.text));
     ok('and it tells an allergic customer to make contact',
       /contact the kitchen/i.test(day.text));
     ok('and it never claims to be allergen-free',
@@ -510,7 +511,9 @@ const PAST_DATE = T.addDays(today, -2);
        full_on, full_price, daily_cap)
       VALUES (?,?,?,?,?,'[]',1,?,1,2200,1)`)
       .run(weekId, today, 'Cutoff Test Dish', desc,
-        JSON.stringify(A.detect(desc).map((h) => h.allergen)), desc);
+        JSON.stringify(A.detect(A.reviewedText({ name: 'Cutoff Test Dish', description: desc }))
+          .map((h) => h.allergen)),
+        A.reviewedText({ name: 'Cutoff Test Dish', description: desc }));
 
     const lateDay = db.prepare('SELECT id FROM service_days WHERE week_id=? AND service_date=?')
       .get(weekId, today);

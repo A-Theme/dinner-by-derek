@@ -221,35 +221,81 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
 
 /* --- The publish gate: acknowledgement, and it goes stale ----------------- */
 {
+  const name = 'Chicken Cutlets';
   const desc = 'Chicken cutlets, breaded and fried';
-  const accepted = JSON.stringify(A.detect(desc).map((h) => h.allergen));
+  // What the owner is shown and ticks against: both halves, as stored.
+  const reviewed = A.reviewedText({ name, description: desc });
+  const accepted = JSON.stringify(A.detect(reviewed).map((h) => h.allergen));
+  const item = (over) => ({ name, description: desc, allergens: accepted, dismissed: '[]', ack: 1, ack_of: reviewed, ...over });
 
-  const unacked = A.reviewState({ description: desc, allergens: accepted, dismissed: '[]', ack: 0, ack_of: null });
+  const unacked = A.reviewState(item({ ack: 0, ack_of: null }));
   check('an unacknowledged item cannot publish', unacked.ok, false);
   check('and the reason says why', unacked.reason, 'not_acknowledged');
 
-  const acked = A.reviewState({ description: desc, allergens: accepted, dismissed: '[]', ack: 1, ack_of: desc });
-  check('an acknowledged item can publish', acked.ok, true);
+  check('an acknowledged item can publish', A.reviewState(item({})).ok, true);
 
-  const edited = A.reviewState({ description: `${desc}, served with lemon`, allergens: accepted, dismissed: '[]', ack: 1, ack_of: desc });
+  const edited = A.reviewState(item({ description: `${desc}, served with lemon` }));
   check('editing the description invalidates the acknowledgement', edited.ok, false);
   check('and the reason names the edit', edited.reason, 'description_changed');
 
-  const ignored = A.reviewState({ description: desc, allergens: '[]', dismissed: '[]', ack: 1, ack_of: desc });
+  const ignored = A.reviewState(item({ allergens: '[]' }));
   check('unanswered suggestions block publishing', ignored.ok, false);
   check('even when the box is ticked', ignored.reason, 'pending_suggestions');
 
-  const emptyDetection = A.reviewState({ description: 'Roasted carrots with thyme', allergens: '[]', dismissed: '[]', ack: 0, ack_of: null });
+  const clean = { name: 'Roast Carrots', description: 'Roasted carrots with thyme' };
+  const emptyDetection = A.reviewState({ ...clean, allergens: '[]', dismissed: '[]', ack: 0, ack_of: null });
   check('detecting nothing still requires acknowledgement', emptyDetection.ok, false);
 
-  const emptyAcked = A.reviewState({ description: 'Roasted carrots with thyme', allergens: '[]', dismissed: '[]', ack: 1, ack_of: 'Roasted carrots with thyme' });
+  const emptyAcked = A.reviewState({ ...clean, allergens: '[]', dismissed: '[]', ack: 1, ack_of: A.reviewedText(clean) });
   check('acknowledging a clean dish lets it publish', emptyAcked.ok, true);
 
   const msg = A.reviewMessage('The featured dish', unacked);
   ok('the message names the item and the action',
     msg.includes('The featured dish') && msg.length > 30);
   ok('a dismissed suggestion counts as answered',
-    A.reviewState({ description: desc, allergens: '[]', dismissed: JSON.stringify(A.detect(desc).map((h) => h.allergen)), ack: 1, ack_of: desc }).ok);
+    A.reviewState(item({
+      allergens: '[]',
+      dismissed: JSON.stringify(A.detect(reviewed).map((h) => h.allergen)),
+    })).ok);
+}
+
+/* --- The name is read too, not just the description ----------------------
+   A dish carries its allergen in its title far more often than the dictionary
+   gets credit for. "Beer-Battered Haddock" described as chips and mushy peas
+   is fish and gluten with nothing detectable in the body. Reading the
+   description alone let exactly that through the gate, acknowledged in good
+   faith and untagged on the menu. */
+{
+  const names = (list) => list.map((h) => h.allergen);
+  const fishy = { name: 'Beer-Battered Haddock', description: 'Hand-cut chips and mushy peas.' };
+
+  check('the description alone finds nothing here', A.detect(fishy.description), []);
+  ok('but the reviewed text finds the fish in the title',
+    names(A.detect(A.reviewedText(fishy))).includes('fish'));
+  ok('and the gluten in it',
+    names(A.detect(A.reviewedText(fishy))).includes('gluten'));
+
+  const pending = A.pendingFor(A.reviewedText(fishy), [], []);
+  ok('so it is offered as a suggestion rather than assumed', names(pending).includes('fish'));
+
+  // The tick alone must not carry it: the suggestion is still undecided.
+  const ticked = A.reviewState({
+    ...fishy, allergens: '[]', dismissed: '[]', ack: 1, ack_of: A.reviewedText(fishy),
+  });
+  check('ticking the box does not publish a dish with the fish still pending', ticked.ok, false);
+  check('and it says which suggestions are waiting', ticked.reason, 'pending_suggestions');
+
+  // Renaming has to reopen the review, or the gate has a hole exactly the size
+  // of the fix: review "Chicken Pie", rename to "Salmon Pie", publish untagged.
+  const pie = { name: 'Chicken Pie', description: 'Short pastry, roast vegetables.' };
+  const acked = { ...pie, allergens: JSON.stringify(A.detect(A.reviewedText(pie)).map((h) => h.allergen)),
+    dismissed: '[]', ack: 1, ack_of: A.reviewedText(pie) };
+  check('the reviewed pie publishes', A.reviewState(acked).ok, true);
+
+  const renamed = A.reviewState({ ...acked, name: 'Salmon Pie' });
+  check('renaming it invalidates the acknowledgement', renamed.ok, false);
+  ok('and the fish it now names is waiting to be decided',
+    names(renamed.pending).includes('fish'));
 }
 
 /* --- Storage keeps the three levels distinct ------------------------------ */

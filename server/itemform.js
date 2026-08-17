@@ -5,6 +5,8 @@
  * three levels, because the editor is the same at all three levels.
  */
 
+const { reviewedText } = require('./allergens');
+
 function cents(v) {
   if (v === undefined || v === null || String(v).trim() === '') return null;
   const n = Number(String(v).replace(/[^0-9.]/g, ''));
@@ -31,22 +33,24 @@ function jsonArr(v) {
 }
 
 /**
- * The acknowledgement is only recorded together with the description it was
- * given against. That pairing is what lets a later edit invalidate it.
+ * The acknowledgement is only recorded together with the text it was given
+ * against — the name and the description together, since both feed the
+ * suggestions. That pairing is what lets a later edit to either invalidate it.
  */
 function parse(body, prefix, { withWeekdays = false } = {}) {
   const description = String(body[`${prefix}_description`] || '').trim();
+  const name = String(body[`${prefix}_name`] || '').trim();
   const ack = body[`${prefix}_ack`] ? 1 : 0;
 
   const out = {
-    name: String(body[`${prefix}_name`] || '').trim(),
+    name,
     description,
     photo: String(body[`${prefix}_photo`] || '').trim() || null,
     halal: body[`${prefix}_halal`] ? 1 : 0,
     allergens: JSON.stringify(jsonArr(body[`${prefix}_allergens`])),
     dismissed: JSON.stringify(jsonArr(body[`${prefix}_dismissed`])),
     ack,
-    ack_of: ack ? description : null,
+    ack_of: ack ? reviewedText({ name, description }) : null,
     full_on: body[`${prefix}_full_on`] ? 1 : 0,
     full_label: String(body[`${prefix}_full_label`] || '').trim() || 'Full size',
     full_price: cents(body[`${prefix}_full_price`]),

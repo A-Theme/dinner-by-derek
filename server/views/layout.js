@@ -82,16 +82,16 @@ function allergenDisclaimer() {
   return html`
   <aside class="notice notice--strong">
     <strong>About allergens.</strong> Allergen information is a guide only.
-    Every dish is prepared in a shared home kitchen where cross-contamination is
-    possible. If you have an allergy, contact the kitchen directly before
-    ordering. ${settings.get('owner_contact')}
+    Every necessary precaution is taken in the kitchen, but cross-contamination
+    remains a small possibility. If you have an allergy, contact the kitchen
+    directly before ordering. ${settings.get('owner_contact')}
   </aside>`;
 }
 
 const DISCLAIMER_TEXT =
-  'Allergen information is a guide only. Every dish is prepared in a shared ' +
-  'home kitchen where cross-contamination is possible. If you have an allergy, ' +
-  'contact the kitchen directly before ordering.';
+  'Allergen information is a guide only. Every necessary precaution is taken ' +
+  'in the kitchen, but cross-contamination remains a small possibility. ' +
+  'If you have an allergy, contact the kitchen directly before ordering.';
 
 function halalBadge(on) {
   return on ? html`<span class="badge" title="Owner-declared, not third-party certified">Prepared halal as declared by the kitchen</span>` : '';

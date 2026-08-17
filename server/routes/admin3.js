@@ -118,7 +118,8 @@ strict.get('/sheet/kitchen/:date', auth.requiredStrict, (req, res) => {
       <p class="allergy-note"><strong>${n.name}:</strong> ${n.allergy_notes}</p>`)
       : html`<p>No allergy notes for this day.</p>`}
     <p style="margin-top:1em;font-size:0.9em">Allergen information is a guide only.
-      Dishes are prepared in a shared home kitchen where cross-contamination is possible.</p>`;
+      Every necessary precaution is taken in the kitchen, but cross-contamination remains a
+      small possibility.</p>`;
 
   res.type('html').send(String(sheetShell('Kitchen sheet', body)));
 });

@@ -336,8 +336,8 @@ Publishing a week is blocked by name: *"Braised Beef still needs its allergen
 review."*
 
 The app never tells a customer a dish is allergen-free. Every menu page carries
-the disclaimer that the food is made in a shared home kitchen where
-cross-contamination is possible.
+the disclaimer that every necessary precaution is taken in the kitchen but
+cross-contamination remains a small possibility.
 
 ### Maintaining the dictionary
 
