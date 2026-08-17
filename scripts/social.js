@@ -2,7 +2,11 @@
 /**
  * Social graphics for the Facebook page.
  *
- *   npm run social
+ *   npm run social          — from a terminal
+ *   Dashboard → Graphics    — from a phone
+ *
+ * Both go through generate() below. The command-line path is a shim around it,
+ * so what the button does and what the command does cannot drift apart.
  *
  * Five pieces: a page cover, a profile picture, the weekly menu post, a
  * last-call reminder, and the image Facebook shows when the app's link is
@@ -26,7 +30,18 @@ const brandmark = require('./brandmark');
 const T = require('../server/time');
 
 const root = path.join(__dirname, '..');
-const OUT = path.join(root, 'public', 'social');
+
+/**
+ * Generated images live outside the app directory, beside the database and the
+ * uploads, because a redeploy wipes the app directory and these are now made
+ * from a phone rather than from a checkout. `public/social/` still holds the
+ * versions committed to the repo; index.js serves this directory first and
+ * falls back to those, so a fresh install has a link preview before anything
+ * has been generated. Point GRAPHICS_DIR at a persistent volume in production,
+ * the same as DB_PATH and UPLOAD_DIR.
+ */
+const GRAPHICS = process.env.GRAPHICS_DIR || path.join(root, 'data', 'graphics');
+const OUT = path.join(GRAPHICS, 'social');
 
 /* --- Type ---------------------------------------------------------------- */
 /* Mirrors theme.css. Liberation faces are the metric-compatible substitutes
@@ -68,7 +83,7 @@ async function render(file, width, height, ground, svgBody, marks = []) {
     .composite(marks)
     .png({ compressionLevel: 9 })
     .toFile(path.join(OUT, file));
-  console.log(`  ${file.padEnd(24)} ${width}×${height}`);
+  return { name: file, width, height };
 }
 
 /* --- Live menu ------------------------------------------------------------ */
@@ -142,7 +157,7 @@ async function cover(w) {
     text(`Pickup ${win} · Delivery across KW`,
       { x: mid, y: 522, size: 26, fill: palette.parchment, anchor: 'middle', font: DISPLAY }),
   ].join('');
-  await render('cover.png', W, H, palette.olive, body,
+  return render('cover.png', W, H, palette.olive, body,
     [{ input: mark.data, top: markTop, left: Math.round(mid - mark.width / 2) }]);
 }
 
@@ -154,7 +169,7 @@ async function cover(w) {
 async function profile() {
   const S = 1080, mid = S / 2;
   const mark = await brandmark.wordmark({ width: 760 });
-  await render('profile.png', S, S, palette.olive, '',
+  return render('profile.png', S, S, palette.olive, '',
     [{ input: mark.data, top: Math.round(mid - mark.height / 2), left: Math.round(mid - mark.width / 2) }]);
 }
 
@@ -219,7 +234,7 @@ async function menu(w) {
     label('Order on our page', { x: mid, y: 1316, size: 23, fill: palette['tan-lift'], anchor: 'middle', track: 5 }),
   ].join('');
 
-  await render('menu.png', W, H, palette.olive, body,
+  return render('menu.png', W, H, palette.olive, body,
     [{ input: mark.data, top: 84, left: Math.round(mid - mark.width / 2) }]);
 }
 
@@ -238,7 +253,7 @@ async function lastCall(w) {
     label('After that it becomes a request, not an order',
       { x: mid, y: 836, size: 22, fill: palette['tan-lift'], anchor: 'middle', track: 3 }),
   ].join('');
-  await render('last-call.png', S, S, palette['umber-deep'], body,
+  return render('last-call.png', S, S, palette['umber-deep'], body,
     [{ input: mark.data, top: 228, left: Math.round(mid - mark.width / 2) }]);
 }
 
@@ -258,36 +273,53 @@ async function linkPreview(w) {
     text(`Pickup ${win} · Delivery across Kitchener & Waterloo`,
       { x: mid, y: 528, size: 27, fill: palette.parchment, anchor: 'middle', font: DISPLAY }),
   ].join('');
-  await render('link-preview.png', W, H, palette.olive, body,
+  return render('link-preview.png', W, H, palette.olive, body,
     [{ input: mark.data, top: 96, left: Math.round(mid - mark.width / 2) }]);
 }
 
-/* --- Run ------------------------------------------------------------------ */
-(async () => {
+/* --- Run ------------------------------------------------------------------
+ * generate() is the whole of it. The dashboard button calls it directly rather
+ * than shelling out to `npm run social`: under systemd the service's PATH
+ * often has no npm, and spawning a shell from an admin route buys nothing that
+ * a function call doesn't already give — including the real error text.
+ */
+async function generate() {
   for (const f of [brandmark.WORDMARK, brandmark.SOURCE]) {
-    if (!fs.existsSync(f)) {
-      console.error(`\nMissing ${f}\n`);
-      process.exit(1);
-    }
+    if (!fs.existsSync(f)) throw new Error(`Missing brand artwork: ${f}`);
   }
   fs.mkdirSync(OUT, { recursive: true });
 
   const live = loadWeek();
   const w = live || SAMPLE;
 
-  console.log('\nGenerating social graphics');
-  if (!live) {
-    console.log('  (no published week yet — the menu post uses sample dishes)');
-  }
+  const files = [
+    await cover(w),
+    await profile(),
+    await menu(w),
+    await lastCall(w),
+    await linkPreview(w),
+  ];
 
-  await cover(w);
-  await profile();
-  await menu(w);
-  await lastCall(w);
-  await linkPreview(w);
+  return {
+    dir: OUT,
+    files,
+    notes: live ? [] : ['No week is published yet, so the menu post uses sample dishes.'],
+  };
+}
 
-  console.log('\nDone. Images are in public/social/.\n');
-})().catch((e) => {
-  console.error('\nSocial graphics failed:', e.message, '\n');
-  process.exit(1);
-});
+if (require.main === module) {
+  (async () => {
+    console.log('\nGenerating social graphics');
+    const out = await generate();
+    for (const f of out.files) {
+      console.log(`  ${f.name.padEnd(24)} ${f.width}×${f.height}`);
+    }
+    for (const n of out.notes) console.log(`  (${n})`);
+    console.log(`\nDone. Images are in ${out.dir}.\n`);
+  })().catch((e) => {
+    console.error('\nSocial graphics failed:', e.message, '\n');
+    process.exit(1);
+  });
+}
+
+module.exports = { generate, OUT };

@@ -71,6 +71,22 @@ app.get('/sw.js', (req, res) => {
   res.type('application/javascript').sendFile(path.join(publicDir, 'sw.js'));
 });
 
+/* Generated graphics are mounted ahead of publicDir so a set made from the
+ * dashboard wins over the copy committed to the repo, and a fresh install that
+ * has generated nothing yet still has a link preview to serve. They get a short
+ * max-age rather than the shell's seven days: they are a handful of small PNGs
+ * fetched rarely, and a week-long cache on an image the owner just regenerated
+ * from a phone reads as the button having done nothing. */
+const graphics = require('./graphics');
+for (const [key, dir] of Object.entries(graphics.dirs)) {
+  fs.mkdirSync(dir, { recursive: true });
+  app.use(graphics.SETS[key].urlBase, express.static(dir, {
+    index: false,
+    dotfiles: 'deny',
+    maxAge: config.isProd ? '1h' : 0,
+  }));
+}
+
 app.use(express.static(publicDir, {
   maxAge: config.isProd ? '7d' : 0,
   index: false,

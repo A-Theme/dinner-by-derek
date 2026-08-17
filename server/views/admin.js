@@ -11,6 +11,7 @@ const NAV = [
   ['/admin/other-options', 'Other Options'],
   ['/admin/orders', 'Orders'],
   ['/admin/locations', 'Locations & Delivery'],
+  ['/admin/graphics', 'Graphics'],
   ['/admin/settings', 'Settings'],
 ];
 
@@ -33,6 +34,7 @@ ${extraHead || ''}
   <li><a href="/admin/other-options"${current === 'other' ? ' aria-current="page"' : ''}>Other Options</a></li>
   <li><a href="/admin/orders"${current === 'orders' ? ' aria-current="page"' : ''}>Orders</a></li>
   <li><a href="/admin/locations"${current === 'locations' ? ' aria-current="page"' : ''}>Locations &amp; Delivery</a></li>
+  <li><a href="/admin/graphics"${current === 'graphics' ? ' aria-current="page"' : ''}>Graphics</a></li>
   <li><a href="/admin/settings"${current === 'settings' ? ' aria-current="page"' : ''}>Settings</a></li>
 </ul></nav>
 <main class="admin-wrap">

@@ -7,6 +7,7 @@ const T = require('../time');
 const O = require('../orders');
 const FB = require('../facebook');
 const X = require('../exports');
+const G = require('../graphics');
 const V = require('../views/admin');
 const { html, raw, money } = require('../html');
 
@@ -189,8 +190,92 @@ strict.get('/sheet/delivery/:date', auth.requiredStrict, (req, res) => {
   res.type('html').send(String(sheetShell('Delivery run', body)));
 });
 
-/* =========================== FACEBOOK ================================== */
+/* Everything below is behind the ordinary redirect-to-login guard: these are
+   dashboard pages, so an expired session should land on the login form rather
+   than on a bare 401 the way the exports above do. */
 router.use(auth.required);
+
+/* =========================== GRAPHICS ==================================
+   The social graphics and the business card, generated from the dashboard
+   instead of from a terminal. The images themselves are served statically
+   from GRAPHICS_DIR — see index.js — so this page is a list of links and
+   two buttons, and the drawing lives in scripts/ where the command line
+   already used it. */
+
+function graphicsPanel(set) {
+  const files = G.list(set.key);
+  const stale = files.some((f) => f.source === 'shipped');
+
+  return html`
+    <div class="card">
+      <h2>${set.title}</h2>
+      <p class="also">${set.blurb}</p>
+      ${set.key === 'card' && !process.env.BASE_URL ? html`
+        <div class="notice notice--strong">
+          <strong>The QR points at a placeholder.</strong> BASE_URL isn't set on this server,
+          so the code on the card doesn't lead anywhere. Set it and generate again before
+          sending anything to a printer. The address is printed under the code, so you can
+          read it off the card below and check.
+        </div>` : ''}
+      ${stale ? html`
+        <div class="notice">
+          Some of these are the versions that shipped with the app. Generate to replace them
+          with your own.
+        </div>` : ''}
+
+      <form method="post" action="/admin/graphics/${set.key}">
+        <button class="btn btn--primary" type="submit">Generate ${set.title.toLowerCase()}</button>
+      </form>
+
+      <div class="graphics-grid">
+        ${files.map((f) => html`
+          <figure class="graphic">
+            ${f.url
+              ? html`<a href="${f.url}" download="${f.name}"><img src="${f.url}" alt="${f.label}" loading="lazy"></a>`
+              : html`<div class="graphic__empty">Not generated yet</div>`}
+            <figcaption>
+              <strong>${f.label}</strong><br>
+              <span class="variant__label">${f.size}
+                ${f.source === 'generated'
+                  ? html`· made ${T.fmtLocal(f.at, tz(), { month: 'short', day: 'numeric' })}` : ''}
+                ${f.source === 'shipped' ? '· shipped with the app' : ''}</span>
+              ${f.url ? html`<br><a href="${f.url}" download="${f.name}">Download</a>` : ''}
+            </figcaption>
+          </figure>`)}
+      </div>
+    </div>`;
+}
+
+router.get('/graphics', (req, res) => {
+  const body = html`
+    <h1>Graphics</h1>
+    <p class="also">Everything here is drawn from the logo files and your own settings.
+      Generating replaces the previous set — there is nothing to undo, and nothing a
+      customer sees changes except the link preview.</p>
+    ${Object.values(G.SETS).map(graphicsPanel)}`;
+
+  res.type('html').send(String(V.shell({ title: 'Graphics', body, current: 'graphics' })));
+});
+
+router.post('/graphics/:set', async (req, res) => {
+  const set = G.SETS[req.params.set];
+  if (!set) return back(res, req, null, 'That isn\'t something this app draws.');
+
+  try {
+    const out = await G.run(set.key);
+    const notes = [...(out.notes || []), ...(out.warnings || [])];
+    back(res, req, `${set.title} generated.${notes.length ? ` ${notes.join(' ')}` : ''}`);
+  } catch (e) {
+    // A missing brand file or an unreadable database is worth saying plainly:
+    // the owner can act on both, and neither is a bug to hide behind "try again".
+    // A second tap while the first is still drawing is not a fault at all, so it
+    // is answered without filling the log with a stack trace.
+    if (!e.busy) console.error('[graphics]', e);
+    back(res, req, null, e.busy ? e.message : `That didn't generate: ${e.message}`);
+  }
+});
+
+/* =========================== FACEBOOK ================================== */
 
 router.get('/facebook/connect', (req, res) => {
   if (!config.facebook.appId || !config.facebook.appSecret) {

@@ -21,6 +21,7 @@ website that installs to a home screen and works like an app.
 - [Colours and the theme file](#colours-and-the-theme-file)
 - [Icons](#icons)
 - [Social graphics](#social-graphics)
+- [Business card](#business-card)
 - [Facebook](#facebook)
 - [Backup and restore](#backup-and-restore)
 - [Deployment](#deployment)
@@ -59,6 +60,7 @@ any change — nothing in this file is read again while the app is running.
 | `BASE_URL` | Recommended | The public https address, no trailing slash. Used in emails, share links, the Facebook post, and the OAuth redirect. Must match exactly. |
 | `DB_PATH` | No | SQLite file. Defaults to `./data/dinnerbyderek.db`. |
 | `UPLOAD_DIR` | No | Photo storage. Defaults to `./data/uploads`. |
+| `GRAPHICS_DIR` | No | Generated social graphics and business card. Defaults to `./data/graphics`. |
 | `SMTP_*` | No | Order emails. Leave blank and orders are still saved and still appear in the dashboard — you just won't get an email. |
 | `FB_APP_ID`, `FB_APP_SECRET` | No | Only for one-tap publishing to a Facebook Page. |
 | `FB_GRAPH_VERSION` | No | Defaults to `v21.0`. |
@@ -71,8 +73,10 @@ Generate a secret or a key:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-`DB_PATH` and `UPLOAD_DIR` must survive a redeploy. If your host wipes the app
-directory on deploy, point both at a persistent volume.
+`DB_PATH`, `UPLOAD_DIR` and `GRAPHICS_DIR` must survive a redeploy. If your host
+wipes the app directory on deploy, point all three at a persistent volume. The
+graphics matter here because they are now made from a phone rather than from a
+checkout — a redeploy that discards them takes the only copy with it.
 
 ---
 
@@ -354,12 +358,18 @@ so a 512-pixel icon made from it would look soft.
 
 ## Social graphics
 
+**Dashboard → Graphics**, or from a terminal:
+
 ```bash
 npm run social
 ```
 
-Writes five images to `public/social/`, all from `brand/logo-wordmark.svg` and
-the colours in `theme.css`:
+Both run the same code. The page is the one that matters in practice — the
+menu post is worth regenerating the moment a week goes live, and that happens
+on a phone.
+
+Writes five images to `GRAPHICS_DIR/social/`, all from `brand/logo-wordmark.svg`
+and the colours in `theme.css`:
 
 | File | Size | What it's for |
 |---|---|---|
@@ -381,8 +391,77 @@ The lockup is knocked off its supplied charcoal background so it can sit on
 olive and umber. That makes it **light artwork** — it needs a dark ground, and
 will disappear on parchment.
 
-Everything in `public/social/` is generated. Edit `scripts/social.js` or the
-theme, never the PNGs.
+The copies committed under `public/social/` are the fallback. The app serves
+`GRAPHICS_DIR` first and falls back to those, so a fresh install has a link
+preview before anything has been generated, and a wiped volume degrades to the
+shipped artwork rather than to a broken image. The Graphics page labels which
+of the two you are looking at.
+
+Everything in both places is generated. Edit `scripts/social.js` or the theme,
+never the PNGs.
+
+---
+
+## Business card
+
+**Dashboard → Graphics**, or from a terminal:
+
+```bash
+npm run card
+```
+
+Writes two faces to `GRAPHICS_DIR/print/`, ready for a printer:
+
+| File | What's on it |
+|---|---|
+| `card-front.png` | The gold lockup on olive, with one line saying what this is and where |
+| `card-back.png` | The medallion, the pickup window, the delivery area, the cutoff, your contact line, and a QR that opens the site |
+
+Both are **1126 × 676 pixels**: a 3.5 × 2 inch card at 300 DPI plus an eighth
+of an inch of bleed on every side. The DPI is written into the file, so a print
+shop opening it sees a 3.75-inch image rather than a 1126-pixel one. Ink that
+has to survive the guillotine stays about a sixth of an inch inside the trim;
+the olive ground and the hairlines run off the edge on purpose.
+
+Front and back split identity from information. The lockup is light artwork —
+it needs a dark ground and would disappear on parchment — and it already
+contains the name, so the front sets nothing else in type. The back is
+parchment, because a card that gets written on gets kept.
+
+**The wording is not in this file.** The pickup window, the delivery area, the
+cutoff hour, the business name and the contact line are read from the live
+database, the same way `menu.png` is. Change the pickup window in Settings, run
+this again, and the next card carries the new one. Colours come from
+`theme.css`. Nothing is typed twice.
+
+### The QR
+
+It points at `BASE_URL`. **Set that in `.env` before printing** — without it
+the code points at a placeholder. The command says so loudly, the Graphics page
+carries the same warning where you can't miss it, and the address is printed in
+readable type under the code, so a wrong one is visible on the card rather than
+hidden in it.
+
+The code is drawn by `scripts/qr.js`, written here rather than installed:
+byte mode, error correction level Q, versions 1 through 6, which is four times
+the length any URL on a card will reach. Level Q survives about 25% of the
+symbol being obscured, which is the right trade for something that lives in a
+wallet. It is scaled by whole modules with nearest-neighbour so every module
+edge lands on a pixel boundary — a resampled QR with soft edges is one a phone
+in a dim hallway gives up on.
+
+Version 7 and up need a version-information block that nothing here would
+exercise, so rather than ship untested table data the encoder refuses and says
+so. Every table row it does carry is checked against the version's total
+codeword count at load, so a typo fails on `require` rather than at a print
+shop.
+
+Nothing ships in the repo for the card — unlike the link preview, no page needs
+one to exist — so before the first generate the Graphics page shows both faces
+as *Not generated yet*.
+
+Everything here is generated. Edit `scripts/card.js` or the theme, never the
+PNGs.
 
 ---
 

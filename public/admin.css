@@ -103,6 +103,29 @@ details.daycard-edit > summary { cursor: pointer; font-family: var(--dbd-display
 .dl-row { display: flex; flex-wrap: wrap; gap: var(--dbd-sp-2); }
 .dl-row .btn { flex: 1 1 auto; }
 
+/* Generated graphics. The thumbnails sit on a chequer rather than on the card,
+   because half of them are light artwork on a dark ground and half are dark on
+   parchment, and a plain cream tile makes the second kind look like it lost its
+   background. */
+.graphics-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--dbd-sp-4); margin-top: var(--dbd-sp-4);
+}
+.graphic { margin: 0; }
+.graphic img, .graphic__empty {
+  display: block; width: 100%; border-radius: var(--dbd-radius-sm);
+  border: 1px solid var(--dbd-rule-tan); background: var(--dbd-surface-sunk);
+}
+/* One height for every thumbnail, letterboxed rather than cropped: these run
+   from a 1640×624 banner to a 1080×1350 portrait, and left to size themselves
+   they stagger the captions into an unreadable sawtooth. */
+.graphic img { height: 150px; object-fit: contain; }
+.graphic__empty {
+  display: grid; place-items: center; height: 150px;
+  color: var(--dbd-ink-muted); font-size: var(--dbd-step--1); font-style: italic;
+}
+.graphic figcaption { margin-top: var(--dbd-sp-2); font-size: var(--dbd-step--1); }
+
 /* Print: kitchen and pickup sheets are a real workflow. */
 @media print {
   .admin-nav, .no-print, #toasts, .btn { display: none !important; }
