@@ -82,7 +82,15 @@ function variantRows(item, disabled) {
     </div>`)}`;
 }
 
-function featuredBlock(item) {
+function featuredBlock(item, cap) {
+  // The day's ceiling across both sizes. Only worth saying out loud once it is
+  // close enough to change what someone does.
+  const capNote = cap && cap.remaining === 0
+    ? html`<p><span class="chip chip--soldout">Sold out for today</span></p>`
+    : cap && cap.remaining <= 5
+      ? html`<p class="variant__label" style="color:var(--dbd-warn)">
+          Only ${cap.remaining} left for today</p>`
+      : '';
   return html`
   <section class="featured">
     ${item.photo ? html`<img class="featured__photo" src="/uploads/${item.photo}" alt="${item.name}">` : ''}
@@ -90,6 +98,7 @@ function featuredBlock(item) {
       <p class="featured__eyebrow">Featured tonight</p>
       <h2 class="featured__name">${item.name}</h2>
       ${item.halal ? html`<p>${L.halalBadge(true)}</p>` : ''}
+      ${capNote}
       ${item.description ? html`<p>${item.description}</p>` : ''}
       ${L.allergenChips(item.allergens)}
       ${variantRows(item)}
@@ -135,7 +144,7 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
     ${banner}
     ${L.allergenDisclaimer()}
 
-    ${menu.featured ? featuredBlock(menu.featured) : html`<div class="notice">No featured dish is set for this day yet.</div>`}
+    ${menu.featured ? featuredBlock(menu.featured, menu.featuredCap) : html`<div class="notice">No featured dish is set for this day yet.</div>`}
 
     ${menu.grouped.length ? html`
       <div class="section-rule"><h2>Other Options</h2></div>

@@ -443,6 +443,14 @@ router.post('/settings/pickup', (req, res) => {
   back(res, req, 'Pickup window saved. Future days use the new window; orders already placed keep the window they were given.');
 });
 
+router.post('/settings/capacity', (req, res) => {
+  const n = Math.max(0, Math.floor(Number(req.body.featured_daily_cap)) || 0);
+  settings.set('featured_daily_cap', n);
+  back(res, req, n === 0
+    ? 'Saved. The featured dish now has no daily limit.'
+    : `Saved. Up to ${n} of the featured dish a day, unless a day says otherwise.`);
+});
+
 router.post('/settings/delivery', (req, res) => {
   settings.set('delivery_enabled', req.body.delivery_enabled ? 1 : 0);
   settings.set('delivery_fee', IF.cents(req.body.delivery_fee) || 0);
@@ -482,6 +490,19 @@ router.get('/settings', (req, res) => {
         <label for="ne">Where new orders are emailed</label>
         <input type="email" id="ne" name="notify_email" value="${settings.get('notify_email')}">
         <button class="btn btn--primary" type="submit">Save settings</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>How many of the featured dish</h2>
+      <p class="also">The most you'll cook of a day's featured dish, counting both sizes
+        together — one full size and one meal for one uses two of them. A single day can
+        be given its own number in This Week. Set this to 0 for no limit.</p>
+      <form method="post" action="/admin/settings/capacity">
+        <label for="fcap">Featured dish per day</label>
+        <input type="number" id="fcap" name="featured_daily_cap" min="0" step="1"
+          value="${settings.get('featured_daily_cap')}">
+        <button class="btn btn--primary" type="submit">Save</button>
       </form>
     </div>
 

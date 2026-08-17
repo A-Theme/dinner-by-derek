@@ -14,6 +14,7 @@ function weekPage({ week, days, items, hasPrevious }) {
   const cutoffHour = settings.getInt('cutoff_hour', 22);
   const cutoffMin = settings.getInt('cutoff_minute', 0);
   const weekStart = week.week_start || T.mondayOf(T.todayIn(tz()));
+  const globalCap = M.featuredCapFor({});   // null when the setting is 0
 
   const soup = items.soup || { kind: 'soup', weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1 };
   const salad = items.salad || { kind: 'salad', weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1 };
@@ -66,7 +67,7 @@ function weekPage({ week, days, items, hasPrevious }) {
           const stub = {
             dish_name: '', description: '', allergens: '[]', dismissed: '[]', ack: 0, ack_of: null,
             photo: null, halal: 0, full_on: 1, full_label: '', full_price: null, full_cap: null,
-            single_on: 0, single_label: '', single_price: null, single_cap: null,
+            single_on: 0, single_label: '', single_price: null, single_cap: null, daily_cap: null,
           };
           const item = existing || stub;
           return html`
@@ -75,6 +76,10 @@ function weekPage({ week, days, items, hasPrevious }) {
               — ${item.dish_name || 'nothing yet'}
               ${existing ? V.reviewFlag(item, item.dish_name || 'This dish') : ''}</summary>
             ${V.itemEditor({ prefix: wd, item, nameLabel: 'Featured dish' })}
+            <label for="cap_${wd}">How many this day (both sizes together)</label>
+            <input type="number" id="cap_${wd}" name="${wd}_daily_cap" min="0" step="1"
+              value="${item.daily_cap == null ? '' : item.daily_cap}"
+              placeholder="Blank = the usual ${globalCap === null ? 'no limit' : globalCap}">
           </details>`;
         })}
         <button class="btn btn--primary" type="submit">Save this week's days</button>

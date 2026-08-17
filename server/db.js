@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS service_days (
   pickup_start  TEXT,                            -- NULL = inherit global
   pickup_end    TEXT,
   delivery_on   INTEGER,                         -- NULL = inherit global
+  daily_cap     INTEGER,                         -- NULL = inherit global
   UNIQUE(week_id, service_date)
 );
 
@@ -240,6 +241,9 @@ const DEFAULTS = {
   cutoff_minute: '0',
   pickup_start: '16:00',
   pickup_end: '19:00',
+  // Whole-day ceiling on the featured dish, counted across both size
+  // variants. 0 means no ceiling. A service day can override it.
+  featured_daily_cap: '25',
   delivery_enabled: '1',
   delivery_fee: '500',
   delivery_min: '0',
@@ -324,6 +328,9 @@ function addColumn(table, column, definition) {
 }
 addColumn('fb_connection', 'warned_at', 'TEXT');
 addColumn('weeks', 'week_start', 'TEXT');
+// NULL = inherit the featured_daily_cap setting. A number is that day's own
+// ceiling; 0 closes the featured dish for the day.
+addColumn('service_days', 'daily_cap', 'INTEGER');
 
 function renameColumn(table, from, to) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();

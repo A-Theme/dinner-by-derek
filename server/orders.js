@@ -12,7 +12,8 @@ const D = require('./delivery');
  *   - that each item exists, is available on THAT service day, and that the
  *     chosen variant is enabled
  *   - the unit price (taken from the database, never from the form)
- *   - remaining availability for the day
+ *   - remaining availability for the day, per size and against the featured
+ *     dish's whole-day ceiling
  *   - delivery eligibility and the fee (recomputed from the postal code)
  *   - the delivery minimum
  *   - whether the cutoff has passed, which decides confirmed vs late_request
@@ -59,6 +60,7 @@ function create(payload) {
   const requested = parseLines(payload.lines);
   const lines = [];
   let subtotal = 0;
+  let featuredQty = 0;
 
   for (const r of requested) {
     if (!Number.isFinite(r.qty) || r.qty < 1 || r.qty > 40) {
@@ -79,6 +81,7 @@ function create(payload) {
         ? `${item.name} (${variant.label}) has just sold out for that day.`
         : `Only ${variant.remaining} of ${item.name} (${variant.label}) left for that day.`);
     }
+    if (item.level === 'Featured') featuredQty += r.qty;
     lines.push({
       source_level: item.level,
       ref_table: item.refTable,
@@ -92,6 +95,20 @@ function create(payload) {
       allergens: item.allergens,
     });
     subtotal += variant.price * r.qty;
+  }
+
+  /* --- The featured dish's ceiling for the day -------------------------- */
+  // Checked on the total rather than per size: two sizes can each sit under
+  // what is left while together they go over it. Like the per-variant check
+  // above, a late request reserves nothing and so is not measured against it.
+  if (status === 'confirmed' && featuredQty > 0 && menu.featuredCap) {
+    const left = menu.featuredCap.remaining;
+    if (featuredQty > left) {
+      const name = menu.featured ? menu.featured.name : 'The featured dish';
+      throw new OrderError(left === 0
+        ? `${name} has sold out for that day.`
+        : `Only ${left} of ${name} left for that day, across both sizes.`);
+    }
   }
 
   /* --- Customer -------------------------------------------------------- */

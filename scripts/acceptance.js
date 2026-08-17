@@ -127,6 +127,30 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('cross-year week range', T.fmtWeekRange('2025-12-29', TZ), 'Dec 29, 2025–Jan 4, 2026');
 }
 
+/* --- The featured dish's daily ceiling ------------------------------------ */
+{
+  const M = require('../server/menu');
+  const { settings } = require('../server/db');
+  const before = settings.get('featured_daily_cap');
+
+  settings.set('featured_daily_cap', 25);
+  check('it ships at 25', Number(before), 25);
+  check('a day with no number of its own inherits the setting',
+    M.featuredCapFor({ daily_cap: null }), 25);
+  check('a day with its own number overrides the setting',
+    M.featuredCapFor({ daily_cap: 8 }), 8);
+  check('and a day set to zero means none, not unlimited',
+    M.featuredCapFor({ daily_cap: 0 }), 0);
+
+  settings.set('featured_daily_cap', 0);
+  check('zero as the setting means no ceiling at all',
+    M.featuredCapFor({ daily_cap: null }), null);
+  check('but a day can still impose one when the setting is off',
+    M.featuredCapFor({ daily_cap: 6 }), 6);
+
+  settings.set('featured_daily_cap', before);
+}
+
 /* --- Postal code normalization -------------------------------------------- */
 {
   const forms = ['N2L 3G1', 'n2l3g1', 'N2L-3G1', '  n2l 3g1  ', 'N2l3G1'];

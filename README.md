@@ -99,6 +99,27 @@ things that belong to the date rather than the dish: a pickup-window override
 for that one day, delivery on or off for it, and removing the day. Saving it
 cannot overwrite what the box above holds.
 
+#### How many you'll cook
+
+Each day's featured dish has a ceiling, **25 by default**, set in
+**Settings → How many of the featured dish**. Set it to `0` for no ceiling.
+
+It counts **both sizes together** — one full size plus one meal for one uses
+two of the 25. That is deliberate: it is a limit on portions leaving the
+kitchen, not on either size separately.
+
+A single day can be given its own number in its weekday box. Leave that blank
+and the day uses the setting. The number carries over through *Duplicate last
+week*.
+
+This sits on top of the per-size counts, it does not replace them. Whichever
+runs out first stops the orders. Customers see "Only N left for today" under
+five, and a sold-out badge at zero.
+
+**A late request never eats into it.** Past the cutoff a day takes requests
+rather than orders, and a request holds nothing until you confirm it — so it
+cannot sell out a dish ahead of a real order.
+
 ### Level 2 — soup and salad of the week
 
 **One soup and one salad, for the whole week.** Not per day. By default they

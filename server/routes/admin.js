@@ -194,25 +194,28 @@ router.post('/week/:id/weekdays', (req, res) => {
       const item = IF.parse(req.body, wd);
       if (!item.name && !item.description) return; // nothing entered for this day
       const date = T.addDays(weekStart, offset);
+      // Blank inherits the global setting, so it stays NULL rather than 0.
+      const dailyCap = IF.intOrNull(req.body[`${wd}_daily_cap`]);
       const existing = db.prepare('SELECT id FROM service_days WHERE week_id = ? AND service_date = ?').get(id, date);
       if (existing) {
         db.prepare(`UPDATE service_days SET dish_name=?, description=?, photo=?, halal=?,
             allergens=?, dismissed=?, ack=?, ack_of=?, full_on=?, full_label=?, full_price=?,
-            full_cap=?, single_on=?, single_label=?, single_price=?, single_cap=? WHERE id=?`)
+            full_cap=?, single_on=?, single_label=?, single_price=?, single_cap=?,
+            daily_cap=? WHERE id=?`)
           .run(item.name, item.description, item.photo, item.halal, item.allergens,
             item.dismissed, item.ack, item.ack_of, item.full_on, item.full_label,
             item.full_price, item.full_cap, item.single_on, item.single_label,
-            item.single_price, item.single_cap, existing.id);
+            item.single_price, item.single_cap, dailyCap, existing.id);
       } else {
         db.prepare(`INSERT INTO service_days
             (week_id, service_date, dish_name, description, photo, halal, allergens, dismissed,
              ack, ack_of, full_on, full_label, full_price, full_cap, single_on, single_label,
-             single_price, single_cap)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+             single_price, single_cap, daily_cap)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
           .run(id, date, item.name, item.description, item.photo, item.halal, item.allergens,
             item.dismissed, item.ack, item.ack_of, item.full_on, item.full_label,
             item.full_price, item.full_cap, item.single_on, item.single_label,
-            item.single_price, item.single_cap);
+            item.single_price, item.single_cap, dailyCap);
       }
     });
   });
@@ -306,12 +309,13 @@ router.post('/week/duplicate', (req, res) => {
       db.prepare(`INSERT INTO service_days
         (week_id, service_date, sort, dish_name, description, photo, halal, allergens,
          dismissed, ack, ack_of, full_on, full_label, full_price, full_cap,
-         single_on, single_label, single_price, single_cap, pickup_start, pickup_end, delivery_on)
-        VALUES (?,?,?,?,?,?,?,?,?,0,NULL,?,?,?,?,?,?,?,?,?,?,?)`)
+         single_on, single_label, single_price, single_cap, pickup_start, pickup_end,
+         delivery_on, daily_cap)
+        VALUES (?,?,?,?,?,?,?,?,?,0,NULL,?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(newId, T.addDays(d.service_date, shift), d.sort, d.dish_name, d.description,
           d.photo, d.halal, d.allergens, d.dismissed, d.full_on, d.full_label,
           d.full_price, d.full_cap, d.single_on, d.single_label, d.single_price,
-          d.single_cap, d.pickup_start, d.pickup_end, d.delivery_on);
+          d.single_cap, d.pickup_start, d.pickup_end, d.delivery_on, d.daily_cap);
     }
     for (const w of db.prepare('SELECT * FROM week_items WHERE week_id = ?').all(src.id)) {
       db.prepare(`INSERT INTO week_items

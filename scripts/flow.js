@@ -372,6 +372,70 @@ const PAST_DATE = T.addDays(today, -2);
     check('an empty order is refused', empty.status, 400);
   }
 
+  /* --- The featured dish's ceiling for the day ---------------------------- */
+  {
+    // Two confirmed orders of the featured dish exist by now. Lift the
+    // per-size caps out of the way so the day ceiling is what binds, and set
+    // it to leave room for exactly one more.
+    const sold = db.prepare(`SELECT COALESCE(SUM(l.qty),0) n FROM order_lines l
+      JOIN orders o ON o.id = l.order_id
+      WHERE l.ref_table='service_days' AND l.ref_id=? AND o.service_date=?
+        AND o.status='confirmed'`).get(dayId, SERVICE_DATE).n;
+
+    cookie = savedCookie;
+    const A = require('../server/allergens');
+    await POST(`/admin/week/${weekId}/weekdays`, dish({
+      [`${WD}_ack`]: '1',
+      [`${WD}_allergens`]: JSON.stringify(A.detect(DISH_DESC).map((h) => h.allergen)),
+      [`${WD}_full_cap`]: '99',
+      [`${WD}_single_cap`]: '99',
+      [`${WD}_daily_cap`]: String(sold + 1),
+    }));
+    check('the day ceiling was saved against the service day',
+      db.prepare('SELECT daily_cap FROM service_days WHERE id = ?').get(dayId).daily_cap, sold + 1);
+    cookie = '';
+
+    // One of each size is two portions, and only one is left.
+    const bothSizes = await POST('/order', {
+      week: weekSlug, date: SERVICE_DATE,
+      lines: JSON.stringify([
+        { key: featuredKey, variant: 'full', qty: 1 },
+        { key: featuredKey, variant: 'single', qty: 1 },
+      ]),
+      name: 'Two Sizes', phone: '519-555-0106', email: 'ts@example.com',
+      method: 'pickup', location_id: '1',
+    });
+    check('the ceiling counts both sizes together, not each on its own',
+      bothSizes.status, 400);
+    ok('and the refusal says so', /across both sizes/i.test(bothSizes.text));
+
+    const lastOne = await POST('/order', {
+      week: weekSlug, date: SERVICE_DATE,
+      lines: JSON.stringify([{ key: featuredKey, variant: 'single', qty: 1 }]),
+      name: 'Last One', phone: '519-555-0107', email: 'lo@example.com',
+      method: 'pickup', location_id: '1',
+    });
+    check('the one that fits is taken', lastOne.status, 200);
+
+    const overflow = await POST('/order', {
+      week: weekSlug, date: SERVICE_DATE,
+      lines: JSON.stringify([{ key: featuredKey, variant: 'full', qty: 1 }]),
+      name: 'Too Late', phone: '519-555-0108', email: 'tl@example.com',
+      method: 'pickup', location_id: '1',
+    });
+    check('the next one is refused', overflow.status, 400);
+    ok('and it reads as sold out', /sold out/i.test(overflow.text));
+
+    // A standing item is a different level and keeps its own availability.
+    const stillOpen = await POST('/order', {
+      week: weekSlug, date: SERVICE_DATE,
+      lines: JSON.stringify([{ key: schnitzel.key, variant: 'full', qty: 1 }]),
+      name: 'Other Level', phone: '519-555-0109', email: 'ol@example.com',
+      method: 'pickup', location_id: '1',
+    });
+    check('the ceiling does not touch Other Options', stillOpen.status, 200);
+  }
+
   /* --- Back in the dashboard ---------------------------------------------- */
   cookie = savedCookie;
   {
@@ -426,6 +490,41 @@ const PAST_DATE = T.addDays(today, -2);
 
     const standing = db.prepare('SELECT COUNT(*) n FROM standing_items').get().n;
     check('standing items were left alone — they never belonged to a week', standing, 6);
+
+    check('the day ceiling came along with the copy',
+      copiedDays[0].daily_cap, db.prepare('SELECT daily_cap FROM service_days WHERE id = ?').get(dayId).daily_cap);
+  }
+
+  /* --- A late request reserves nothing, so no ceiling applies -------------
+     Last, because it adds a service day dated today — earlier than the rest
+     of the week — and the duplicate check above reads the first day it finds. */
+  {
+    cookie = '';
+    const A = require('../server/allergens');
+    const desc = 'Slow braised beef with buttered mash';
+    // Today is past its cutoff (22:00 yesterday) but not past the service day
+    // itself, which is the one state that produces a late request.
+    const today = T.todayIn(TZ);
+    db.prepare(`INSERT INTO service_days
+      (week_id, service_date, dish_name, description, allergens, dismissed, ack, ack_of,
+       full_on, full_price, daily_cap)
+      VALUES (?,?,?,?,?,'[]',1,?,1,2200,1)`)
+      .run(weekId, today, 'Cutoff Test Dish', desc,
+        JSON.stringify(A.detect(desc).map((h) => h.allergen)), desc);
+
+    const lateDay = db.prepare('SELECT id FROM service_days WHERE week_id=? AND service_date=?')
+      .get(weekId, today);
+    const late = await POST('/order', {
+      week: weekSlug, date: today,
+      lines: JSON.stringify([{ key: `service_days:${lateDay.id}`, variant: 'full', qty: 5 }]),
+      name: 'After Hours', phone: '519-555-0110', email: 'ah@example.com',
+      method: 'pickup', location_id: '1',
+    });
+    check('a late request past the ceiling is still accepted', late.status, 200);
+    const row = db.prepare('SELECT status FROM orders ORDER BY id DESC LIMIT 1').get();
+    check('and it is held as a request, not a confirmed order', row.status, 'late_request');
+    check('so it consumes none of the ceiling',
+      M.soldOnAll('service_days', lateDay.id, today), 0);
   }
 
   /* --- Report -------------------------------------------------------------- */

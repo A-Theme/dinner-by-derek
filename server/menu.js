@@ -65,6 +65,29 @@ function soldOn(refTable, refId, variant, serviceDate) {
   return r.n;
 }
 
+/** The same, but across every variant — what the day ceiling counts. */
+function soldOnAll(refTable, refId, serviceDate) {
+  if (!serviceDate) return 0;
+  const r = db.prepare(`
+    SELECT COALESCE(SUM(l.qty),0) AS n
+    FROM order_lines l JOIN orders o ON o.id = l.order_id
+    WHERE l.ref_table = ? AND l.ref_id = ?
+      AND o.service_date = ? AND o.status = 'confirmed'`)
+    .get(refTable, refId, serviceDate);
+  return r.n;
+}
+
+/**
+ * The featured dish's ceiling for one day, counted across both sizes.
+ * The day's own number wins; otherwise the global setting. Null means no
+ * ceiling — either the setting is 0, or it is missing.
+ */
+function featuredCapFor(day) {
+  if (day && day.daily_cap != null) return day.daily_cap;
+  const global = settings.getInt('featured_daily_cap', 0);
+  return global > 0 ? global : null;
+}
+
 function activeWeek() {
   return db.prepare(`SELECT * FROM weeks WHERE status='published'
                      ORDER BY published_at DESC, id DESC LIMIT 1`).get();
@@ -139,6 +162,22 @@ function menuForDay(week, day) {
       })
     : null;
 
+  // The day ceiling, and the featured variants clamped to whatever is left of
+  // it. Clamping here means the menu, the quantity steppers' maximums and the
+  // sold-out chips all honour the ceiling without each having to know about
+  // it. It is not sufficient on its own — two sizes can each fit under the
+  // remainder while their sum exceeds it — so orders.js also checks the total.
+  const capLimit = featured ? featuredCapFor(day) : null;
+  const capSold = capLimit == null ? 0 : soldOnAll('service_days', day.id, day.service_date);
+  const capLeft = capLimit == null ? null : Math.max(0, capLimit - capSold);
+
+  if (featured && capLeft !== null) {
+    for (const v of featured.variants) {
+      v.remaining = v.remaining === null ? capLeft : Math.min(v.remaining, capLeft);
+      v.soldOut = v.remaining === 0;
+    }
+  }
+
   const others = [];
 
   if (weekItemRunsOn(soup, weekday) && reviewState(soup).ok) {
@@ -181,6 +220,7 @@ function menuForDay(week, day) {
     featured,
     grouped,
     allItems: featured ? [featured, ...others] : others,
+    featuredCap: capLimit == null ? null : { cap: capLimit, sold: capSold, remaining: capLeft },
     window: pickupWindowFor(day),
     deliveryOn: deliveryOnFor(day),
     ...state,
@@ -207,5 +247,5 @@ module.exports = {
   SUBCATEGORY_ORDER, activeWeek, weekBySlug, serviceDaysOf, weekItemsOf,
   standingItems, standingRunsOn, weekItemRunsOn, pickupWindowFor,
   deliveryOnFor, menuForDay, findItem, alsoAvailableLine, activeLocations,
-  soldOn, toRenderItem,
+  soldOn, soldOnAll, featuredCapFor, toRenderItem,
 };
