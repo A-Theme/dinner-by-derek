@@ -237,15 +237,38 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
         <div id="formerror" class="notice notice--strong" hidden></div>
 
         <button type="submit" class="btn btn--primary btn--block" id="submitbtn">
-          ${late ? 'Request late order' : 'Place order'}
+          ${late ? 'Review late request' : 'Review order'}
         </button>
+        <p class="variant__label" style="margin-top:var(--dbd-sp-2);text-align:center">
+          You'll see everything to check before anything is sent.</p>
       </div>
     </form>
 
     <div class="orderbar" id="orderbar" hidden>
       <span id="bar-count">0 items</span>
       <span class="orderbar__total" id="bar-total">$0.00</span>
-    </div>`}`;
+    </div>
+
+    <!-- The review step. A <dialog> so the browser handles the focus trap, the
+         backdrop and Escape — behaviour that is tedious and easy to get subtly
+         wrong by hand, and that a screen reader depends on. Filled from
+         /api/quote, so what is shown here is priced by the server, not by the
+         page. Hidden entirely without JavaScript, where the form submits
+         directly as it always did. -->
+    <dialog class="review" id="review" aria-labelledby="review-title">
+      <form method="dialog" class="review__close">
+        <button class="btn btn--secondary" value="cancel" aria-label="Close review">✕</button>
+      </form>
+      <h2 id="review-title">${late ? 'Check your request' : 'Check your order'}</h2>
+      <div id="review-body"></div>
+      <div class="review__actions">
+        <button type="button" class="btn btn--secondary" id="review-back">Back to edit</button>
+        <button type="button" class="btn btn--primary" id="review-confirm">
+          ${late ? 'Send request' : 'Place order'}
+        </button>
+      </div>
+      <p class="variant__label" id="review-foot"></p>
+    </dialog>`}`;
 
   const cfg = {
     late,

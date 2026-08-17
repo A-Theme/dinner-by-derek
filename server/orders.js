@@ -60,7 +60,20 @@ function parseLines(input) {
   }));
 }
 
-function create(payload) {
+/**
+ * Everything an order is, decided from the database, without writing anything.
+ *
+ * This is the whole of the old create() up to the INSERT, lifted out so the
+ * review step can show the customer the same numbers the submit will use. It
+ * throws the same OrderError for the same reasons, so a sold-out dish or a
+ * postal code outside the area is reported at review time rather than after
+ * the customer has committed.
+ *
+ * create() calls this again rather than trusting a quote the browser hands
+ * back: between reviewing and confirming, a dish can sell out. The review is a
+ * courtesy, never a reservation.
+ */
+function quote(payload) {
   const tz = settings.get('timezone', 'America/Toronto');
   const week = M.weekBySlug(String(payload.week || ''));
   if (!week || week.status !== 'published') throw new OrderError('That menu is no longer available.');
@@ -198,6 +211,12 @@ function create(payload) {
     o.total = subtotal + check.fee;
   }
 
+  return { order: o, lines, status, menu };
+}
+
+function create(payload) {
+  const { order: o, lines } = quote(payload);
+
   /* --- Persist --------------------------------------------------------- */
   const tx = db.transaction(() => {
     const cols = Object.keys(o);
@@ -261,6 +280,6 @@ function kitchenTotals(serviceDate) {
 }
 
 module.exports = {
-  create, linesOf, byRef, kitchenTotals, OrderError,
+  create, quote, linesOf, byRef, kitchenTotals, OrderError,
   PAYMENT_METHODS, PAYMENT_LABEL,
 };

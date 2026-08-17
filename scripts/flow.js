@@ -340,6 +340,43 @@ const PAST_DATE = T.addDays(today, -2);
     });
     check('a nonexistent pickup location is refused', badLocation.status, 400);
 
+    /* --- The review step prices without committing --------------------- */
+    {
+      const before = db.prepare('SELECT COUNT(*) n FROM orders').get().n;
+      const q = await req('POST', '/api/quote', {
+        json: {
+          week: weekSlug, date: SERVICE_DATE,
+          // A standing item, not the featured dish: by this point in the run
+          // the featured dish has deliberately been sold out by earlier checks.
+          lines: JSON.stringify([{ key: schnitzel.key, variant: 'full', qty: 2 }]),
+          name: 'Window Shopper', phone: '519-555-0105',
+          method: 'pickup', payment_method: 'etransfer',
+          location_id: String(db.prepare('SELECT id FROM locations LIMIT 1').get().id),
+        },
+      });
+      ok('the review returns a quote', q.status === 200, `got ${q.status}: ${q.text.slice(0, 200)}`);
+      const body = JSON.parse(q.text);
+      ok('priced from the database, not the browser', body.ok && body.subtotal > 0);
+      check('and it prices the quantity asked for', body.lines[0].qty, 2);
+      check('the total is the subtotal plus any delivery', body.total, body.subtotal + body.deliveryFee);
+      ok('it names the payment method back', !!body.payment);
+      check('reviewing stores nothing', db.prepare('SELECT COUNT(*) n FROM orders').get().n, before);
+
+      const bad = await req('POST', '/api/quote', {
+        json: {
+          week: weekSlug, date: SERVICE_DATE,
+          lines: JSON.stringify([{ key: schnitzel.key, variant: 'full', qty: 1 }]),
+          name: 'No Method', phone: '519-555-0106',
+          method: 'delivery', payment_method: 'cash',
+          addr_line: '1 Yonge St', postal: 'M5V 2T6',
+        },
+      });
+      check('a review of an undeliverable order is refused too', bad.status, 400);
+      const badMsg = JSON.parse(bad.text).error;
+      ok('with the same sentence the submit would give',
+        /deliver/i.test(badMsg), `error was: ${badMsg}`);
+    }
+
     // The payment choice is a declaration the kitchen plans around, so it is
     // required and validated rather than defaulted — recording "e-transfer"
     // for someone who never said so is the failure this field exists to stop.

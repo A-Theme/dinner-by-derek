@@ -172,6 +172,110 @@
     try { localStorage.setItem('dbd.customer', JSON.stringify(out)); } catch (e) {}
   }
 
+  /* --- Review before submitting ------------------------------------------
+     The submit button opens a review instead of sending. The summary is priced
+     by the server via /api/quote, not assembled from the page, so what the
+     customer confirms is what the order will actually cost — and a dish that
+     sold out while they were typing their address is caught here rather than
+     after they commit.
+
+     Without JavaScript none of this binds and the form posts straight through,
+     exactly as it did before. */
+  var dlg = document.getElementById('review');
+  var reviewBody = document.getElementById('review-body');
+  var reviewFoot = document.getElementById('review-foot');
+  var confirmed = false;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function row(label, value, cls) {
+    return '<div class="totals__row' + (cls ? ' ' + cls : '') + '"><span>' + label
+      + '</span><span>' + value + '</span></div>';
+  }
+
+  function renderReview(q) {
+    var h = '';
+    if (q.late) {
+      h += '<div class="notice notice--strong"><strong>This is a request, not an order.</strong> '
+        + 'Ordering has closed for this day, so Derek has to confirm it before it counts.</div>';
+    }
+
+    h += '<div class="review__section"><h3>Your items</h3>';
+    q.lines.forEach(function (l) {
+      h += row(esc(l.qty) + ' × ' + esc(l.name)
+        + ' <span class="variant__label">(' + esc(l.variant) + ')</span>', money(l.total));
+    });
+    h += '</div>';
+
+    h += '<div class="review__section"><div class="totals">'
+      + row('Food subtotal', money(q.subtotal))
+      + (q.method === 'delivery' ? row('Delivery', money(q.deliveryFee)) : '')
+      + row('Total', money(q.total), 'totals__row--grand')
+      + '</div></div>';
+
+    h += '<div class="review__section"><h3>' + (q.method === 'pickup' ? 'Pickup' : 'Delivery') + '</h3>';
+    if (q.pickup) {
+      h += '<p><strong>' + esc(q.pickup.name) + '</strong><br>' + esc(q.pickup.address)
+        + '<br>Anytime ' + esc(q.pickup.window) + '</p>';
+    } else if (q.delivery) {
+      h += '<p>' + esc(q.delivery.line) + (q.delivery.unit ? ', ' + esc(q.delivery.unit) : '')
+        + '<br>' + esc(q.delivery.postal) + '</p>';
+    }
+    h += '</div>';
+
+    h += '<div class="review__section"><h3>Paying</h3><p>' + esc(q.payment)
+      + ' <span class="variant__label">— nothing is charged here</span></p></div>';
+
+    if (q.allergyNotes) {
+      h += '<div class="review__section"><h3>Your note to the kitchen</h3>'
+        + '<p>' + esc(q.allergyNotes) + '</p></div>';
+    }
+
+    reviewBody.innerHTML = h;
+    reviewFoot.textContent = '';
+  }
+
+  function openReview() {
+    var data = new FormData(form);
+    var payload = {};
+    data.forEach(function (v, k) { payload[k] = v; });
+
+    reviewBody.innerHTML = '<p class="variant__label">Checking prices and availability…</p>';
+    reviewFoot.textContent = '';
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+
+    fetch('/api/quote', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).then(function (r) { return r.json(); }).then(function (q) {
+      if (!q.ok) {
+        reviewBody.innerHTML = '<p class="review__err">' + esc(q.error) + '</p>';
+        reviewFoot.textContent = 'Close this and fix it, then try again.';
+        return;
+      }
+      renderReview(q);
+    }).catch(function () {
+      // The review is a courtesy; losing it must not block the order.
+      reviewBody.innerHTML = '<p class="review__err">We couldn\'t load the summary just now.</p>';
+      reviewFoot.textContent = 'You can still place the order — everything is checked again when you do.';
+    });
+  }
+
+  if (dlg) {
+    document.getElementById('review-back').addEventListener('click', function () { dlg.close(); });
+    document.getElementById('review-confirm').addEventListener('click', function () {
+      confirmed = true;
+      dlg.close();
+      remember();
+      document.getElementById('submitbtn').disabled = true;
+      form.submit();                     // bypasses the listener below
+    });
+  }
+
   /* --- Submit ------------------------------------------------------------ */
   form.addEventListener('submit', function (e) {
     elErr.hidden = true;
@@ -195,6 +299,14 @@
       elErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
+    // Everything checks out locally. Show the review rather than sending —
+    // unless this submit is the confirmation coming back from the review.
+    if (dlg && !confirmed) {
+      e.preventDefault();
+      openReview();
+      return;
+    }
+
     remember();
     document.getElementById('submitbtn').disabled = true;
   });

@@ -282,3 +282,32 @@ legend { font-weight: 700; font-size: var(--dbd-step--1); padding: 0 var(--dbd-s
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap;
 }
+
+/* --- Review before submitting ------------------------------------------- */
+/* Sized to a phone first: full width, capped on a laptop, and scrollable in
+   the middle so the confirm button never falls off the bottom of a long order. */
+.review {
+  width: min(560px, calc(100vw - var(--dbd-sp-4) * 2));
+  border: none; border-radius: var(--dbd-radius);
+  background: var(--dbd-surface); color: var(--dbd-ink);
+  padding: var(--dbd-sp-5);
+  box-shadow: 0 18px 50px var(--dbd-shadow);
+  max-height: min(90vh, 900px);
+}
+.review::backdrop { background: var(--dbd-scrim); }
+.review h2 { margin-top: 0; }
+.review__close { position: absolute; top: var(--dbd-sp-3); right: var(--dbd-sp-3); margin: 0; }
+.review__close .btn { min-width: 44px; padding: var(--dbd-sp-2); }
+.review__section { margin-top: var(--dbd-sp-4); }
+.review__section h3 {
+  font-family: var(--dbd-body); font-size: var(--dbd-step--1);
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--dbd-tan-deep); margin: 0 0 var(--dbd-sp-2);
+}
+.review__actions {
+  display: flex; gap: var(--dbd-sp-3); margin-top: var(--dbd-sp-5);
+  position: sticky; bottom: 0; background: var(--dbd-surface);
+  padding-top: var(--dbd-sp-3);
+}
+.review__actions .btn { flex: 1 1 auto; }
+.review__err { color: var(--dbd-danger); font-weight: 600; }

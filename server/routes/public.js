@@ -105,6 +105,49 @@ router.post('/api/eligibility', rateLimit('eligibility', 40, 60_000), (req, res)
   res.json({ ok: r.ok, reason: r.reason, fsa: r.fsa, fee: r.fee, zone: r.zoneName });
 });
 
+/**
+ * Priced review, for the confirm-before-you-submit step. Writes nothing.
+ *
+ * The numbers come from the same code the submit runs, so the review cannot
+ * promise a price the order will not honour — and a dish that sold out while
+ * the customer was filling in their address is reported here, before they
+ * commit, rather than after.
+ *
+ * Its own limiter, looser than the order limiter: reviewing is something a
+ * hesitant customer may reasonably do several times, and the round trip that
+ * talks them out of a mistake should not be the one that locks them out.
+ */
+router.post('/api/quote', rateLimit('quote', 40, 60_000), (req, res) => {
+  noStore(res);
+  try {
+    const q = O.quote(req.body);
+    res.json({
+      ok: true,
+      late: q.status === 'late_request',
+      lines: q.lines.map((l) => ({
+        name: l.item_name, variant: l.variant_label, qty: l.qty,
+        unit: l.unit_price, total: l.unit_price * l.qty,
+        allergens: l.allergens || [],
+      })),
+      subtotal: q.order.subtotal,
+      deliveryFee: q.order.delivery_fee,
+      total: q.order.total,
+      method: q.order.method,
+      pickup: q.order.method === 'pickup'
+        ? { name: q.order.location_name, address: q.order.location_addr, window: q.order.pickup_window }
+        : null,
+      delivery: q.order.method === 'delivery'
+        ? { line: q.order.addr_line, unit: q.order.addr_unit, postal: q.order.postal_norm }
+        : null,
+      payment: O.PAYMENT_LABEL(q.order.payment_method),
+      allergyNotes: q.order.allergy_notes || '',
+    });
+  } catch (e) {
+    if (e instanceof O.OrderError) return res.status(400).json({ ok: false, error: e.message });
+    throw e;
+  }
+});
+
 /* Submit. */
 router.post('/order', rateLimit('order', 12, 60_000), async (req, res) => {
   noStore(res);
