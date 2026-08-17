@@ -154,13 +154,22 @@ async function icon(file, size, inset, bg, ink) {
  * full-colour photo of a leather medallion, not black ink on white, so there
  * is no threshold to stencil — just a crop to the badge and a circular clip.
  *
- * That crop lives in brandmark.js, shared with the social graphics so both
- * find the badge's edge the same way.
+ * That crop lives in brandmark.js, shared with the business card so both find
+ * the badge's edge the same way.
  *
- * The badge itself is only ~210px across in the source file, so this is
- * exported close to its native size rather than upscaled to hide that.
+ * 252px is three times the 84px it is displayed at, which is what a phone
+ * wants. The source holds a badge about 950px across, so that is a downscale,
+ * not a stretch — it was 240px against a 210px source before, and looked it.
+ *
+ * Quantised to a palette on the way out. The badge is one hue in a few dozen
+ * shades, so there is nothing for 24-bit colour to hold that survives being
+ * drawn at 84px — and this is the largest thing the customer page loads: 155KB
+ * as truecolour, 44KB quantised. The card seal is deliberately NOT quantised;
+ * that one is printed at 300 DPI, where the banding this hides would show.
  */
-const headerMark = (size) => brandmark.circle(size, MEDALLION_SOURCE);
+const headerMark = async (size) => sharp(await brandmark.circle(size, MEDALLION_SOURCE))
+  .png({ palette: true, quality: 100, effort: 10 })
+  .toBuffer();
 
 (async () => {
   if (!fs.existsSync(SOURCE)) {
@@ -189,8 +198,8 @@ const headerMark = (size) => brandmark.circle(size, MEDALLION_SOURCE);
   // Site header — the full-colour leather medallion, not the line-art stencil.
   if (fs.existsSync(MEDALLION_SOURCE)) {
     console.log('\nGenerating header mark from brand/logo-medallion.jpg');
-    fs.writeFileSync(path.join(OUT, 'header-mark.png'), await headerMark(240));
-    console.log(`  header-mark.png             240×240`);
+    fs.writeFileSync(path.join(OUT, 'header-mark.png'), await headerMark(252));
+    console.log(`  header-mark.png             252×252`);
   }
 
   console.log('\nDone. Icons are in public/icons/.\n');

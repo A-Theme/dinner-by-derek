@@ -2,10 +2,11 @@
 /**
  * The leather medallion, cropped to its own edge and clipped to a circle.
  *
- * Shared by make-icons.js (the site header mark) and social.js (the seal on
- * every social graphic) so both crop the badge identically — the artwork sits
- * in a much larger transparent-turned-grey canvas, and finding its real edge
- * is the fiddly part worth doing once.
+ * Shared by make-icons.js (the site header mark) and card.js (the seal on the
+ * back of the business card) so both crop the badge identically — the artwork
+ * sits in a larger transparent-turned-grey canvas, and finding its real edge is
+ * the fiddly part worth doing once. The social graphics use the wordmark, not
+ * this.
  *
  * The source file is only ever READ.
  */
@@ -57,16 +58,32 @@ async function bounds(file = SOURCE) {
 /**
  * The medallion as a transparent-cornered circular PNG at `size` px.
  *
- * The badge is only ~210px across in the source, so asking for much more than
- * that upscales it. Callers that need it large should expect it soft.
+ * The badge is about 950px across in the source, with real detail to roughly
+ * 500 — comfortably more than the two sizes that ship (a 240px header mark and
+ * a 96px card seal), so neither is upscaled.
+ *
+ * EDGE_INSET is why this is not simply "crop to the bounds and clip". The badge
+ * carries a soft drop shadow, and the source is flattened against a
+ * checkerboard, so the last few pixels before its edge are neither leather nor
+ * cleanly transparent — colour enough for bounds() to include, grey enough to
+ * show as a speckled rim once clipped. The clip therefore lands just inside the
+ * badge. What it costs is 3% of a plain leather border; what it buys is an edge
+ * that is leather all the way to the cut.
  */
+const EDGE_INSET = 0.03;
+
 async function circle(size, file = SOURCE) {
   const box = await bounds(file);
+  const cut = Math.round(box.width * EDGE_INSET);
+  const inner = {
+    left: box.left + cut, top: box.top + cut,
+    width: Math.max(1, box.width - cut * 2), height: Math.max(1, box.height - cut * 2),
+  };
   const mask = Buffer.from(
     `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`
   );
   return sharp(file)
-    .extract(box)
+    .extract(inner)
     .resize(size, size, { fit: 'cover' })
     .ensureAlpha()
     .composite([{ input: mask, blend: 'dest-in' }])

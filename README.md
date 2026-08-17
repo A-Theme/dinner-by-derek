@@ -560,7 +560,12 @@ Source artwork is in `brand/`:
   icons are built from.**
 - `logo-lineart.jpg` — the same mark, flattened onto white. Superseded by the
   PNG above and kept only because it is what the first icons were cut from.
-- `logo-medallion.jpg` — the leather version, used for the site header.
+- `logo-medallion.jpg` — the leather version, 1000×1027 with the badge about
+  950px across. **This is what the site header mark and the business card seal
+  are built from.** It is flattened against a checkerboard rather than
+  genuinely transparent, which is why `brandmark.js` finds the badge by colour
+  and clips 3% inside its edge. Replacing it with a larger export is the single
+  cheapest upgrade to both; nothing else needs changing.
 - `logo-wordmark.svg` — the full gold lockup, vector. **This is what the social
   graphics and the README banner are built from**, because it is the only
   source that stays sharp at poster size.
