@@ -253,8 +253,46 @@ async function weekPublishRefusedEmail(week, blockers) {
   });
 }
 
+/**
+ * Nothing has been built for the week ahead. The one failure the schedule
+ * cannot report itself, since it has no week to refuse.
+ *
+ * Written to be answerable two ways, because both are legitimate: build it, or
+ * close the week on purpose. Closing is offered as plainly as cooking is.
+ */
+async function weekMissingEmail({ weekStart, publishAt }) {
+  const tz = settings.get('timezone');
+  const range = T.fmtWeekRange(weekStart, tz);
+  const due = publishAt
+    ? T.fmtLocal(publishAt, tz, { weekday: 'long', month: 'long', day: 'numeric' })
+    : null;
+  const html = shell('No menu for next week yet', `
+    <p style="background:${palette.parchment};border-left:4px solid ${palette.umber};padding:10px">
+      <strong>Nothing is built for ${esc(range)}.</strong>
+      ${due ? `It would publish itself on ${esc(due)}, but there is no week for it to publish.` : ''}</p>
+    <p>Two ways to settle it, and closing counts:</p>
+    <ul>
+      <li><strong>Cooking?</strong> Build the week in This Week — Duplicate last week is the quick way —
+        and it goes live on schedule once the allergen reviews are done.</li>
+      <li><strong>Not cooking?</strong> Close the week. Customers get one clear message for those
+        dates instead of a stale menu, and this reminder stops.</li>
+    </ul>
+    <p>Leave it and nothing breaks: last week's menu simply stays up until you do one or the other.</p>
+    <p><a href="${config.baseUrl}/admin/week"
+      style="background:${palette.tan};color:${palette.espresso};padding:10px 16px;
+      border-radius:6px;text-decoration:none;display:inline-block">Open This Week</a></p>`);
+  return send({
+    to: settings.get('notify_email'),
+    subject: `No menu built for ${range}`,
+    html,
+    text: `Nothing is built for ${range}.`
+      + (due ? ` It would publish itself on ${due}, but there is no week to publish.` : '')
+      + `\n\nBuild it, or close the week — both settle it. ${config.baseUrl}/admin/week`,
+  });
+}
+
 module.exports = {
   send, ownerOrderEmail, customerOrderEmail, lateDecisionEmail, tokenExpiryEmail,
-  weekPublishedEmail, weekPublishRefusedEmail,
+  weekPublishedEmail, weekPublishRefusedEmail, weekMissingEmail,
   configured: () => !!config.smtp.host,
 };

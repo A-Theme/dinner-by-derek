@@ -464,6 +464,13 @@ router.post('/settings/publishing', (req, res) => {
   if (T.WEEKDAYS.includes(wd)) settings.set('auto_publish_weekday', wd);
   const t = String(req.body.auto_publish_time || '12:00');
   if (/^\d{1,2}:\d{2}$/.test(t)) settings.set('auto_publish_time', t);
+
+  settings.set('remind_missing_week', req.body.remind_missing_week ? 1 : 0);
+  const lead = Math.max(0, Math.min(6, Math.floor(Number(req.body.remind_missing_week_days)) || 0));
+  settings.set('remind_missing_week_days', lead);
+  // A week already asked about stays asked about: saving this form twice
+  // should not send the same reminder twice. A new lead time takes effect
+  // from the next week.
   back(res, req, 'Publishing schedule saved.');
 });
 
@@ -542,6 +549,27 @@ router.get('/settings', (req, res) => {
         <p class="also">That is the ${T.WEEKDAY_LABELS[settings.get('auto_publish_weekday', 'sat')] || 'day'}
           <em>before</em> the week starts, in ${settings.get('timezone')} — so it stays the same
           clock time when the clocks change.</p>
+
+        <fieldset>
+          <legend>If no week has been built</legend>
+          <p class="also">The schedule can only publish a week that exists. If nothing has been
+            started for the week ahead, you get one email — early enough to cook, or to close
+            the week on purpose.</p>
+          <label style="display:flex;gap:var(--dbd-sp-2);align-items:center">
+            <input type="checkbox" name="remind_missing_week" value="1" style="width:22px;height:22px"${settings.get('remind_missing_week', '1') === '1' ? ' checked' : ''}>
+            Email me when there's no week built</label>
+          <label for="rmwd">How many days before the publish time</label>
+          <input type="number" id="rmwd" name="remind_missing_week_days" min="0" max="6" step="1"
+            value="${settings.getInt('remind_missing_week_days', 2)}">
+          <p class="also">${(() => {
+            const wd = settings.get('auto_publish_weekday', 'sat');
+            const lead = Math.max(0, Math.min(6, settings.getInt('remind_missing_week_days', 2) || 0));
+            const idx = T.WEEKDAYS.indexOf(wd);
+            const dayName = idx < 0 ? 'that day' : T.WEEKDAY_LABELS[T.WEEKDAYS[(idx - lead + 7) % 7]];
+            return `As things stand: ${dayName} at ${settings.get('auto_publish_time', '12:00')}.`;
+          })()} One email a week at most, and none once the week is built or closed.</p>
+        </fieldset>
+
         <button class="btn btn--primary" type="submit">Save publishing schedule</button>
       </form>
     </div>

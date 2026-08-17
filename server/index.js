@@ -206,6 +206,20 @@ function runScheduledPublish() {
   } catch (e) {
     console.error('[job] scheduled publish', e);
   }
+
+  // Separately, because it is the case the publisher cannot see: a week that
+  // was never built has no draft row to be due, and would otherwise pass in
+  // total silence.
+  try {
+    publish.runMissingWeek({
+      onMissing(miss) {
+        console.warn(`[publish] nothing built for the week of ${miss.weekStart}`);
+        mailer.weekMissingEmail(miss).catch((e) => console.error('[email] week missing', e));
+      },
+    });
+  } catch (e) {
+    console.error('[job] missing week reminder', e);
+  }
 }
 
 /* --- Start --------------------------------------------------------------- */

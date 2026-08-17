@@ -145,13 +145,49 @@ function deliveryOnFor(day) {
 }
 
 /**
+ * Is the kitchen shut for this day — either the day itself, or the whole week?
+ * The day's own note is preferred over the week's, being the more specific.
+ */
+function closureFor(week, day) {
+  if (day && day.closed) return { closed: true, note: (day.closed_note || week.closed_note || '').trim() };
+  if (week && week.closed) return { closed: true, note: (week.closed_note || '').trim() };
+  return { closed: false, note: '' };
+}
+
+/**
  * The full menu for one service day, all three levels merged.
  * Items failing their allergen review are omitted — the gate is enforced here,
  * not only at publish time, so a later edit cannot leak an unreviewed item
  * onto a live menu.
+ *
+ * A closed day returns no items at all — not the featured dish, and not the
+ * standing Other Options either. Closed means the kitchen is shut, and Chili
+ * left orderable on a day nobody is cooking is a customer turning up to a dark
+ * house. Everything downstream — the views, the order validation, the day
+ * ceiling — reads emptiness from here rather than each checking the flag.
  */
 function menuForDay(week, day) {
   const weekday = T.weekdayOf(day.service_date);
+  const closure = closureFor(week, day);
+  if (closure.closed) {
+    return {
+      day,
+      closed: true,
+      closedNote: closure.note,
+      featured: null,
+      grouped: [],
+      allItems: [],
+      featuredCap: null,
+      window: pickupWindowFor(day),
+      deliveryOn: false,
+      ...T.dayState(
+        day.service_date,
+        settings.getInt('cutoff_hour', 22),
+        settings.getInt('cutoff_minute', 0),
+        settings.get('timezone', 'America/Toronto')
+      ),
+    };
+  }
   const { soup, salad } = weekItemsOf(week.id);
 
   const featured = reviewState(day).ok && day.dish_name.trim()
@@ -217,6 +253,8 @@ function menuForDay(week, day) {
 
   return {
     day,
+    closed: false,
+    closedNote: '',
     featured,
     grouped,
     allItems: featured ? [featured, ...others] : others,
@@ -235,6 +273,7 @@ function findItem(menu, key) {
 /** Summary line the dashboard shows on each service day card. */
 function alsoAvailableLine(week, day) {
   const menu = menuForDay(week, day);
+  if (menu.closed) return 'Nothing — the kitchen is closed this day';
   const names = menu.grouped.flatMap((g) => g.items.map((i) => i.name));
   return names.length ? names.join(', ') : 'Nothing else runs on this day yet';
 }
@@ -246,6 +285,6 @@ function activeLocations() {
 module.exports = {
   SUBCATEGORY_ORDER, activeWeek, weekBySlug, serviceDaysOf, weekItemsOf,
   standingItems, standingRunsOn, weekItemRunsOn, pickupWindowFor,
-  deliveryOnFor, menuForDay, findItem, alsoAvailableLine, activeLocations,
+  deliveryOnFor, closureFor, menuForDay, findItem, alsoAvailableLine, activeLocations,
   soldOn, soldOnAll, featuredCapFor, toRenderItem,
 };

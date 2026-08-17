@@ -254,6 +254,12 @@ const DEFAULTS = {
   auto_publish: '1',
   auto_publish_weekday: 'sat',
   auto_publish_time: '12:00',
+  // The schedule can only publish a week that exists. Nothing built for the
+  // week ahead is the one failure it cannot report, so it is reported here
+  // instead — a couple of days before the publish moment, while there is still
+  // time to cook or to close the week on purpose.
+  remind_missing_week: '1',
+  remind_missing_week_days: '2',
   payment_instructions:
     'No online payment. Pay at pickup, on delivery, or by e-transfer to derek@example.com.',
   owner_contact: 'Message Dinner By Derek on Facebook, or call (519) 555-0142.',
@@ -357,6 +363,15 @@ addColumn('orders', 'payment_method', "TEXT NOT NULL DEFAULT ''");
 // was refused, so the refusal is emailed once rather than every minute.
 addColumn('weeks', 'auto_publish', 'INTEGER NOT NULL DEFAULT 1');
 addColumn('weeks', 'publish_warned_at', 'TEXT');
+// Closing up shop, at either scale. A closed day or week is NOT a blank one:
+// blank means undecided and shows nothing, closed is a decision, is shown to
+// customers in as many words, publishes like any other week, and refuses
+// orders. The note is optional and appears under the closure — "back on the
+// 25th", "away for a wedding".
+addColumn('service_days', 'closed', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('service_days', 'closed_note', "TEXT NOT NULL DEFAULT ''");
+addColumn('weeks', 'closed', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('weeks', 'closed_note', "TEXT NOT NULL DEFAULT ''");
 
 function renameColumn(table, from, to) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();

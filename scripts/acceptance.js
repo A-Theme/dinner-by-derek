@@ -427,6 +427,133 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   settings.set('auto_publish_time', '12:00');
 }
 
+/* --- Closing a day, and closing a week ------------------------------------
+   Closed is not blank. A blank day is undecided and shows nothing; a closed
+   one is a decision, is shown to customers, carries no menu at all — not even
+   the standing items, which are otherwise available every service day — and
+   is not something the allergen gate may hold hostage. */
+{
+  const P = require('../server/publish');
+  const M = require('../server/menu');
+
+  const weekId = db.prepare(`INSERT INTO weeks (slug, title, status, week_start)
+    VALUES ('closed-test','Closed test','draft','2026-08-24')`).run().lastInsertRowid;
+  const insDay = db.prepare(`INSERT INTO service_days
+    (week_id, service_date, dish_name, description, ack, ack_of, closed, closed_note, full_on, full_price)
+    VALUES (?,?,?,?,?,?,?,?,1,1800)`);
+
+  // A reviewed standing item, so "closed hides even the always-available
+  // things" is proved against something that would otherwise be there.
+  const standingId = db.prepare(`INSERT INTO standing_items
+    (name, subcategory, description, availability, sort, full_on, full_price, ack, ack_of)
+    VALUES ('Test Chili','Mains','','every_service_day',99,1,1400,1,?)`)
+    .run(A.reviewedText({ name: 'Test Chili', description: '' })).lastInsertRowid;
+
+  const week = () => db.prepare('SELECT * FROM weeks WHERE id = ?').get(weekId);
+  const dayOn = (date) => db.prepare('SELECT * FROM service_days WHERE week_id=? AND service_date=?')
+    .get(weekId, date);
+
+  // Monday: cooking, reviewed. Tuesday: closed, and deliberately left with an
+  // unreviewed dish name on it to prove the gate ignores what nobody can order.
+  insDay.run(weekId, '2026-08-24', 'Roast chicken', 'Chicken, potatoes',
+    1, A.reviewedText({ name: 'Roast chicken', description: 'Chicken, potatoes' }), 0, '');
+  insDay.run(weekId, '2026-08-25', 'Beer-battered haddock', '', 0, null, 1, 'Back Wednesday');
+
+  const openMenu = M.menuForDay(week(), dayOn('2026-08-24'));
+  check('an open day still carries its featured dish', openMenu.featured.name, 'Roast chicken');
+  ok('and the standing items that run that day',
+    openMenu.allItems.some((i) => i.name === 'Test Chili'));
+
+  const shutMenu = M.menuForDay(week(), dayOn('2026-08-25'));
+  ok('a closed day says so', shutMenu.closed);
+  check('its note is carried to the customer', shutMenu.closedNote, 'Back Wednesday');
+  check('it offers no featured dish', shutMenu.featured, null);
+  check('and nothing else either — not even the standing items', shutMenu.allItems.length, 0);
+
+  check('an unreviewed dish on a closed day does not block publishing', P.blockers(weekId), []);
+  check('and a week with a closed day on it is not an empty week', P.isEmpty(weekId), false);
+
+  // The same dish, reopened, is exactly the blocker it always was.
+  db.prepare('UPDATE service_days SET closed=0 WHERE week_id=? AND service_date=?')
+    .run(weekId, '2026-08-25');
+  check('reopening the day brings its allergen review back', P.blockers(weekId).length, 1);
+  db.prepare('UPDATE service_days SET closed=1 WHERE week_id=? AND service_date=?')
+    .run(weekId, '2026-08-25');
+
+  // Closing the whole week.
+  db.prepare('UPDATE weeks SET closed=1, closed_note=? WHERE id=?').run('Away for a wedding', weekId);
+  const closedWeekMenu = M.menuForDay(week(), dayOn('2026-08-24'));
+  ok('closing the week closes a day that was cooking', closedWeekMenu.closed);
+  check('and the week note stands in for a day note', closedWeekMenu.closedNote, 'Away for a wedding');
+  check('a closed week has nothing to review', P.blockers(weekId), []);
+  check('and is not empty — a closure is something to show', P.isEmpty(weekId), false);
+
+  // A blank week, by contrast, is still empty: that distinction is the whole
+  // reason the flag exists rather than being inferred from having no dishes.
+  const blankId = db.prepare(`INSERT INTO weeks (slug, title, status, week_start)
+    VALUES ('blank-test','Blank test','draft','2026-09-07')`).run().lastInsertRowid;
+  check('a week with nothing on it is still empty', P.isEmpty(blankId), true);
+
+  db.prepare('DELETE FROM service_days WHERE week_id = ?').run(weekId);
+  db.prepare('DELETE FROM weeks WHERE id IN (?,?)').run(weekId, blankId);
+  db.prepare('DELETE FROM standing_items WHERE id = ?').run(standingId);
+}
+
+/* --- The reminder for a week nobody built ---------------------------------
+   The refusal email needs a draft week to refuse. Nothing built at all is
+   invisible to it, so it is watched separately: two days before the publish
+   moment by default, once, and never for a week that is built or closed. */
+{
+  const P = require('../server/publish');
+  const { settings } = require('../server/db');
+  settings.set('auto_publish_weekday', 'sat');
+  settings.set('auto_publish_time', '12:00');
+  settings.set('remind_missing_week', '1');
+  settings.set('remind_missing_week_days', '2');
+  settings.set('missing_week_warned_for', '');
+
+  // Thursday 20 August 2026, noon — two days before the Saturday that would
+  // publish the week starting Monday the 24th.
+  const thursdayNoon = T.zonedToUtc(2026, 8, 20, 12, 0, TZ);
+  const thursdayJustBefore = T.zonedToUtc(2026, 8, 20, 11, 59, TZ);
+
+  check('nothing is asked before the moment arrives', P.missingWeek(thursdayJustBefore), null);
+  const miss = P.missingWeek(thursdayNoon);
+  ok('at the moment, the week ahead is named', miss && miss.weekStart === '2026-08-24',
+    JSON.stringify(miss));
+
+  // Opening This Week creates an empty draft. That must not count as built —
+  // it is the single most likely way to be lulled into missing a week.
+  const emptyId = db.prepare(`INSERT INTO weeks (slug, title, status, week_start)
+    VALUES ('reminder-empty','Empty','draft','2026-08-24')`).run().lastInsertRowid;
+  ok('an empty draft does not count as a week', !!P.missingWeek(thursdayNoon));
+
+  db.prepare(`INSERT INTO service_days (week_id, service_date, dish_name)
+    VALUES (?, '2026-08-24', 'Roast chicken')`).run(emptyId);
+  check('a dish on it does', P.missingWeek(thursdayNoon), null);
+
+  // Closing counts as answering. Somebody who is not cooking has decided, and
+  // being nagged about it weekly would teach them to ignore the email.
+  db.prepare('DELETE FROM service_days WHERE week_id = ?').run(emptyId);
+  db.prepare('UPDATE weeks SET closed=1 WHERE id=?').run(emptyId);
+  check('and so does closing the week', P.missingWeek(thursdayNoon), null);
+
+  db.prepare('DELETE FROM weeks WHERE id = ?').run(emptyId);
+  ok('deleting it again puts the question back', !!P.missingWeek(thursdayNoon));
+
+  // Once, not every minute.
+  let asked = 0;
+  P.runMissingWeek({ now: thursdayNoon, onMissing: () => { asked++; } });
+  P.runMissingWeek({ now: thursdayNoon, onMissing: () => { asked++; } });
+  P.runMissingWeek({ now: T.zonedToUtc(2026, 8, 21, 9, 0, TZ), onMissing: () => { asked++; } });
+  check('asked exactly once for the same week', asked, 1);
+
+  settings.set('remind_missing_week', '0');
+  settings.set('missing_week_warned_for', '');
+  check('and not at all when switched off', P.missingWeek(thursdayNoon), null);
+  settings.set('remind_missing_week', '1');
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {

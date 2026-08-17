@@ -147,10 +147,16 @@ a { color: var(--dbd-olive-deep); }
 .daycard__dish { font-family: var(--dbd-display); font-size: var(--dbd-step-2); color: var(--dbd-heading); }
 .daycard__meta { font-size: var(--dbd-step--1); color: var(--dbd-ink-muted); }
 
+/* A day the kitchen is shut. Rendered as a plain block, never a link: there
+   is nothing behind it to order, and a card that looks tappable and isn't is
+   worse than one that plainly says so. */
+.daycard--shut { border-left-color: var(--dbd-umber-soft); background: var(--dbd-parchment-2); }
+.daycard--shut:hover { border-left-color: var(--dbd-umber-soft); background: var(--dbd-parchment-2); }
+
 .state { font-weight: 700; font-size: var(--dbd-step--1); }
 .state--open { color: var(--dbd-ok); }
 .state--closing { color: var(--dbd-warn); }
-.state--closed, .state--past { color: var(--dbd-danger); }
+.state--closed, .state--past, .state--shut { color: var(--dbd-danger); }
 
 /* --- Featured dish ------------------------------------------------------ */
 .featured {

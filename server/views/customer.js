@@ -8,11 +8,14 @@ const O = require('../orders');
 
 const tz = () => settings.get('timezone', 'America/Toronto');
 
+/* "Ordering closed" rather than plain "closed", because a day the kitchen is
+   shut sits in the same list and means something else entirely: one is a
+   cutoff that has passed, the other is nobody cooking. */
 const STATE_LABEL = {
   open: 'Open',
   closing: 'Closing tonight',
-  closed: 'Closed — late requests only',
-  past: 'This day has closed',
+  closed: 'Ordering closed — late requests only',
+  past: 'This day is over',
 };
 
 function stateLine(st, cutoff) {
@@ -25,7 +28,17 @@ function stateLine(st, cutoff) {
 
 /* --- Week / day selector ------------------------------------------------ */
 function weekView({ week, days }) {
-  const body = html`
+  // A closed week is published like any other and says so plainly. The day
+  // list is not shown at all: there is nothing to pick between.
+  const body = week.closed ? html`
+    <h1>${week.title || 'This week'}</h1>
+    <div class="notice notice--strong">
+      <strong>The kitchen is closed this week.</strong>
+      ${week.closed_note ? html`<br>${week.closed_note}` : ''}
+    </div>
+    <p>There's nothing to order for these dates. Check back for the following week.</p>
+    <p>${settings.get('owner_contact')}</p>`
+  : html`
     ${week.image ? html`<img src="/uploads/${week.image}" alt="" class="featured__photo" style="border-radius:var(--dbd-radius);margin-bottom:var(--dbd-sp-4)">` : ''}
     <h1>${week.title || 'This week'}</h1>
     ${week.description ? html`<p>${week.description}</p>` : ''}
@@ -34,6 +47,18 @@ function weekView({ week, days }) {
     <ul class="daylist">
       ${days.map((d) => {
         const menu = M.menuForDay(week, d);
+        if (menu.closed) {
+          return html`<li>
+            <div class="daycard daycard--shut">
+              <div class="daycard__date">${T.fmtDayLong(d.service_date, tz())}</div>
+              <div class="daycard__dish">Not cooking</div>
+              <div class="daycard__meta">
+                <span class="state state--shut">The kitchen is closed this day</span>
+                ${menu.closedNote ? html` · ${menu.closedNote}` : ''}
+              </div>
+            </div>
+          </li>`;
+        }
         return html`<li>
           <a class="daycard" href="/w/${week.slug}/${d.service_date}">
             <div class="daycard__date">${T.fmtDayLong(d.service_date, tz())}</div>
@@ -126,6 +151,29 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
   const late = menu.state === 'closed';
   const past = menu.state === 'past';
   const dayLabel = T.fmtDayLong(day.service_date, tz());
+
+  // Closed — the day is still reachable by its permalink, because the link may
+  // be sitting in somebody's messages, and it should explain itself rather
+  // than 404. No menu, no order form, and no late-request route either: a
+  // closure is not a cutoff, and there is nothing to request.
+  if (menu.closed) {
+    return L.page({
+      title: `${dayLabel} — closed`,
+      description: `Dinner By Derek isn't cooking on ${dayLabel}.`,
+      url: `/w/${week.slug}/${day.service_date}`,
+      body: html`
+        <p><a href="/w/${week.slug}">← All days</a></p>
+        <h1>${dayLabel}</h1>
+        <div class="notice notice--strong">
+          <strong>Derek isn't cooking on ${dayLabel}.</strong>
+          ${menu.closedNote ? html`<br>${menu.closedNote}` : ''}
+        </div>
+        <p>Nothing can be ordered for this day.</p>
+        <p>${settings.get('owner_contact')}</p>
+        <p style="margin-top:var(--dbd-sp-5)">
+          <a class="btn btn--primary" href="/w/${week.slug}">See the other days</a></p>`,
+    });
+  }
 
   const banner = past
     ? html`<div class="notice notice--strong"><strong>This day has closed.</strong>

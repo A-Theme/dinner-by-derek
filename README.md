@@ -31,6 +31,7 @@ website that installs to a home screen and works like an app.
 - 🔑 [Environment variables](#environment-variables)
 - 🍲 [The three-level menu](#the-three-level-menu)
 - 📅 [Publishing a week](#publishing-a-week)
+- 🚫 [Closing a day, or a week](#closing-a-day-or-a-week)
 - ⏰ [The cutoff](#the-cutoff)
 - 🚪 [Pickup window and locations](#pickup-window-and-locations)
 - 🚗 [Delivery area](#delivery-area)
@@ -254,6 +255,53 @@ there.
 
 Both paths run the same check, in `server/publish.js`. The gate is the one
 thing in this app that must not have a second implementation.
+
+### When nothing has been built
+
+The schedule can only refuse a week that exists. A week nobody started has no
+draft to be refused, so it would pass in silence — and the first sign of it is
+a customer finding last week's menu still up on Monday.
+
+So the absence is watched on its own. **Two days before the publish moment** by
+default — Thursday noon, for a Saturday-noon schedule — you get one email if
+nothing is built for the week ahead. It offers both answers, because both are
+real: cook it, or close the week. One email per week at most, and none once the
+week has a dish on it or has been closed.
+
+Opening **This Week** creates an empty draft, so the reminder does not count a
+week as built just because a row exists. It counts a dish, a soup, a salad, or
+a closure.
+
+Off, or moved, in **Settings → Publishing**.
+
+---
+
+## Closing a day, or a week
+
+**Closed is not blank.** A blank day is undecided and simply shows nothing; a
+closed day is a decision, and the customer reads it.
+
+| | Where | What customers see |
+|---|---|---|
+| **A day** | This Week → the day's box → *Closed — not cooking this day* | The day is marked closed in the list and cannot be opened. Its permalink still answers, and says the kitchen is shut. |
+| **A week** | This Week → *Closing the whole week* | One message instead of a menu. No day list at all. |
+
+Either takes an optional note — "back Thursday", "away for a wedding" — shown
+under the closure.
+
+A closed day carries **no menu at all**, and that includes the standing Other
+Options that otherwise run every service day. Chili left orderable on a day
+nobody is cooking is a customer turning up to a dark house. Orders for a closed
+day are refused server-side, by name, not as a sold-out item.
+
+A closure needs **no allergen review** — nothing on it is on offer — so a
+closed week publishes on the ordinary schedule, and an unreviewed dish sitting
+on a closed day cannot hold the rest of the week hostage. Reopen the day and
+that dish is exactly the blocker it always was.
+
+Nothing is deleted by closing: dishes, prices and photos stay where they are
+and come back when it reopens. Closures are **not** carried into a duplicated
+week — a day you were shut last week opens again in the new one.
 
 ---
 

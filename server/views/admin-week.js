@@ -23,13 +23,19 @@ function weekPage({ week, days, items, hasPrevious }) {
   const body = html`
     <h1>This Week</h1>
     <p><span class="flag ${published ? 'flag--ok' : 'flag--warn'}">
-      ${published ? 'Published — customers can see this' : 'Draft — customers cannot see this'}</span></p>
+      ${published ? 'Published — customers can see this' : 'Draft — customers cannot see this'}</span>
+      ${week.closed ? html` <span class="flag flag--stop">Closed for the week</span>` : ''}</p>
+    ${week.closed ? html`<div class="notice notice--strong"><strong>This week is marked closed.</strong>
+      ${published ? 'Customers are being told the kitchen is shut for these dates and can order nothing on them.'
+        : 'Once published, customers will be told the kitchen is shut for these dates.'}
+      Anything filled in below is kept, but none of it is shown. Reopen it at the bottom of this page.</div>` : ''}
 
     ${hasPrevious ? html`
-      <form method="post" action="/admin/week/duplicate" data-confirm="This copies last week's menu into a brand new draft with the dates moved forward seven days. Your standing Other Options are not touched. Every dish will need its allergen review again before you can publish.">
+      <form method="post" action="/admin/week/duplicate" data-confirm="This copies last week's menu into a brand new draft with the dates moved forward seven days. Your standing Other Options are not touched. Closed days are not copied. Every dish will need its allergen review again before you can publish.">
         <button class="btn btn--primary btn--block" type="submit">Duplicate last week</button>
       </form>
-      <p class="also" style="margin-bottom:var(--dbd-sp-5)">Copies the dishes, soup, salad, prices and photos. Resets every allergen review.</p>` : ''}
+      <p class="also" style="margin-bottom:var(--dbd-sp-5)">Copies the dishes, soup, salad, prices and photos. Resets every allergen review.
+        Closures aren't copied — a day you were shut last week opens again in the new one.</p>` : ''}
 
     <!-- 1. Week basics -->
     <div class="card">
@@ -59,8 +65,9 @@ function weekPage({ week, days, items, hasPrevious }) {
     <!-- 2. One box per day -->
     <div class="card">
       <h2>This week's days</h2>
-      <p class="also">Fill in whichever days you're cooking. Leave a day blank to skip it. A pickup-window
-        override for just that day, and removing it, are below in Day details once it has a name.</p>
+      <p class="also">Fill in whichever days you're cooking. Leave a day blank to skip it quietly, or tick
+        <em>Closed</em> to say so out loud on the menu. A pickup-window override for just that day, and
+        removing it, are below in Day details once it has a name.</p>
       <form method="post" action="/admin/week/${week.id}/weekdays" data-autosave>
         ${T.WEEKDAYS_MON_FIRST.map((wd, offset) => {
           const date = T.addDays(weekStart, offset);
@@ -69,13 +76,28 @@ function weekPage({ week, days, items, hasPrevious }) {
             dish_name: '', description: '', allergens: '[]', dismissed: '[]', ack: 0, ack_of: null,
             photo: null, halal: 0, full_on: 1, full_label: '', full_price: null, full_cap: null,
             single_on: 0, single_label: '', single_price: null, single_cap: null, daily_cap: null,
+            closed: 0, closed_note: '',
           };
           const item = existing || stub;
           return html`
-          <details class="daycard-edit"${existing && existing.dish_name ? '' : ' open'}>
+          <details class="daycard-edit"${existing && (existing.dish_name || existing.closed) ? '' : ' open'}>
             <summary>${T.WEEKDAY_LABELS[wd]}, ${T.fmtMonthDay(date, tz())}
-              — ${item.dish_name || 'nothing yet'}
-              ${existing ? V.reviewFlag(item, item.dish_name || 'This dish') : ''}</summary>
+              — ${item.closed ? 'closed' : (item.dish_name || 'nothing yet')}
+              ${existing && !item.closed ? V.reviewFlag(item, item.dish_name || 'This dish') : ''}
+              ${item.closed ? html`<span class="flag flag--warn">Closed</span>` : ''}</summary>
+
+            <fieldset>
+              <legend>Cooking this day?</legend>
+              <label style="display:flex;gap:var(--dbd-sp-3);align-items:center">
+                <input type="checkbox" name="${wd}_closed" value="1" style="width:22px;height:22px"${item.closed ? ' checked' : ''}>
+                <span><strong>Closed — not cooking this day.</strong> Customers see the day marked
+                  closed and can order nothing on it, not even the standing Other Options.</span>
+              </label>
+              <label for="cn_${wd}">Note for customers (optional)</label>
+              <input type="text" id="cn_${wd}" name="${wd}_closed_note" maxlength="200"
+                value="${item.closed_note || ''}" placeholder="e.g. Back on Thursday">
+            </fieldset>
+
             ${V.itemEditor({ prefix: wd, item, nameLabel: 'Featured dish' })}
             <label for="cap_${wd}">How many this day (both sizes together)</label>
             <input type="number" id="cap_${wd}" name="${wd}_daily_cap" min="0" step="1"
@@ -133,9 +155,9 @@ function weekPage({ week, days, items, hasPrevious }) {
       const cutoff = T.cutoffFor(d.service_date, cutoffHour, cutoffMin, tz());
       const win = M.pickupWindowFor(d);
       return html`
-      <details class="daycard-edit"${d.dish_name ? '' : ' open'}>
-        <summary>${T.fmtDayLong(d.service_date, tz())} — ${d.dish_name || 'no dish yet'}
-          &nbsp;${V.reviewFlag(d, d.dish_name || 'This dish')}</summary>
+      <details class="daycard-edit"${d.dish_name || d.closed ? '' : ' open'}>
+        <summary>${T.fmtDayLong(d.service_date, tz())} — ${d.closed ? 'closed' : (d.dish_name || 'no dish yet')}
+          &nbsp;${d.closed ? html`<span class="flag flag--warn">Closed</span>` : V.reviewFlag(d, d.dish_name || 'This dish')}</summary>
 
         <p class="also">Also available that day: ${M.alsoAvailableLine(week, d)}</p>
         <p class="variant__label">Orders close ${T.fmtLocal(cutoff, tz(), { weekday: 'long', month: 'short', day: 'numeric' })}
@@ -172,6 +194,25 @@ function weekPage({ week, days, items, hasPrevious }) {
         })}
       </details>`;
     }) : html`<div class="card"><p>No service days yet. Add one above.</p></div>`}
+
+    <!-- 5. Closing the whole week -->
+    <div class="card">
+      <h2>Closing the whole week</h2>
+      <p class="also">For a week you're away, or not cooking at all. Customers see one clear message
+        instead of a menu, and nothing on these dates can be ordered — including the standing Other
+        Options. It still publishes like any other week${week.status === 'published' ? ', and this one is live, so the change is visible the moment you save it' : ', on the same schedule, and needs no allergen review'}.</p>
+      ${week.closed ? html`
+        <p><span class="flag flag--stop">Closed — this week is shut</span></p>` : ''}
+      <form method="post" action="/admin/week/${week.id}/closed">
+        <label for="wclosednote">Note for customers (optional)</label>
+        <input type="text" id="wclosednote" name="closed_note" maxlength="200"
+          value="${week.closed_note || ''}" placeholder="e.g. Away for a wedding — back the following Monday">
+        ${week.closed
+          ? html`<button class="btn btn--primary" type="submit" name="closed" value="0">Reopen this week</button>
+                 <button class="btn btn--secondary" type="submit" name="closed" value="1">Save the note</button>`
+          : html`<button class="btn btn--secondary" type="submit" name="closed" value="1">Close the whole week</button>`}
+      </form>
+    </div>
 
     <!-- Preview + publish -->
     <div class="card">
@@ -213,7 +254,10 @@ function weekPage({ week, days, items, hasPrevious }) {
                 an allergen review. Nothing will be published and you'll get an email. Finish the
                 reviews and it goes out on its own.
                 <ul>${stopped.map((b) => html`<li>${b}</li>`)}</ul>`
-                : html`<br>Everything on it has been reviewed, so it will publish.`}
+                : week.closed
+                  ? html`<br>It will go out as a <strong>closed</strong> week — customers will be told
+                      the kitchen is shut for these dates. A closed week needs no allergen review.`
+                  : html`<br>Everything on it has been reviewed, so it will publish.`}
             </div>
             <form method="post" action="/admin/week/${week.id}/auto-publish">
               <input type="hidden" name="auto_publish" value="0">

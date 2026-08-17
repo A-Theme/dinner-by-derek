@@ -63,7 +63,11 @@ router.get('/', (req, res) => {
 
   const tomorrow = T.addDays(today, 1);
 
-  const upcoming = days.filter((d) => d.service_date >= today);
+  // A closed day is not the next service day — there is no cooking to show
+  // totals for, and putting one at the top of Today would read as a shift the
+  // kitchen still has to work.
+  const weekClosed = !!(week && week.closed);
+  const upcoming = weekClosed ? [] : days.filter((d) => d.service_date >= today && !d.closed);
   const next = upcoming[0] || null;
   const cutoff = next ? T.cutoffFor(next.service_date, settings.getInt('cutoff_hour', 22),
     settings.getInt('cutoff_minute', 0), tz()) : null;
@@ -74,6 +78,7 @@ router.get('/', (req, res) => {
   let primary;
   if (!week) primary = { href: '/admin/week', label: 'Build this week\'s menu' };
   else if (week.status === 'draft') primary = { href: '/admin/week', label: 'Finish and publish this week' };
+  else if (weekClosed) primary = { href: '/admin/week', label: 'Plan the next week' };
   else if (lateCount) primary = { href: '/admin/orders?status=late_request', label: `Review ${lateCount} late request${lateCount === 1 ? '' : 's'}` };
   else if (next) primary = { href: `/admin/orders?date=${next.service_date}`, label: `See orders for ${T.fmtDayShort(next.service_date, tz())}` };
   else primary = { href: '/admin/week', label: 'Plan next week' };
@@ -107,7 +112,11 @@ router.get('/', (req, res) => {
         <p class="variant__label">${totals.split.pickup} pickup · ${totals.split.delivery} delivery</p>
         <p><a class="btn btn--secondary" href="/admin/sheet/kitchen/${next.service_date}">Kitchen sheet</a>
            <a class="btn btn--secondary" href="/admin/sheet/pickup/${next.service_date}">Pickup sheet</a></p>
-      </div>` : html`<div class="card"><p>No upcoming service days. Build a week to get going.</p></div>`}
+      </div>` : weekClosed
+        ? html`<div class="card"><p><span class="flag flag--stop">Closed for the week</span></p>
+            <p>${week.title} is marked closed — customers are told the kitchen is shut and can order
+            nothing on these dates. Reopen it, or start the next week, in This Week.</p></div>`
+        : html`<div class="card"><p>No upcoming service days. Build a week to get going.</p></div>`}
 
     <form method="post" action="/admin/logout" class="no-print">
       <button class="btn btn--secondary" type="submit">Sign out</button></form>`;
@@ -205,30 +214,38 @@ router.post('/week/:id/weekdays', (req, res) => {
   const tx = db.transaction(() => {
     T.WEEKDAYS_MON_FIRST.forEach((wd, offset) => {
       const item = IF.parse(req.body, wd);
-      if (!item.name && !item.description) return; // nothing entered for this day
+      // Closing a day is itself something entered, so it creates the row a
+      // blank day never gets. Without this, "closed" on a day with no dish
+      // would have nowhere to be stored and would silently do nothing.
+      const closed = req.body[`${wd}_closed`] ? 1 : 0;
+      const closedNote = String(req.body[`${wd}_closed_note`] || '').trim().slice(0, 200);
       const date = T.addDays(weekStart, offset);
+      const existing = db.prepare('SELECT id FROM service_days WHERE week_id = ? AND service_date = ?').get(id, date);
+      // A day that already exists is always written, or unticking Closed on a
+      // day with no dish on it would be silently dropped by the guard below
+      // and leave the day shut.
+      if (!existing && !item.name && !item.description && !closed && !closedNote) return;
       // Blank inherits the global setting, so it stays NULL rather than 0.
       const dailyCap = IF.intOrNull(req.body[`${wd}_daily_cap`]);
-      const existing = db.prepare('SELECT id FROM service_days WHERE week_id = ? AND service_date = ?').get(id, date);
       if (existing) {
         db.prepare(`UPDATE service_days SET dish_name=?, description=?, photo=?, halal=?,
             allergens=?, dismissed=?, ack=?, ack_of=?, full_on=?, full_label=?, full_price=?,
             full_cap=?, single_on=?, single_label=?, single_price=?, single_cap=?,
-            daily_cap=? WHERE id=?`)
+            daily_cap=?, closed=?, closed_note=? WHERE id=?`)
           .run(item.name, item.description, item.photo, item.halal, item.allergens,
             item.dismissed, item.ack, item.ack_of, item.full_on, item.full_label,
             item.full_price, item.full_cap, item.single_on, item.single_label,
-            item.single_price, item.single_cap, dailyCap, existing.id);
+            item.single_price, item.single_cap, dailyCap, closed, closedNote, existing.id);
       } else {
         db.prepare(`INSERT INTO service_days
             (week_id, service_date, dish_name, description, photo, halal, allergens, dismissed,
              ack, ack_of, full_on, full_label, full_price, full_cap, single_on, single_label,
-             single_price, single_cap, daily_cap)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+             single_price, single_cap, daily_cap, closed, closed_note)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
           .run(id, date, item.name, item.description, item.photo, item.halal, item.allergens,
             item.dismissed, item.ack, item.ack_of, item.full_on, item.full_label,
             item.full_price, item.full_cap, item.single_on, item.single_label,
-            item.single_price, item.single_cap, dailyCap);
+            item.single_price, item.single_cap, dailyCap, closed, closedNote);
       }
     });
   });
@@ -368,6 +385,26 @@ router.post('/week/:id/auto-publish', (req, res) => {
   back(res, req, on
     ? 'This week will publish on schedule once everything is reviewed.'
     : 'This week will not publish itself. Use the button when you\'re ready.');
+});
+
+/* Closing the whole week. Kept separate from publishing: a closed week is
+   still published, it just says the kitchen is shut. Nothing is deleted — the
+   dishes stay in the draft and come back if it is reopened. */
+router.post('/week/:id/closed', (req, res) => {
+  const id = Number(req.params.id);
+  const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(id);
+  if (!week) return back(res, req, null, 'That week no longer exists.');
+
+  const on = req.body.closed === '1' ? 1 : 0;
+  db.prepare('UPDATE weeks SET closed=?, closed_note=? WHERE id=?')
+    .run(on, String(req.body.closed_note || '').trim().slice(0, 200), id);
+
+  const live = week.status === 'published';
+  back(res, req, on
+    ? (live ? 'Week closed. Customers can see that straight away and can order nothing on these dates.'
+      : 'Week closed. It will tell customers the kitchen is shut when it publishes.')
+    : (live ? 'Week reopened. The menu is back in front of customers.'
+      : 'Week reopened. The dishes on it are as you left them.'));
 });
 
 router.post('/week/:id/unpublish', (req, res) => {

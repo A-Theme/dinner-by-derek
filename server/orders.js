@@ -83,6 +83,13 @@ function quote(payload) {
   if (!day) throw new OrderError('That service day is no longer on the menu.');
 
   const menu = M.menuForDay(week, day);
+  // Said in as many words. A closed day has no items on it, so every line
+  // would otherwise fail as "not available any more", which reads like a
+  // sell-out and invites the customer to try again in a minute.
+  if (menu.closed) {
+    throw new OrderError(`Derek isn't cooking on ${T.fmtDayLong(day.service_date, tz)}. `
+      + 'Nothing can be ordered for that day.');
+  }
   if (menu.state === 'past') throw new OrderError('That service day has already passed.');
 
   // Cutoff decides the status. Standing items get no exemption: the cutoff

@@ -106,9 +106,18 @@ function loadWeek() {
     const week = db.prepare(`SELECT * FROM weeks WHERE status IN ('published','draft')
       ORDER BY CASE status WHEN 'published' THEN 0 ELSE 1 END, id DESC LIMIT 1`).get();
     if (!week) return null;
+    // A closed week has nothing to advertise. Better to fall back to the
+    // sample copy, which is obviously a sample, than to post a menu graphic
+    // for dates the kitchen is shut.
+    if (week.closed) return null;
 
+    // Opened readonly, so this file may predate the closure columns if the
+    // server has not started against it yet. Ask before relying on them.
+    const hasClosed = db.prepare('PRAGMA table_info(service_days)').all()
+      .some((c) => c.name === 'closed');
     const days = db.prepare(`SELECT service_date, dish_name, full_price FROM service_days
-      WHERE week_id = ? AND TRIM(dish_name) != '' ORDER BY service_date`).all(week.id);
+      WHERE week_id = ? AND TRIM(dish_name) != ''${hasClosed ? ' AND closed = 0' : ''}
+      ORDER BY service_date`).all(week.id);
     if (!days.length) return null;
 
     return {

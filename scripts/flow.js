@@ -594,6 +594,140 @@ const PAST_DATE = T.addDays(today, -2);
       M.soldOnAll('service_days', lateDay.id, today), 0);
   }
 
+  /* --- Closing a day, and closing the week --------------------------------
+     Closed has to reach the customer, not just the database: the day says so
+     on the menu, the day page says so, and the order route refuses by name.
+     Run against the week that is currently live, so what is checked is what a
+     customer would actually be served. */
+  {
+    await POST('/admin/login', { password: 'flow-test-password', next: '/admin' });
+
+    // The weekday box owns the dish, so the closure is saved alongside it —
+    // sending it without the dish fields would blank the dish.
+    await POST(`/admin/week/${weekId}/weekdays`, dish({
+      [`${WD}_ack`]: '1',
+      [`${WD}_allergens`]: JSON.stringify(require('../server/allergens').detect(DISH_DESC).map((h) => h.allergen)),
+      [`${WD}_closed`]: '1',
+      [`${WD}_closed_note`]: 'Back Thursday',
+    }));
+    const closedDay = db.prepare('SELECT * FROM service_days WHERE id = ?').get(dayId);
+    check('the day is stored as closed', closedDay.closed, 1);
+    check('with its note', closedDay.closed_note, 'Back Thursday');
+    check('and the dish it had is kept, not deleted', closedDay.dish_name, 'Braised Beef');
+
+    cookie = '';                                   // from here on, as a customer
+    const weekPage = await GET(`/w/${weekSlug}`);
+    ok('the day list marks the day closed',
+      /Not cooking/.test(weekPage.text) && /kitchen is closed this day/i.test(weekPage.text));
+    ok('and shows the note', /Back Thursday/.test(weekPage.text));
+    ok('and does not link to it',
+      !new RegExp(`href="/w/${weekSlug}/${SERVICE_DATE}"`).test(weekPage.text));
+
+    const dayPage = await GET(`/w/${weekSlug}/${SERVICE_DATE}`);
+    check('the day permalink still answers rather than 404s', dayPage.status, 200);
+    ok('and explains itself', /isn't cooking|isn&#39;t cooking/i.test(dayPage.text));
+    ok('with no order form on it', !/id="orderform"/.test(dayPage.text));
+    ok('and nothing orderable — not even the standing items',
+      !/data-qty/.test(dayPage.text));
+
+    const refused = await POST('/order', {
+      week: weekSlug, date: SERVICE_DATE,
+      lines: JSON.stringify([{ key: `service_days:${dayId}`, variant: 'full', qty: 1 }]),
+      name: 'Hopeful', phone: '519-555-0177', email: 'h@example.com',
+      method: 'pickup', payment_method: 'cash', location_id: '1',
+    });
+    check('an order for a closed day is refused', refused.status, 400);
+    ok('in as many words', /isn't cooking|isn&#39;t cooking/i.test(refused.text),
+      refused.text.replace(/<[^>]+>/g, ' ').slice(0, 200));
+
+    // Reopening puts it all back.
+    await POST('/admin/login', { password: 'flow-test-password', next: '/admin' });
+    await POST(`/admin/week/${weekId}/weekdays`, dish({
+      [`${WD}_ack`]: '1',
+      [`${WD}_allergens`]: JSON.stringify(require('../server/allergens').detect(DISH_DESC).map((h) => h.allergen)),
+    }));
+    check('unticking it reopens the day',
+      db.prepare('SELECT closed FROM service_days WHERE id = ?').get(dayId).closed, 0);
+    const reopened = await GET(`/w/${weekSlug}/${SERVICE_DATE}`);
+    ok('and the dish is back in front of customers', /Braised Beef/.test(reopened.text));
+
+    // A day with no dish on it at all: closing one creates the row it never
+    // had, and reopening it has to write that row back rather than be dropped
+    // as "nothing entered for this day".
+    const WD2 = WD === 'mon' ? 'tue' : 'mon';
+    const otherDate = T.addDays(T.mondayOf(SERVICE_DATE), T.WEEKDAYS_MON_FIRST.indexOf(WD2));
+    const reviewedDish = dish({
+      [`${WD}_ack`]: '1',
+      [`${WD}_allergens`]: JSON.stringify(require('../server/allergens').detect(DISH_DESC).map((h) => h.allergen)),
+    });
+    await POST(`/admin/week/${weekId}/weekdays`, { ...reviewedDish, [`${WD2}_closed`]: '1' });
+    const bare = db.prepare('SELECT * FROM service_days WHERE week_id=? AND service_date=?')
+      .get(weekId, otherDate);
+    ok('closing a day with no dish on it creates the day', !!bare && bare.closed === 1);
+
+    await POST(`/admin/week/${weekId}/weekdays`, reviewedDish);
+    check('and unticking it reopens that day too',
+      db.prepare('SELECT closed FROM service_days WHERE week_id=? AND service_date=?')
+        .get(weekId, otherDate).closed, 0);
+    db.prepare('DELETE FROM service_days WHERE week_id=? AND service_date=?').run(weekId, otherDate);
+
+    // The whole week.
+    const closeWeek = await POST(`/admin/week/${weekId}/closed`,
+      { closed: '1', closed_note: 'Away for a wedding' });
+    check('closing the week redirects back with a message', closeWeek.status, 303);
+    check('and is stored on the week',
+      db.prepare('SELECT closed FROM weeks WHERE id = ?').get(weekId).closed, 1);
+
+    cookie = '';
+    const shutWeek = await GET(`/w/${weekSlug}`);
+    ok('customers are told the kitchen is closed', /closed this week/i.test(shutWeek.text));
+    ok('and read the reason', /Away for a wedding/.test(shutWeek.text));
+    ok('with no day list to pick from', !/daylist/.test(shutWeek.text));
+
+    const shutDay = await GET(`/w/${weekSlug}/${SERVICE_DATE}`);
+    ok('every day in it is closed, whatever the day itself says',
+      /isn't cooking|isn&#39;t cooking/i.test(shutDay.text));
+
+    const refusedAgain = await POST('/order', {
+      week: weekSlug, date: SERVICE_DATE,
+      lines: JSON.stringify([{ key: `service_days:${dayId}`, variant: 'full', qty: 1 }]),
+      name: 'Hopeful', phone: '519-555-0177', email: 'h@example.com',
+      method: 'pickup', payment_method: 'cash', location_id: '1',
+    });
+    check('and orders on it are refused too', refusedAgain.status, 400);
+
+    // A closed week publishes without an allergen review, since nothing on it
+    // is on offer — but it must not be able to reopen without one.
+    const P2 = require('../server/publish');
+    check('a closed week has no blockers', P2.blockers(weekId), []);
+
+    await POST('/admin/login', { password: 'flow-test-password', next: '/admin' });
+    await POST(`/admin/week/${weekId}/closed`, { closed: '0', closed_note: '' });
+    check('reopening the week restores the menu',
+      db.prepare('SELECT closed FROM weeks WHERE id = ?').get(weekId).closed, 0);
+    cookie = '';
+    const back = await GET(`/w/${weekSlug}`);
+    ok('and customers can pick a day again', /daylist/.test(back.text));
+  }
+
+  /* --- The reminder settings are wired to the form ------------------------ */
+  {
+    await POST('/admin/login', { password: 'flow-test-password', next: '/admin' });
+    const { settings } = require('../server/db');
+    await POST('/admin/settings/publishing', {
+      auto_publish: '1', auto_publish_weekday: 'sat', auto_publish_time: '12:00',
+      remind_missing_week: '1', remind_missing_week_days: '3',
+    });
+    check('the reminder lead time saves', settings.get('remind_missing_week_days'), '3');
+
+    await POST('/admin/settings/publishing', {
+      auto_publish: '1', auto_publish_weekday: 'sat', auto_publish_time: '12:00',
+      remind_missing_week_days: '2',
+    });
+    check('and the reminder can be switched off', settings.get('remind_missing_week'), '0');
+    settings.set('remind_missing_week', '1');
+  }
+
   /* --- The schedule refuses an unreviewed week, then publishes it ---------
      The whole point of scheduled publishing: it must be incapable of putting
      an unreviewed dish in front of a customer just because nobody was watching

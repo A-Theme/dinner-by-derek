@@ -183,11 +183,30 @@ function buildPostText(week) {
   const L = [];
 
   L.push(week.title || 'This week at ' + settings.get('business_name'));
+
+  // A closed week is announced, not itemised. Listing the standing items and
+  // the delivery area under "we're shut" would invite exactly the orders the
+  // closure exists to prevent.
+  if (week.closed) {
+    L.push('', 'The kitchen is closed this week.');
+    if (week.closed_note) L.push(week.closed_note);
+    L.push('', 'There is nothing to order for these dates.');
+    L.push('', settings.get('owner_contact'));
+    return L.join('\n');
+  }
+
   if (week.description) L.push('', week.description);
 
   // Day-by-day featured section
   for (const d of days) {
     const menu = M.menuForDay(week, d);
+    // Closed days are named rather than skipped: a gap in the list reads as
+    // an oversight, and the whole point of closing a day is to say so.
+    if (menu.closed) {
+      L.push('', `— ${T.fmtDayLong(d.service_date, tz)} —`);
+      L.push(menu.closedNote ? `Closed — ${menu.closedNote}` : 'Closed');
+      continue;
+    }
     if (!menu.featured) continue;
     const f = menu.featured;
     L.push('', `— ${T.fmtDayLong(d.service_date, tz)} —`);
