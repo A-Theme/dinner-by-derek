@@ -594,6 +594,99 @@ const PAST_DATE = T.addDays(today, -2);
       M.soldOnAll('service_days', lateDay.id, today), 0);
   }
 
+  /* --- The schedule refuses an unreviewed week, then publishes it ---------
+     The whole point of scheduled publishing: it must be incapable of putting
+     an unreviewed dish in front of a customer just because nobody was watching
+     at noon on Saturday. Last, because publishing retires the week the earlier
+     checks were using. */
+  {
+    const P = require('../server/publish');
+    const { settings } = require('../server/db');
+    settings.set('auto_publish', 1);
+    settings.set('auto_publish_weekday', 'sat');
+    settings.set('auto_publish_time', '12:00');
+
+    // A draft week starting this Monday: its Saturday noon has already passed,
+    // so it is due, while its service days are still ahead and therefore
+    // visible to a customer once it goes live.
+    const start = T.mondayOf(today);
+    const id = db.prepare(`INSERT INTO weeks (slug, title, week_start, status)
+      VALUES (?,?,?,'draft')`).run(`sched-${start}`, 'Scheduled week', start).lastInsertRowid;
+    // Backdate creation so the schedule falls after it: a week built on Sunday
+    // must not fire the Saturday that already went by, and the test needs to be
+    // on the other side of that rule.
+    db.prepare(`UPDATE weeks SET created_at = datetime(?, '-14 days') WHERE id = ?`)
+      .run(start, id);
+
+    const desc = 'Cod fillets in a cream sauce';
+    const dishId = db.prepare(`INSERT INTO service_days
+      (week_id, service_date, dish_name, description, allergens, dismissed, ack, ack_of, full_on, full_price)
+      VALUES (?,?,?,?,'[]','[]',0,NULL,1,2000)`)
+      .run(id, T.addDays(start, 5), 'Baked Cod', desc).lastInsertRowid;
+
+    ok('the week is scheduled', !!P.scheduledFor(db.prepare('SELECT * FROM weeks WHERE id=?').get(id)));
+    ok('and it is due', P.due().some((w) => w.id === id));
+
+    let refused = null;
+    const first = P.runDue({ onRefused: (w, b) => { refused = b; } });
+    const afterFirst = db.prepare('SELECT * FROM weeks WHERE id=?').get(id);
+    check('an unreviewed week is refused, not published', afterFirst.status, 'draft');
+    ok('the refusal names the dish', refused && refused.join(' ').includes('Baked Cod'),
+      JSON.stringify(refused));
+    ok('and it is reported as refused', first.some((r) => r.week.id === id && !r.published));
+    ok('the owner is marked as told', !!afterFirst.publish_warned_at);
+
+    let toldAgain = false;
+    P.runDue({ onRefused: () => { toldAgain = true; } });
+    ok('and is not told again on the next tick', !toldAgain);
+    check('while the week stays a draft',
+      db.prepare('SELECT status FROM weeks WHERE id=?').get(id).status, 'draft');
+
+    // Finish the review the way the dashboard would, and let the clock run on.
+    const A2 = require('../server/allergens');
+    const reviewed = A2.reviewedText({ name: 'Baked Cod', description: desc });
+    db.prepare('UPDATE service_days SET allergens=?, ack=1, ack_of=? WHERE id=?')
+      .run(JSON.stringify(A2.detect(reviewed).map((h) => h.allergen)), reviewed, dishId);
+
+    let published = null;
+    P.runDue({ onPublished: (w) => { published = w; } });
+    const afterFix = db.prepare('SELECT * FROM weeks WHERE id=?').get(id);
+    check('finishing the review publishes it with nothing else pressed', afterFix.status, 'published');
+    ok('and the owner is told it went out', published && published.id === id);
+    ok('the fish in the dish name was caught before it went live',
+      JSON.parse(db.prepare('SELECT allergens FROM service_days WHERE id=?').get(dishId).allergens)
+        .includes('fish'));
+
+    // '/' redirects to the live week's own URL, so follow it.
+    const landing = await GET('/');
+    const seen = landing.status === 200 ? landing : await GET(landing.location);
+    ok('and customers can see it',
+      seen.status === 200 && /Baked Cod|Scheduled week/i.test(seen.text),
+      'page was: ' + seen.text.replace(/<[^>]+>/g, ' ').replace(/s+/g, ' ').slice(0, 200));
+
+    // An empty week must never replace a live menu with a blank one just
+    // because its Saturday came round before the cooking was decided.
+    const emptyId = db.prepare(`INSERT INTO weeks (slug, title, week_start, status)
+      VALUES (?,?,?,'draft')`).run(`empty-${start}`, 'Empty week', start).lastInsertRowid;
+    db.prepare(`UPDATE weeks SET created_at = datetime(?, '-14 days') WHERE id = ?`).run(start, emptyId);
+    let emptyRefusal = null;
+    P.runDue({ onRefused: (w, b) => { if (w.id === emptyId) emptyRefusal = b; } });
+    check('an empty week is not published',
+      db.prepare('SELECT status FROM weeks WHERE id=?').get(emptyId).status, 'draft');
+    ok('and the refusal says there is nothing on it',
+      emptyRefusal && /nothing on this week/i.test(emptyRefusal[0]), JSON.stringify(emptyRefusal));
+    ok('so the week that is live stays live',
+      db.prepare(`SELECT COUNT(*) n FROM weeks WHERE status='published'`).get().n === 1);
+
+    // A week that opts out is left alone even when its moment has passed.
+    const id2 = db.prepare(`INSERT INTO weeks (slug, title, week_start, status, auto_publish)
+      VALUES (?,?,?,'draft',0)`).run(`optout-${start}`, 'Opted out', start).lastInsertRowid;
+    db.prepare(`UPDATE weeks SET created_at = datetime(?, '-14 days') WHERE id = ?`).run(start, id2);
+    P.runDue();
+    check('a week opted out of the schedule stays a draft',
+      db.prepare('SELECT status FROM weeks WHERE id=?').get(id2).status, 'draft');
+  }
+
   /* --- Report -------------------------------------------------------------- */
   console.log('\nEnd-to-end flow — Dinner By Derek\n');
   if (failures.length) {

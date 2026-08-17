@@ -458,6 +458,15 @@ router.post('/settings/pickup', (req, res) => {
   back(res, req, 'Pickup window saved. Future days use the new window; orders already placed keep the window they were given.');
 });
 
+router.post('/settings/publishing', (req, res) => {
+  settings.set('auto_publish', req.body.auto_publish ? 1 : 0);
+  const wd = String(req.body.auto_publish_weekday || 'sat');
+  if (T.WEEKDAYS.includes(wd)) settings.set('auto_publish_weekday', wd);
+  const t = String(req.body.auto_publish_time || '12:00');
+  if (/^\d{1,2}:\d{2}$/.test(t)) settings.set('auto_publish_time', t);
+  back(res, req, 'Publishing schedule saved.');
+});
+
 router.post('/settings/capacity', (req, res) => {
   const n = Math.max(0, Math.floor(Number(req.body.featured_daily_cap)) || 0);
   settings.set('featured_daily_cap', n);
@@ -505,6 +514,35 @@ router.get('/settings', (req, res) => {
         <label for="ne">Where new orders are emailed</label>
         <input type="email" id="ne" name="notify_email" value="${settings.get('notify_email')}">
         <button class="btn btn--primary" type="submit">Save settings</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Publishing</h2>
+      <p class="also">A finished week can go live on its own, on the weekday before it starts.
+        <strong>A scheduled publish never skips the allergen review.</strong> If anything on the
+        week still needs reviewing at that moment, nothing is published, you get an email saying
+        which dish, and the week goes out by itself as soon as you finish it.</p>
+      <form method="post" action="/admin/settings/publishing">
+        <label style="display:flex;gap:var(--dbd-sp-2);align-items:center">
+          <input type="checkbox" name="auto_publish" value="1" style="width:22px;height:22px"${settings.get('auto_publish', '1') === '1' ? ' checked' : ''}>
+          Publish a finished week automatically</label>
+        <div class="stack2">
+          <div>
+            <label for="apwd">Day</label>
+            <select id="apwd" name="auto_publish_weekday">
+              ${T.WEEKDAYS_MON_FIRST.map((w) => html`<option value="${w}"${settings.get('auto_publish_weekday', 'sat') === w ? ' selected' : ''}>${T.WEEKDAY_LABELS[w]}</option>`)}
+            </select>
+          </div>
+          <div>
+            <label for="aptime">Time</label>
+            <input type="time" id="aptime" name="auto_publish_time" value="${settings.get('auto_publish_time', '12:00')}">
+          </div>
+        </div>
+        <p class="also">That is the ${T.WEEKDAY_LABELS[settings.get('auto_publish_weekday', 'sat')] || 'day'}
+          <em>before</em> the week starts, in ${settings.get('timezone')} — so it stays the same
+          clock time when the clocks change.</p>
+        <button class="btn btn--primary" type="submit">Save publishing schedule</button>
       </form>
     </div>
 

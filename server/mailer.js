@@ -209,7 +209,52 @@ async function tokenExpiryEmail(days, pageName) {
   });
 }
 
+/** A scheduled publish went out on its own. Sent so it is never a surprise. */
+async function weekPublishedEmail(week) {
+  const title = week.title || 'Your week';
+  const html = shell('Week published', `
+    <p><strong>${esc(title)}</strong> went live on schedule. Customers can order it now.</p>
+    <p>Standing items were not touched.</p>
+    <p><a href="${config.baseUrl}/admin/week"
+      style="background:${palette.tan};color:${palette.espresso};padding:10px 16px;
+      border-radius:6px;text-decoration:none;display:inline-block">Open This Week</a></p>`);
+  return send({
+    to: settings.get('notify_email'),
+    subject: `Published: ${title}`,
+    html,
+    text: `${title} went live on schedule. ${config.baseUrl}/admin/week`,
+  });
+}
+
+/**
+ * A scheduled publish was refused. This is the email that matters: the week is
+ * still a draft, customers see nothing, and it goes out by itself as soon as
+ * the reviews are done.
+ */
+async function weekPublishRefusedEmail(week, blockers) {
+  const title = week.title || 'Your week';
+  const list = blockers.map((b) => `<li>${esc(b)}</li>`).join('');
+  const html = shell('Week not published', `
+    <p style="background:${palette.parchment};border-left:4px solid ${palette.umber};padding:10px">
+      <strong>${esc(title)} did not go live.</strong> It was due to publish just now, but
+      something on it still needs its allergen review. Nothing was published and customers
+      see no change.</p>
+    <ul>${list}</ul>
+    <p>Finish the reviews and it publishes by itself — there is nothing else to press.</p>
+    <p><a href="${config.baseUrl}/admin/week"
+      style="background:${palette.tan};color:${palette.espresso};padding:10px 16px;
+      border-radius:6px;text-decoration:none;display:inline-block">Finish the review</a></p>`);
+  return send({
+    to: settings.get('notify_email'),
+    subject: `Not published: ${title} still needs an allergen review`,
+    html,
+    text: `${title} did not publish. Still to do:\n\n${blockers.map((b) => `- ${b}`).join('\n')}\n\n`
+      + `Finish the reviews and it publishes by itself. ${config.baseUrl}/admin/week`,
+  });
+}
+
 module.exports = {
   send, ownerOrderEmail, customerOrderEmail, lateDecisionEmail, tokenExpiryEmail,
+  weekPublishedEmail, weekPublishRefusedEmail,
   configured: () => !!config.smtp.host,
 };

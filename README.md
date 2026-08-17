@@ -30,6 +30,7 @@ website that installs to a home screen and works like an app.
 - 🔥 [Running it](#running-it)
 - 🔑 [Environment variables](#environment-variables)
 - 🍲 [The three-level menu](#the-three-level-menu)
+- 📅 [Publishing a week](#publishing-a-week)
 - ⏰ [The cutoff](#the-cutoff)
 - 🚪 [Pickup window and locations](#pickup-window-and-locations)
 - 🚗 [Delivery area](#delivery-area)
@@ -208,6 +209,51 @@ allergen suggestions, and tick the box. Then they appear.
 Fulfillment is identical at all three levels: same pickup window, same locations,
 same cutoff, same delivery rules. A standing item gets no exemption from the
 cutoff.
+
+---
+
+## Publishing a week
+
+A week is a draft until it is published. Only one week is ever live: publishing
+retires the one before it. You can keep **as many drafts queued behind it as you
+like** — build a month ahead if you want — but customers only ever see the
+newest published one.
+
+### On a schedule
+
+**Settings → Publishing.** Ships on, set to **Saturday at 12:00**: the weekday
+*before* the week starts, so a week beginning Monday the 24th goes live at noon
+on Saturday the 22nd. The menu is up for the weekend and Monday's cutoff is
+still a day and a half away.
+
+The time is in your Settings timezone, resolved the same way the cutoff is — so
+noon stays noon when the clocks change, rather than becoming 11am in November.
+
+> [!IMPORTANT]
+> **The schedule refuses; it never overrides.** If anything on the week still
+> needs its allergen review when the moment arrives, **nothing is published.**
+> The week stays a draft, customers see no change, and you get one email naming
+> the dish. Finish the review and it publishes itself on the next check — there
+> is nothing else to press. A refusal costs you a delay, never a missed week,
+> and never an untagged allergen in front of a customer.
+
+It also refuses to publish a week with **nothing on it**. An empty week going
+out unattended would retire your live menu and replace it with a blank page
+because Saturday arrived before the cooking was decided.
+
+Checked every minute, so the time you set is the time it happens. If the server
+was off over the weekend it catches up on the next start rather than skipping
+the week — but a week built *after* its scheduled moment has passed is left
+alone, because building next week's menu on Sunday should not fire the Saturday
+that already went by.
+
+The week page shows what will happen and when, including the blockers that
+would stop it. Any single week can opt out with **Don't publish this week
+automatically**, and the manual **Publish this week now** button is always
+there.
+
+Both paths run the same check, in `server/publish.js`. The gate is the one
+thing in this app that must not have a second implementation.
 
 ---
 

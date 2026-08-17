@@ -5,6 +5,7 @@ const config = require('../config');
 const T = require('../time');
 const M = require('../menu');
 const A = require('../allergens');
+const P = require('../publish');
 const V = require('./admin');
 
 const tz = () => settings.get('timezone', 'America/Toronto');
@@ -193,12 +194,43 @@ function weekPage({ week, days, items, hasPrevious }) {
           buttonLabel: 'Move back to draft',
           message: 'This hides the whole week from customers straight away. Orders already placed are kept. Your standing Other Options stay live.',
         })}`
-      : V.confirmForm({
+      : html`
+        ${(() => {
+          const at = P.scheduledFor(week);
+          const stopped = P.blockers(week.id);
+          if (!at) {
+            return html`<p class="also">This week has no automatic publish time — either the
+              schedule is off in Settings, this week is set not to publish itself, or it has no
+              start date yet. Publish it by hand below whenever it's ready.</p>`;
+          }
+          return html`
+            <div class="notice${stopped.length ? ' notice--strong' : ''}">
+              <strong>Goes live by itself
+                ${T.fmtLocal(at, tz(), { weekday: 'long', month: 'long', day: 'numeric' })}.</strong>
+              ${stopped.length ? html`<br>
+                As things stand it will be <strong>refused</strong> — ${stopped.length}
+                item${stopped.length === 1 ? '' : 's'} still need${stopped.length === 1 ? 's' : ''}
+                an allergen review. Nothing will be published and you'll get an email. Finish the
+                reviews and it goes out on its own.
+                <ul>${stopped.map((b) => html`<li>${b}</li>`)}</ul>`
+                : html`<br>Everything on it has been reviewed, so it will publish.`}
+            </div>
+            <form method="post" action="/admin/week/${week.id}/auto-publish">
+              <input type="hidden" name="auto_publish" value="0">
+              <button class="btn btn--secondary" type="submit">Don't publish this week automatically</button>
+            </form>`;
+        })()}
+        ${week.auto_publish ? '' : html`
+          <form method="post" action="/admin/week/${week.id}/auto-publish">
+            <input type="hidden" name="auto_publish" value="1">
+            <button class="btn btn--secondary" type="submit">Let this week publish on schedule</button>
+          </form>`}
+        ${V.confirmForm({
           action: `/admin/week/${week.id}/publish`,
-          buttonLabel: 'Publish this week',
+          buttonLabel: 'Publish this week now',
           message: 'This makes the week visible to customers immediately and retires the previous week. Your standing Other Options are not affected.',
           kind: 'primary',
-        })}
+        })}`}
     </div>
 
     <div class="card">

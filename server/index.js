@@ -179,6 +179,35 @@ function checkTokenExpiry() {
   }
 }
 
+/* --- Background job: scheduled publishing --------------------------------
+ * Checked every minute rather than hourly, because the owner sets a time and
+ * expects that time. The query is one indexed read over a handful of rows.
+ *
+ * The gate is not negotiable here: publish.js runs the same allergen check the
+ * button runs, and a week that fails it stays a draft and emails the owner
+ * instead of going out. Never throws into the interval — a failed publish must
+ * not take the timer down with it.
+ */
+const publish = require('./publish');
+
+function runScheduledPublish() {
+  try {
+    publish.runDue({
+      onPublished(week) {
+        console.log(`[publish] ${week.title || week.slug} went live on schedule`);
+        mailer.weekPublishedEmail(week).catch((e) => console.error('[email] published', e));
+      },
+      onRefused(week, blockers) {
+        console.warn(`[publish] refused ${week.title || week.slug}: ${blockers[0]}`);
+        mailer.weekPublishRefusedEmail(week, blockers)
+          .catch((e) => console.error('[email] publish refused', e));
+      },
+    });
+  } catch (e) {
+    console.error('[job] scheduled publish', e);
+  }
+}
+
 /* --- Start --------------------------------------------------------------- */
 const server = app.listen(config.port, () => {
   console.log(`\nDinner By Derek is running.`);
@@ -188,6 +217,8 @@ const server = app.listen(config.port, () => {
   console.log(`  Uploads:    ${config.uploadDir}\n`);
   checkTokenExpiry();
   setInterval(checkTokenExpiry, 60 * 60 * 1000).unref();
+  runScheduledPublish();
+  setInterval(runScheduledPublish, 60 * 1000).unref();
 });
 
 function shutdown(signal) {

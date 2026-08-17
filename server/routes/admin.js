@@ -8,6 +8,7 @@ const T = require('../time');
 const M = require('../menu');
 const A = require('../allergens');
 const O = require('../orders');
+const P = require('../publish');
 const images = require('../images');
 const IF = require('../itemform');
 const V = require('../views/admin');
@@ -352,26 +353,21 @@ router.post('/week/:id/publish', (req, res) => {
   const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(id);
   if (!week) return back(res, req, null, 'That week no longer exists.');
 
-  const blockers = [];
-  for (const d of M.serviceDaysOf(id)) {
-    if (!d.dish_name.trim()) continue;
-    const st = A.reviewState(d);
-    if (!st.ok) blockers.push(A.reviewMessage(`${T.fmtDayShort(d.service_date, tz())} — ${d.dish_name}`, st));
-  }
-  const { soup, salad } = M.weekItemsOf(id);
-  for (const [item, label] of [[soup, 'The soup of the week'], [salad, 'The salad of the week']]) {
-    if (!item || !item.name.trim()) continue;
-    const st = A.reviewState(item);
-    if (!st.ok) blockers.push(A.reviewMessage(`${label}, ${item.name},`, st));
-  }
+  // Same gate the scheduler runs. One implementation, deliberately.
+  const blockers = P.blockers(id);
   if (blockers.length) return back(res, req, null, blockers[0]);
 
-  const tx = db.transaction(() => {
-    db.prepare(`UPDATE weeks SET status='retired' WHERE status='published' AND id != ?`).run(id);
-    db.prepare(`UPDATE weeks SET status='published', published_at=datetime('now') WHERE id=?`).run(id);
-  });
-  tx();
+  P.publishNow(id);
   back(res, req, 'Week published. Standing items are untouched and still live.');
+});
+
+router.post('/week/:id/auto-publish', (req, res) => {
+  const on = req.body.auto_publish === '1' ? 1 : 0;
+  db.prepare('UPDATE weeks SET auto_publish=?, publish_warned_at=NULL WHERE id=?')
+    .run(on, Number(req.params.id));
+  back(res, req, on
+    ? 'This week will publish on schedule once everything is reviewed.'
+    : 'This week will not publish itself. Use the button when you\'re ready.');
 });
 
 router.post('/week/:id/unpublish', (req, res) => {

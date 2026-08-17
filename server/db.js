@@ -248,6 +248,12 @@ const DEFAULTS = {
   delivery_fee: '500',
   delivery_min: '0',
   delivery_window: '4:00–7:00 PM',
+  // A finished week goes live on its own, on the weekday before it starts.
+  // Saturday noon: the menu is up for the weekend, and Monday's cutoff is
+  // still a day and a half away.
+  auto_publish: '1',
+  auto_publish_weekday: 'sat',
+  auto_publish_time: '12:00',
   payment_instructions:
     'No online payment. Pay at pickup, on delivery, or by e-transfer to derek@example.com.',
   owner_contact: 'Message Dinner By Derek on Facebook, or call (519) 555-0142.',
@@ -344,6 +350,13 @@ addColumn('service_days', 'daily_cap', 'INTEGER');
 // so this is a declaration of intent for the kitchen's benefit, never a
 // payment record — which is why `paid` stays a separate flag the owner sets.
 addColumn('orders', 'payment_method', "TEXT NOT NULL DEFAULT ''");
+// Scheduled publishing. `auto_publish` is the per-week off switch; the moment
+// itself is computed from the settings and the week's start date rather than
+// stored, so changing the schedule moves every week that has not gone out yet.
+// `publish_warned_at` records that the owner has been told a scheduled publish
+// was refused, so the refusal is emailed once rather than every minute.
+addColumn('weeks', 'auto_publish', 'INTEGER NOT NULL DEFAULT 1');
+addColumn('weeks', 'publish_warned_at', 'TEXT');
 
 function renameColumn(table, from, to) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();

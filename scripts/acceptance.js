@@ -374,6 +374,59 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('no hex literals outside theme.css', offenders.length, 0);
 }
 
+/* --- Scheduled publishing -------------------------------------------------
+   The moment is computed from the week's start date, so a schedule change
+   moves every week that has not gone out yet. It has to land on the configured
+   weekday BEFORE the week starts, at local wall-clock time, on both sides of
+   the daylight-saving boundary — noon must stay noon in November. */
+{
+  const P = require('../server/publish');
+  const { settings } = require('../server/db');
+  settings.set('auto_publish', 1);
+  settings.set('auto_publish_weekday', 'sat');
+  settings.set('auto_publish_time', '12:00');
+  settings.set('timezone', 'America/Toronto');
+
+  const draft = (over) => ({
+    id: -1, status: 'draft', auto_publish: 1, week_start: '2026-08-24', ...over,
+  });
+
+  const local = (instant) => T.fmtLocal(instant, 'America/Toronto',
+    { weekday: 'short', month: 'short', day: 'numeric' });
+
+  const summer = P.scheduledFor(draft());
+  ok('a week starting Monday publishes the Saturday before',
+    local(summer).includes('Sat') && local(summer).includes('22'), local(summer));
+  ok('at noon local', local(summer).includes('12:00'), local(summer));
+
+  // Toronto leaves daylight saving on 1 November 2026, so a week starting
+  // Monday 9 November schedules on Saturday 7 November — still EDT — and a
+  // week starting Monday 16 November schedules in EST. Both must read 12:00.
+  const beforeChange = P.scheduledFor(draft({ week_start: '2026-11-02' }));
+  const afterChange = P.scheduledFor(draft({ week_start: '2026-11-16' }));
+  ok('noon stays noon before the clocks change', local(beforeChange).includes('12:00'), local(beforeChange));
+  ok('and after them', local(afterChange).includes('12:00'), local(afterChange));
+  ok('which is a different UTC hour on each side of the boundary',
+    (beforeChange.getUTCHours() !== afterChange.getUTCHours()));
+
+  check('a published week has no schedule', P.scheduledFor(draft({ status: 'published' })), null);
+  check('nor does a week opted out of it', P.scheduledFor(draft({ auto_publish: 0 })), null);
+  check('nor does one with no start date', P.scheduledFor(draft({ week_start: null })), null);
+
+  settings.set('auto_publish', 0);
+  check('nor any week when the schedule is switched off', P.scheduledFor(draft()), null);
+  settings.set('auto_publish', 1);
+
+  settings.set('auto_publish_weekday', 'thu');
+  settings.set('auto_publish_time', '09:30');
+  const moved = P.scheduledFor(draft());
+  ok('changing the schedule moves an existing draft',
+    local(moved).includes('Thu') && local(moved).includes('20'), local(moved));
+  ok('to the new time', local(moved).includes('9:30'), local(moved));
+  settings.set('auto_publish_weekday', 'sat');
+  settings.set('auto_publish_time', '12:00');
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {
