@@ -4,11 +4,17 @@
  *
  *   npm run icons
  *
- * Source of truth is brand/logo-lineart.jpg — the black line-art mark, which
+ * Source of truth is brand/logo-lineart.png — the black line-art mark, which
  * is the highest-resolution version available and the one that survives being
  * shrunk to 48px on a home screen. The leather medallion (brand/logo-medallion.jpg)
  * is kept for artwork and social posts, but its usable area is only ~206px
  * across, so upscaling it to 512 would be visibly soft.
+ *
+ * That source carries real transparency, and the thresholds below are written
+ * for ink on paper, so it is flattened onto white once at the top and every
+ * stage works from that. Feeding the transparent file in directly would read
+ * as a solid black canvas: transparent pixels carry whatever RGB the encoder
+ * happened to leave behind, and here that is black.
  *
  * The originals are READ ONLY here. Everything is written to public/icons/.
  * Re-running is safe and idempotent; replace the file in brand/ and re-run to
@@ -25,9 +31,26 @@ const { palette } = require('../server/theme');
 const brandmark = require('./brandmark');
 
 const root = path.join(__dirname, '..');
-const SOURCE = path.join(root, 'brand', 'logo-lineart.jpg');
+const SOURCE = path.join(root, 'brand', 'logo-lineart.png');
 const MEDALLION_SOURCE = path.join(root, 'brand', 'logo-medallion.jpg');
 const OUT = path.join(root, 'public', 'icons');
+
+/**
+ * The source as ink on paper: transparency resolved to white, once, in memory.
+ * The original file is never modified. White is written as a channel triple
+ * rather than a hex string because theme.css is the only file here allowed to
+ * contain one, and paper is not a brand colour.
+ */
+let paperPromise = null;
+const paper = () => {
+  if (!paperPromise) {
+    paperPromise = sharp(SOURCE)
+      .flatten({ background: { r: 255, g: 255, b: 255 } })
+      .png()
+      .toBuffer();
+  }
+  return paperPromise;
+};
 
 /** Ink threshold: pixels darker than this are logo, lighter are paper. */
 const INK_GAIN = 3.0;
@@ -44,8 +67,8 @@ function hexToRgb(hex) {
 }
 
 /** Bounding box of the ink, so padding is measured from the mark, not the file. */
-async function inkBounds(file) {
-  const { data, info } = await sharp(file).greyscale().raw()
+async function inkBounds() {
+  const { data, info } = await sharp(await paper()).greyscale().raw()
     .toBuffer({ resolveWithObject: true });
   let minX = info.width, minY = info.height, maxX = -1, maxY = -1;
   for (let y = 0; y < info.height; y++) {
@@ -58,7 +81,7 @@ async function inkBounds(file) {
       }
     }
   }
-  if (maxX < 0) throw new Error(`No logo found in ${file} — is the image blank?`);
+  if (maxX < 0) throw new Error(`No logo found in ${SOURCE} — is the image blank?`);
 
   // Grow the short side to make the crop square. A square crop needs no letter-
   // boxing later, which keeps the mark optically centred and avoids resampling
@@ -86,7 +109,7 @@ async function inkBounds(file) {
 async function stencil(box, colour, size) {
   // Stays raw the whole way. An intermediate JPEG here would ring at the hard
   // black/white edges and print faint bands into the finished icon.
-  const mask = await sharp(SOURCE)
+  const mask = await sharp(await paper())
     .extract(box)
     .greyscale()
     .negate()                      // ink becomes bright
@@ -112,7 +135,7 @@ async function stencil(box, colour, size) {
  * @param ink     mark colour
  */
 async function icon(file, size, inset, bg, ink) {
-  const box = await inkBounds(SOURCE);
+  const box = await inkBounds();
   const markSize = Math.round(size * inset);
   const mark = await stencil(box, ink, markSize);
   const pad = Math.round((size - markSize) / 2);
@@ -147,7 +170,7 @@ const headerMark = (size) => brandmark.circle(size, MEDALLION_SOURCE);
   }
   fs.mkdirSync(OUT, { recursive: true });
 
-  console.log('\nGenerating icons from brand/logo-lineart.jpg');
+  console.log('\nGenerating icons from brand/logo-lineart.png');
 
   // Standard icons: the mark on parchment, 14.08:1 contrast, reads at any size.
   await icon('icon-192.png', 192, 0.86, palette.parchment, palette.espresso);

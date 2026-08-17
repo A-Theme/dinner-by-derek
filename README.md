@@ -404,6 +404,18 @@ Saddle Tan on Olive scored 1.88:1 as an active-tab indicator, well under the
 3:1 needed for a UI element, which is why `--dbd-tan-lift` exists at 3.64:1.
 `CONTRAST.md` documents all of it.
 
+The palette comes from `brand/IDENTITY.txt`, kept verbatim as the source
+document. `theme.css` implements all six of its colours exactly, down to the
+ochre hover state.
+
+> [!NOTE]
+> **There is one deliberate departure, and it is worth knowing about.** The
+> guide specifies header badges as Saddle Tan containers with Burnt Umber text.
+> That pairing measures 3.92:1 — fine for large text, short of the 4.5:1 body
+> text needs, and badge text is small. Badges use `--dbd-umber-deep` instead,
+> two shades darker at 4.52:1. Same hue, same debossed reading, no new colour
+> introduced. If the guide is ever revised, revise that with it.
+
 After changing any colour:
 
 ```bash
@@ -420,12 +432,17 @@ can be unreadable on a phone in a bright kitchen.
 
 Source artwork is in `brand/`:
 
-- `logo-lineart.jpg` — the black line-art mark. **This is what the icons are
-  built from.**
+- `logo-lineart.png` — the black line-art mark, transparent. **This is what the
+  icons are built from.**
+- `logo-lineart.jpg` — the same mark, flattened onto white. Superseded by the
+  PNG above and kept only because it is what the first icons were cut from.
 - `logo-medallion.jpg` — the leather version, used for the site header.
 - `logo-wordmark.svg` — the full gold lockup, vector. **This is what the social
-  graphics are built from**, because it is the only source that stays sharp at
-  poster size.
+  graphics and the README banner are built from**, because it is the only
+  source that stays sharp at poster size.
+- `logo-source.ai` — the Illustrator master. Nothing reads it; it is here so
+  the artwork can be edited rather than re-traced.
+- `IDENTITY.txt` — the brand guide the palette came from, verbatim.
 
 To regenerate:
 
@@ -433,9 +450,18 @@ To regenerate:
 npm run icons
 ```
 
-This reads `brand/logo-lineart.jpg` and writes `public/icons/`. **The originals
+This reads `brand/logo-lineart.png` and writes `public/icons/`. **The originals
 are only ever read, never modified.** To change the icon, replace the file in
 `brand/` and run the command again.
+
+The PNG is preferred over the JPEG of the same mark for three reasons: it holds
+646×664 pixels of actual artwork against the JPEG's 434×445, it is lossless
+where the JPEG rings at the hard black-and-white edges, and it carries real
+transparency. That last one needs handling rather than celebrating — the ink
+thresholds are written for ink on paper, so the script flattens the source onto
+white once in memory before anything else touches it. Passed through as-is, the
+transparent pixels read as a solid black canvas and the whole icon comes out a
+filled square.
 
 The line art is used rather than the medallion because it is the higher
 resolution of the two — the medallion's artwork is only about 206 pixels across,

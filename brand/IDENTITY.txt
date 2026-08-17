@@ -1,0 +1,42 @@
+BRAND IDENTITY GUIDE & UI COMPONENTS
+
+================================================================================
+1. COLOR PALETTE
+================================================================================
+
+Role             | Color Name       | Hex Code | Visual Description
+-----------------|------------------|----------|----------------------------------------------------------------------
+Primary Brand    | Olive Green      | #5A6643  | Muted, earthy backdrop providing a grounded, natural foundation
+Secondary Brand  | Saddle Tan       | #BE8146  | Warm, toasted caramel tone used for key elements and interactive states
+Accent / Contrast| Burnt Umber      | #4A2A1A  | Deep, rich brown for high-contrast debossed details, text, and icons
+Neutral Light    | Cream / Parchment| #F4EFEB  | Soft, warm off-white for backgrounds and high-readability text containers
+Neutral Dark     | Espresso         | #2C1E18  | Darkest tone for primary body text and high-priority UI elements
+
+
+================================================================================
+2. VIBE & AESTHETIC TONE
+================================================================================
+
+* Artisanal & Handcrafted: Reflects small-batch quality, tactile materials, and authentic culinary care.
+* Warm & Grounded: Combines cozy caramel hues with neutral forest tones to create an approachable, high-trust feel.
+* Rugged Premium: Balances workwear-inspired durability (leather and heavy canvas) with crisp, modern layout lines.
+
+
+================================================================================
+3. UI COMPONENT SPECIFICATIONS
+================================================================================
+
+* Buttons & CTAs:
+  - Primary Action: Saddle Tan (#BE8146) background with Espresso (#2C1E18) text. On hover, transition to warm ochre/gold (#D8924A).
+  - Secondary Action: Olive Green (#5A6643) border with Burnt Umber (#4A2A1A) text on a Parchment (#F4EFEB) surface.
+
+* Cards & Containers:
+  - Surface: Parchment (#F4EFEB) background with a thin 1px border in Saddle Tan (#BE8146) at low opacity or Olive Green (#5A6643).
+  - Header Badges: Saddle Tan (#BE8146) circular or pill-shaped containers with debossed-style Burnt Umber (#4A2A1A) text.
+
+* Typography & Contrast:
+  - Headings: Espresso (#2C1E18) or Burnt Umber (#4A2A1A) set in a clean serif or rounded display font.
+  - Body Text: Dark Espresso (#2C1E18) on light surfaces to ensure optimal accessibility standards.
+
+* Navigation & Footer:
+  - Header/Footer: Olive Green (#5A6643) background with Parchment (#F4EFEB) links and Saddle Tan (#BE8146) active indicators.
