@@ -11,7 +11,9 @@ const { palette } = require('../theme');
  */
 
 function og({ title, description, image, url }) {
-  const abs = (p) => (p && p.startsWith('http') ? p : `${config.baseUrl}${p || '/icons/icon-512.png'}`);
+  // Falls back to the branded 1200×630 card rather than the app icon: Facebook
+  // crops a square icon badly in a link preview. Regenerate with `npm run social`.
+  const abs = (p) => (p && p.startsWith('http') ? p : `${config.baseUrl}${p || '/social/link-preview.png'}`);
   return html`
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="${settings.get('business_name')}">

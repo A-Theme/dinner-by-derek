@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const { palette } = require('../server/theme');
+const brandmark = require('./brandmark');
 
 const root = path.join(__dirname, '..');
 const SOURCE = path.join(root, 'brand', 'logo-lineart.jpg');
@@ -130,50 +131,13 @@ async function icon(file, size, inset, bg, ink) {
  * full-colour photo of a leather medallion, not black ink on white, so there
  * is no threshold to stencil — just a crop to the badge and a circular clip.
  *
+ * That crop lives in brandmark.js, shared with the social graphics so both
+ * find the badge's edge the same way.
+ *
  * The badge itself is only ~210px across in the source file, so this is
  * exported close to its native size rather than upscaled to hide that.
  */
-async function medallionBounds(file) {
-  const { data, info } = await sharp(file).raw().toBuffer({ resolveWithObject: true });
-  const { width, height, channels } = info;
-  let minX = width, minY = height, maxX = -1, maxY = -1;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * channels;
-      const r = data[i], g = data[i + 1], b = data[i + 2];
-      // Colour, not the grey checkerboard the source was flattened against.
-      if (Math.max(r, g, b) - Math.min(r, g, b) > 12) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-  if (maxX < 0) throw new Error(`No coloured artwork found in ${file}`);
-
-  let w = maxX - minX + 1, h = maxY - minY + 1;
-  const side = Math.max(w, h);
-  let left = Math.round(minX - (side - w) / 2);
-  let top = Math.round(minY - (side - h) / 2);
-  left = Math.max(0, Math.min(left, width - side));
-  top = Math.max(0, Math.min(top, height - side));
-  return { left, top, width: Math.min(side, width, height), height: Math.min(side, width, height) };
-}
-
-async function headerMark(size) {
-  const box = await medallionBounds(MEDALLION_SOURCE);
-  const circleMask = Buffer.from(
-    `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`
-  );
-  return sharp(MEDALLION_SOURCE)
-    .extract(box)
-    .resize(size, size, { fit: 'cover' })
-    .ensureAlpha()
-    .composite([{ input: circleMask, blend: 'dest-in' }])
-    .png({ compressionLevel: 9 })
-    .toBuffer();
-}
+const headerMark = (size) => brandmark.circle(size, MEDALLION_SOURCE);
 
 (async () => {
   if (!fs.existsSync(SOURCE)) {

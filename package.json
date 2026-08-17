@@ -7,6 +7,7 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "icons": "node scripts/make-icons.js",
+    "social": "node scripts/social.js",
     "contrast": "node scripts/contrast.js",
     "test": "node scripts/acceptance.js && node scripts/flow.js",
     "acceptance": "node scripts/acceptance.js",

@@ -20,6 +20,7 @@ website that installs to a home screen and works like an app.
 - [Payment instructions](#payment-instructions)
 - [Colours and the theme file](#colours-and-the-theme-file)
 - [Icons](#icons)
+- [Social graphics](#social-graphics)
 - [Facebook](#facebook)
 - [Backup and restore](#backup-and-restore)
 - [Deployment](#deployment)
@@ -309,7 +310,10 @@ Source artwork is in `brand/`:
 
 - `logo-lineart.jpg` — the black line-art mark. **This is what the icons are
   built from.**
-- `logo-medallion.jpg` — the leather version, kept for artwork and posts.
+- `logo-medallion.jpg` — the leather version, used for the site header.
+- `logo-wordmark.svg` — the full gold lockup, vector. **This is what the social
+  graphics are built from**, because it is the only source that stays sharp at
+  poster size.
 
 To regenerate:
 
@@ -324,6 +328,40 @@ are only ever read, never modified.** To change the icon, replace the file in
 The line art is used rather than the medallion because it is the higher
 resolution of the two — the medallion's artwork is only about 206 pixels across,
 so a 512-pixel icon made from it would look soft.
+
+---
+
+## Social graphics
+
+```bash
+npm run social
+```
+
+Writes five images to `public/social/`, all from `brand/logo-wordmark.svg` and
+the colours in `theme.css`:
+
+| File | Size | What it's for |
+|---|---|---|
+| `cover.png` | 1640×624 | Facebook page cover |
+| `profile.png` | 1080×1080 | Profile picture |
+| `menu.png` | 1080×1350 | The week's menu, as a feed post |
+| `last-call.png` | 1080×1080 | Cutoff reminder the night before |
+| `link-preview.png` | 1200×630 | What Facebook shows when the app link is pasted |
+
+`menu.png` reads the **live database** — the published week, its dishes, prices
+and pickup window. Publish the week first, then run this, and you get that
+week's post rather than a blank template. With nothing published it falls back
+to sample dishes so you can still see the layout.
+
+`link-preview.png` is wired in as the default `og:image`, so pasting the app's
+address into Facebook shows the branded card instead of a cropped app icon.
+
+The lockup is knocked off its supplied charcoal background so it can sit on
+olive and umber. That makes it **light artwork** — it needs a dark ground, and
+will disappear on parchment.
+
+Everything in `public/social/` is generated. Edit `scripts/social.js` or the
+theme, never the PNGs.
 
 ---
 
