@@ -300,6 +300,15 @@ delivery minimum is optional. Everything is recalculated on the server when the
 order arrives, so a customer editing the page cannot give themselves free
 delivery.
 
+> [!IMPORTANT]
+> **A zone's fee beats the flat fee.** Areas are seeded belonging to no zone, so
+> the flat fee in Settings is what everyone pays. The moment you put an area in
+> a zone, that zone's fee applies to it and the Settings box stops governing it.
+> The Delivery card says so, listing any zone that has areas in it and what it
+> charges — because the earlier version of this app seeded every postal code
+> into a $5 zone that no screen could edit, which made the Delivery fee box
+> silently do nothing on a fresh install.
+
 Distance-based delivery is deliberately **not** built. The code has a clean seam
 for it (`server/delivery.js`), but adding it means a mapping service, an API key
 and a bill, so it stays out until you actually want it.
@@ -364,6 +373,27 @@ No money moves through this app. It takes orders; you get paid your own way.
 Edit the wording in **Settings → Payment instructions**. It appears on the order
 form and in the confirmation email. Say exactly what you want — cash at pickup,
 e-transfer to a specific address, whatever it is.
+
+### How they say they'll pay
+
+The order form asks the customer to choose **E-transfer** (marked as preferred)
+or **Cash**, and that choice travels with the order: onto the confirmation
+screen, into both emails, onto the order card in the dashboard, and into the
+orders CSV as its own column. It is how you know what to expect at the door and
+which e-transfer never arrived.
+
+It is a **declaration of intent, never a payment record.** Choosing e-transfer
+does not mark an order paid — `paid` stays a separate flag that only you set,
+because the customer saying how they intend to pay and the money arriving are
+different events.
+
+The choice is required and validated on the server. An order with no method, or
+one the app doesn't offer, is refused rather than quietly defaulted — recording
+"e-transfer" for someone who never said it puts a wrong expectation in front of
+the kitchen, which is the whole thing this field exists to prevent.
+
+To change the options, edit `PAYMENT_METHODS` in `server/orders.js`. The label
+lives there so the form, the emails and the dashboard cannot drift apart.
 
 ---
 

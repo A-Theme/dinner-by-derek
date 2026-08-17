@@ -4,6 +4,7 @@ const config = require('./config');
 const { settings } = require('./db');
 const { palette } = require('./theme');
 const T = require('./time');
+const O = require('./orders');
 
 let transport = null;
 function tx() {
@@ -71,6 +72,7 @@ function plain(order, lines, heading) {
   parts.push(order.method === 'pickup'
     ? `Pickup: ${order.location_name}, ${order.location_addr}, anytime ${order.pickup_window}`
     : `Delivery: ${order.addr_line}${order.addr_unit ? ', ' + order.addr_unit : ''}, ${order.postal_norm}`);
+  if (order.payment_method) parts.push('', `Paying by: ${O.PAYMENT_LABEL(order.payment_method)}`);
   if (order.allergy_notes) parts.push('', `Allergy notes: ${order.allergy_notes}`);
   parts.push('', settings.get('payment_instructions'));
   return parts.join('\n');
@@ -116,6 +118,8 @@ async function ownerOrderEmail(order, lines) {
       ${order.method === 'delivery' ? `<br>Delivery ${money(order.delivery_fee)}` : ''}
       <br><strong>Total ${money(order.total)}</strong></p>
     ${fulfilBlock(order)}
+    ${order.payment_method ? `<p><strong>Paying by ${esc(O.PAYMENT_LABEL(order.payment_method))}</strong>
+      — as declared by the customer. Nothing is paid until you say so.</p>` : ''}
     ${allergy}
     <p><a href="${config.baseUrl}/admin/orders?date=${order.service_date}"
       style="background:${palette.tan};color:${palette.espresso};padding:10px 16px;
@@ -152,7 +156,9 @@ async function customerOrderEmail(order, lines) {
       ${order.method === 'delivery' ? `<br>Delivery ${money(order.delivery_fee)}` : ''}
       <br><strong>Total owed ${money(order.total)}</strong></p>
     ${fulfilBlock(order)}
-    <p><strong>Paying:</strong> ${esc(settings.get('payment_instructions'))}</p>
+    <p><strong>Paying:</strong>${order.payment_method
+      ? ` you chose ${esc(O.PAYMENT_LABEL(order.payment_method))}.` : ''}
+      ${esc(settings.get('payment_instructions'))}</p>
     ${tags ? `<p><strong>Allergen information as shown when you ordered</strong></p><ul>${tags}</ul>` : ''}
     <p style="font-size:13px;color:${palette['umber-soft']}">Allergen information is a guide only.
       Every necessary precaution is taken in the kitchen, but cross-contamination remains a

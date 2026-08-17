@@ -29,4 +29,16 @@ function rateLimit(name, max, windowMs) {
   };
 }
 
-module.exports = { rateLimit };
+/**
+ * Empty every bucket.
+ *
+ * Exists for flow.js, which places more orders in one run than a real customer
+ * would place in a minute and would otherwise start collecting 429s partway
+ * through the suite. The alternative — raising the real limit so the tests fit
+ * inside it — would loosen production to suit a script.
+ */
+function reset() {
+  buckets.clear();
+}
+
+module.exports = { rateLimit, reset };

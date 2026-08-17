@@ -250,7 +250,9 @@ router.get('/orders', (req, res) => {
         <ul>${lines.map((l) => html`<li>${l.qty} × ${l.item_name}
           <span class="variant__label">(${l.variant_label}, ${money(l.unit_price)})</span></li>`)}</ul>
 
-        <p class="variant__label">Food ${money(o.subtotal)}${o.method === 'delivery' ? ` · Delivery ${money(o.delivery_fee)}` : ''}</p>
+        <p class="variant__label">Food ${money(o.subtotal)}${o.method === 'delivery' ? ` · Delivery ${money(o.delivery_fee)}` : ''}
+          ${o.payment_method ? html` · Paying by <strong>${O.PAYMENT_LABEL(o.payment_method)}</strong>` : ''}
+          ${o.paid ? html` · <span class="flag flag--ok">Paid</span>` : ''}</p>
         <p>${o.method === 'pickup'
           ? html`<strong>Pickup</strong> ${o.location_name}, anytime ${o.pickup_window}`
           : html`<strong>Delivery</strong> ${o.addr_line}${o.addr_unit ? `, ${o.addr_unit}` : ''}, ${o.postal_norm}
@@ -307,6 +309,11 @@ router.get('/locations', (req, res) => {
   const locs = db.prepare('SELECT * FROM locations ORDER BY sort, id').all();
   const fsas = D.fsaUsage();
   const zones = db.prepare('SELECT * FROM zones ORDER BY name').all();
+  // Zones that actually have areas in them. A zone's fee overrides the flat
+  // fee, so the Delivery card has to say so rather than let the owner set a
+  // price that quietly applies to nothing.
+  const zoned = db.prepare(`SELECT z.name, z.fee, COUNT(f.code) n FROM zones z
+    JOIN fsas f ON f.zone_id = z.id GROUP BY z.id ORDER BY z.name`).all();
 
   const body = html`
     <h1>Locations &amp; Delivery</h1>
@@ -367,6 +374,14 @@ router.get('/locations', (req, res) => {
         <button class="btn btn--primary" type="submit">Save delivery settings</button>
       </form>
       <p class="also">Changing the fee never changes the fee stored on an order that's already in.</p>
+      ${zoned.length ? html`
+        <div class="notice notice--strong">
+          <strong>This fee does not apply to every area.</strong>
+          ${zoned.length} postal code${zoned.length === 1 ? ' is' : 's are'} grouped into a zone
+          with its own fee, and a zone's fee wins: ${zoned.map((z) => `${z.name} — ${money(z.fee)}`).join(', ')}.
+          Those areas are charged the zone fee no matter what you type above.
+          Set an area back to <em>Flat fee</em> below to have it follow this box.
+        </div>` : ''}
     </div>
 
     <div class="card">

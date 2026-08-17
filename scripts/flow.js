@@ -285,7 +285,7 @@ const PAST_DATE = T.addDays(today, -2);
       name: 'Test Customer',
       phone: '519-555-0199',
       email: 'test@example.com',
-      method: 'pickup',
+      method: 'pickup', payment_method: 'etransfer',
       location_id: String(db.prepare('SELECT id FROM locations LIMIT 1').get().id),
     });
     if (res.status !== 200) {
@@ -306,6 +306,8 @@ const PAST_DATE = T.addDays(today, -2);
       !!order.location_name);
     ok('the pickup window was frozen onto the order too',
       !!order.pickup_window);
+    check('the payment choice was stored for the kitchen', order.payment_method, 'etransfer');
+    check('but choosing a method does not mark the order paid', order.paid, 0);
     ok('the price came from the database, frozen onto the line',
       lines.every((l) => l.unit_price > 0));
     check('the total is the sum of the lines',
@@ -324,7 +326,7 @@ const PAST_DATE = T.addDays(today, -2);
       week: weekSlug, date: SERVICE_DATE,
       lines: JSON.stringify([{ key: featuredKey, variant: 'full', qty: 1, price: 1 }]),
       name: 'Chancer', phone: '519-555-0100', email: 'c@example.com',
-      method: 'pickup', location_id: '1',
+      method: 'pickup', payment_method: 'etransfer', location_id: '1',
     });
     const order = db.prepare('SELECT * FROM orders ORDER BY id DESC LIMIT 1').get();
     ok('a price sent by the browser is ignored', order.subtotal >= 2200,
@@ -334,15 +336,40 @@ const PAST_DATE = T.addDays(today, -2);
       week: weekSlug, date: SERVICE_DATE,
       lines: JSON.stringify([{ key: featuredKey, variant: 'full', qty: 1 }]),
       name: 'Early Bird', phone: '519-555-0101', email: 'e@example.com',
-      method: 'pickup', location_id: '999999',
+      method: 'pickup', payment_method: 'etransfer', location_id: '999999',
     });
     check('a nonexistent pickup location is refused', badLocation.status, 400);
+
+    // The payment choice is a declaration the kitchen plans around, so it is
+    // required and validated rather than defaulted — recording "e-transfer"
+    // for someone who never said so is the failure this field exists to stop.
+    const noPayment = await POST('/order', {
+      week: weekSlug, date: SERVICE_DATE,
+      lines: JSON.stringify([{ key: featuredKey, variant: 'full', qty: 1 }]),
+      name: 'No Method', phone: '519-555-0103', email: 'n@example.com',
+      method: 'pickup', location_id: String(db.prepare('SELECT id FROM locations LIMIT 1').get().id),
+    });
+    check('an order with no payment choice is refused', noPayment.status, 400);
+
+    const madeUpPayment = await POST('/order', {
+      week: weekSlug, date: SERVICE_DATE,
+      lines: JSON.stringify([{ key: featuredKey, variant: 'full', qty: 1 }]),
+      name: 'Made Up', phone: '519-555-0104', email: 'm@example.com',
+      method: 'pickup', payment_method: 'bitcoin',
+      location_id: String(db.prepare('SELECT id FROM locations LIMIT 1').get().id),
+    });
+    check('and a payment method the app does not offer is refused', madeUpPayment.status, 400);
+
+    // This suite places more orders in one run than the limiter allows in a
+    // minute, and refused attempts count too. Clearing the buckets keeps the
+    // real limit intact rather than widening it to fit a script.
+    require('../server/ratelimit').reset();
 
     const forgedDelivery = await POST('/order', {
       week: weekSlug, date: SERVICE_DATE,
       lines: JSON.stringify([{ key: featuredKey, variant: 'full', qty: 1 }]),
       name: 'Far Away', phone: '519-555-0102', email: 'f@example.com',
-      method: 'delivery', addr_line: '1 Yonge St', postal: 'M5V 2T6',
+      method: 'delivery', payment_method: 'cash', addr_line: '1 Yonge St', postal: 'M5V 2T6',
       eligible: '1', delivery_fee: '0',
     });
     check('a forged eligibility flag is refused', forgedDelivery.status, 400);
@@ -351,7 +378,7 @@ const PAST_DATE = T.addDays(today, -2);
       week: weekSlug, date: PAST_DATE,
       lines: JSON.stringify([{ key: featuredKey, variant: 'full', qty: 1 }]),
       name: 'Time Traveller', phone: '519-555-0103', email: 't@example.com',
-      method: 'pickup', location_id: '1',
+      method: 'pickup', payment_method: 'etransfer', location_id: '1',
     });
     check('an order for a day not on the menu is refused', pastDay.status, 400);
 
@@ -359,7 +386,7 @@ const PAST_DATE = T.addDays(today, -2);
       week: weekSlug, date: SERVICE_DATE,
       lines: JSON.stringify([{ key: featuredKey, variant: 'full', qty: 40 }]),
       name: 'Bulk Buyer', phone: '519-555-0104', email: 'b@example.com',
-      method: 'pickup', location_id: '1',
+      method: 'pickup', payment_method: 'etransfer', location_id: '1',
     });
     check('ordering past the cap is refused', overCap.status, 400);
     ok('and the refusal is a sentence, not a stack trace',
@@ -368,7 +395,7 @@ const PAST_DATE = T.addDays(today, -2);
     const empty = await POST('/order', {
       week: weekSlug, date: SERVICE_DATE, lines: '[]',
       name: 'Nobody', phone: '519-555-0105', email: 'n@example.com',
-      method: 'pickup', location_id: '1',
+      method: 'pickup', payment_method: 'etransfer', location_id: '1',
     });
     check('an empty order is refused', empty.status, 400);
   }
@@ -404,7 +431,7 @@ const PAST_DATE = T.addDays(today, -2);
         { key: featuredKey, variant: 'single', qty: 1 },
       ]),
       name: 'Two Sizes', phone: '519-555-0106', email: 'ts@example.com',
-      method: 'pickup', location_id: '1',
+      method: 'pickup', payment_method: 'etransfer', location_id: '1',
     });
     check('the ceiling counts both sizes together, not each on its own',
       bothSizes.status, 400);
@@ -414,7 +441,7 @@ const PAST_DATE = T.addDays(today, -2);
       week: weekSlug, date: SERVICE_DATE,
       lines: JSON.stringify([{ key: featuredKey, variant: 'single', qty: 1 }]),
       name: 'Last One', phone: '519-555-0107', email: 'lo@example.com',
-      method: 'pickup', location_id: '1',
+      method: 'pickup', payment_method: 'etransfer', location_id: '1',
     });
     check('the one that fits is taken', lastOne.status, 200);
 
@@ -422,7 +449,7 @@ const PAST_DATE = T.addDays(today, -2);
       week: weekSlug, date: SERVICE_DATE,
       lines: JSON.stringify([{ key: featuredKey, variant: 'full', qty: 1 }]),
       name: 'Too Late', phone: '519-555-0108', email: 'tl@example.com',
-      method: 'pickup', location_id: '1',
+      method: 'pickup', payment_method: 'etransfer', location_id: '1',
     });
     check('the next one is refused', overflow.status, 400);
     ok('and it reads as sold out', /sold out/i.test(overflow.text));
@@ -432,7 +459,7 @@ const PAST_DATE = T.addDays(today, -2);
       week: weekSlug, date: SERVICE_DATE,
       lines: JSON.stringify([{ key: schnitzel.key, variant: 'full', qty: 1 }]),
       name: 'Other Level', phone: '519-555-0109', email: 'ol@example.com',
-      method: 'pickup', location_id: '1',
+      method: 'pickup', payment_method: 'etransfer', location_id: '1',
     });
     check('the ceiling does not touch Other Options', stillOpen.status, 200);
   }
@@ -521,7 +548,7 @@ const PAST_DATE = T.addDays(today, -2);
       week: weekSlug, date: today,
       lines: JSON.stringify([{ key: `service_days:${lateDay.id}`, variant: 'full', qty: 5 }]),
       name: 'After Hours', phone: '519-555-0110', email: 'ah@example.com',
-      method: 'pickup', location_id: '1',
+      method: 'pickup', payment_method: 'etransfer', location_id: '1',
     });
     check('a late request past the ceiling is still accepted', late.status, 200);
     const row = db.prepare('SELECT status FROM orders ORDER BY id DESC LIMIT 1').get();

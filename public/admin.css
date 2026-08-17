@@ -33,6 +33,13 @@
 .tile__n { font-family: var(--dbd-display); font-size: var(--dbd-step-4); color: var(--dbd-heading); line-height: 1; }
 .tile__l { font-size: var(--dbd-step--1); color: var(--dbd-ink-muted); text-transform: uppercase; letter-spacing: 0.07em; font-weight: 700; }
 
+/* A tile that opens the list behind its number. Kept visually identical to a
+   plain tile — the affordance is the cursor and the hover, not a colour change
+   that would make the three tiles read as different kinds of thing. */
+.tile--link { display: block; text-decoration: none; color: inherit; }
+.tile--link:hover, .tile--link:focus-visible { border-color: var(--dbd-tan); background: var(--dbd-cream-hi); }
+.tile--link:focus-visible { outline: 3px solid var(--dbd-tan-deep); outline-offset: 2px; }
+
 .countdown { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--dbd-warn); }
 
 /* Tables reflow to stacked cards rather than scrolling sideways at 375px. */

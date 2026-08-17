@@ -60,6 +60,8 @@ router.get('/', (req, res) => {
   const lateCount = db.prepare(
     `SELECT COUNT(*) n FROM orders WHERE status = 'late_request'`).get().n;
 
+  const tomorrow = T.addDays(today, 1);
+
   const upcoming = days.filter((d) => d.service_date >= today);
   const next = upcoming[0] || null;
   const cutoff = next ? T.cutoffFor(next.service_date, settings.getInt('cutoff_hour', 22),
@@ -79,10 +81,16 @@ router.get('/', (req, res) => {
     <h1>Today</h1>
     <p><a class="btn btn--primary btn--block" href="${primary.href}">${primary.label}</a></p>
 
+    <!-- Each tile opens the list behind its own number. A count you cannot
+         open is a dead end: the next question after "3 orders tomorrow" is
+         always "which three". -->
     <div class="tile-grid" style="margin:var(--dbd-sp-4) 0">
-      <div class="tile"><div class="tile__n">${countFor(today)}</div><div class="tile__l">Orders today</div></div>
-      <div class="tile"><div class="tile__n">${countFor(T.addDays(today, 1))}</div><div class="tile__l">Orders tomorrow</div></div>
-      <div class="tile"><div class="tile__n">${lateCount}</div><div class="tile__l">Late requests</div></div>
+      <a class="tile tile--link" href="/admin/orders?date=${today}">
+        <div class="tile__n">${countFor(today)}</div><div class="tile__l">Orders today</div></a>
+      <a class="tile tile--link" href="/admin/orders?date=${tomorrow}">
+        <div class="tile__n">${countFor(tomorrow)}</div><div class="tile__l">Orders tomorrow</div></a>
+      <a class="tile tile--link" href="/admin/orders?status=late_request">
+        <div class="tile__n">${lateCount}</div><div class="tile__l">Late requests</div></a>
     </div>
 
     ${next ? html`

@@ -288,16 +288,25 @@ if (db.prepare('SELECT COUNT(*) n FROM standing_items').get().n === 0) {
   seedIfMissing('Pulled Chicken (Reheat Bag)', 1500);
 }
 
-/* --- Seed: delivery area ------------------------------------------------- */
-if (db.prepare('SELECT COUNT(*) n FROM zones').get().n === 0) {
-  const z = db.prepare('INSERT INTO zones (name, fee) VALUES (?,?)')
-    .run('Kitchener–Waterloo', 500).lastInsertRowid;
+/* --- Seed: delivery area -------------------------------------------------
+ * Seeded with NO zone, so every area falls to the flat delivery_fee setting.
+ *
+ * They used to be seeded into a "Kitchener–Waterloo" zone at $5. That looked
+ * tidy and behaved badly: delivery.js prefers a zone's fee over the flat fee,
+ * nothing in the dashboard could edit a zone, and so the Delivery fee box in
+ * Settings silently did nothing on a fresh install. The owner would set $10,
+ * save, and every customer would still be charged $5.
+ *
+ * Zones remain supported for grouping areas at different prices later. They
+ * are just not conjured up for someone who never asked for one.
+ */
+if (db.prepare('SELECT COUNT(*) n FROM fsas').get().n === 0) {
   // Verified against Canada Post FSA assignments, Aug 2026:
   // Kitchener N2A–N2H and N2M–N2R; Waterloo N2J, N2K, N2L, N2T, N2V.
   const fsas = ['N2A','N2B','N2C','N2E','N2G','N2H','N2J','N2K','N2L',
                 'N2M','N2N','N2P','N2R','N2T','N2V'];
-  const insF = db.prepare('INSERT OR IGNORE INTO fsas (code, zone_id) VALUES (?,?)');
-  for (const f of fsas) insF.run(f, z);
+  const insF = db.prepare('INSERT OR IGNORE INTO fsas (code, zone_id) VALUES (?, NULL)');
+  for (const f of fsas) insF.run(f);
 }
 
 if (db.prepare('SELECT COUNT(*) n FROM locations').get().n === 0) {
@@ -331,6 +340,10 @@ addColumn('weeks', 'week_start', 'TEXT');
 // NULL = inherit the featured_daily_cap setting. A number is that day's own
 // ceiling; 0 closes the featured dish for the day.
 addColumn('service_days', 'daily_cap', 'INTEGER');
+// How the customer says they intend to pay. No money moves through the app,
+// so this is a declaration of intent for the kitchen's benefit, never a
+// payment record — which is why `paid` stays a separate flag the owner sets.
+addColumn('orders', 'payment_method', "TEXT NOT NULL DEFAULT ''");
 
 function renameColumn(table, from, to) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();

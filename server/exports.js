@@ -1,6 +1,7 @@
 'use strict';
 const { db, settings } = require('./db');
 const T = require('./time');
+const O = require('./orders');
 
 /**
  * CSV is UTF-8 with a BOM so Excel opens accented names correctly, and numeric
@@ -50,8 +51,8 @@ function ordersCsv(filters = {}) {
   const out = [[
     'Service day', 'Customer', 'Phone', 'Email', 'Item', 'Source level', 'Section',
     'Size', 'Quantity', 'Line total', 'Fulfillment', 'Pickup location', 'Pickup window',
-    'Delivery address', 'Postal code', 'Delivery fee', 'Order total', 'Allergy notes',
-    'Status', 'Reference',
+    'Delivery address', 'Postal code', 'Delivery fee', 'Order total', 'Paying by',
+    'Allergy notes', 'Status', 'Reference',
   ]];
   for (const r of rows) {
     out.push([
@@ -60,6 +61,7 @@ function ordersCsv(filters = {}) {
       r.method, r.location_name || '', r.pickup_window || '',
       r.method === 'delivery' ? [r.addr_line, r.addr_unit].filter(Boolean).join(', ') : '',
       r.postal_norm || '', money(r.delivery_fee), money(r.total),
+      O.PAYMENT_LABEL(r.payment_method),
       r.allergy_notes, r.status, r.ref,
     ]);
   }

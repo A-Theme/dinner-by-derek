@@ -24,6 +24,26 @@ const D = require('./delivery');
 
 class OrderError extends Error {}
 
+/**
+ * How the customer says they intend to pay.
+ *
+ * No money moves through this app, so this is a declaration of intent, not a
+ * payment. It exists so the kitchen knows what to expect at the door and can
+ * chase the e-transfer that never arrived. The `paid` flag stays separate and
+ * stays the owner's to set — a customer choosing "e-transfer" has not paid.
+ *
+ * Stored as the key; the label is what the customer read when they chose it,
+ * and lives here so the order form, the emails and the dashboard cannot drift.
+ */
+const PAYMENT_METHODS = [
+  { key: 'etransfer', label: 'E-transfer', note: 'preferred' },
+  { key: 'cash', label: 'Cash', note: '' },
+];
+const PAYMENT_LABEL = (key) => {
+  const m = PAYMENT_METHODS.find((p) => p.key === key);
+  return m ? m.label : '';
+};
+
 function ref() {
   return crypto.randomBytes(4).toString('hex').toUpperCase();
 }
@@ -120,11 +140,20 @@ function create(payload) {
   if (!phone) throw new OrderError('Please add a phone number so Derek can reach you.');
   if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new OrderError('That email address doesn\'t look right.');
 
+  // Rejected rather than defaulted. Quietly recording "e-transfer" for someone
+  // who never chose it would put a wrong expectation in front of the kitchen,
+  // which is the one thing this field exists to prevent.
+  const paymentMethod = String(payload.payment_method || '').trim();
+  if (!PAYMENT_METHODS.some((p) => p.key === paymentMethod)) {
+    throw new OrderError('Please choose how you\'ll pay.');
+  }
+
   /* --- Fulfillment ----------------------------------------------------- */
   const method = payload.method === 'delivery' ? 'delivery' : 'pickup';
   const o = {
     ref: ref(), week_id: week.id, service_date: day.service_date, status,
     name, phone, email, allergy_notes: allergyNotes, method,
+    payment_method: paymentMethod,
     location_id: null, location_name: null, location_addr: null, pickup_window: null,
     addr_line: null, addr_unit: null, postal_raw: null, postal_norm: null,
     fsa: null, zone_name: null, addr_notes: null,
@@ -231,4 +260,7 @@ function kitchenTotals(serviceDate) {
   };
 }
 
-module.exports = { create, linesOf, byRef, kitchenTotals, OrderError };
+module.exports = {
+  create, linesOf, byRef, kitchenTotals, OrderError,
+  PAYMENT_METHODS, PAYMENT_LABEL,
+};

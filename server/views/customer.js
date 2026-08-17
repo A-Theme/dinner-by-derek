@@ -4,6 +4,7 @@ const L = require('./layout');
 const T = require('../time');
 const { settings } = require('../db');
 const M = require('../menu');
+const O = require('../orders');
 
 const tz = () => settings.get('timezone', 'America/Toronto');
 
@@ -215,6 +216,18 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
             placeholder="Tell Derek about any allergies here."></textarea>
         </fieldset>
 
+        <fieldset>
+          <legend>How you'll pay</legend>
+          <p class="also">No payment is taken here. This just tells the kitchen what to expect.</p>
+          ${O.PAYMENT_METHODS.map((p, i) => html`
+            <label style="display:flex;gap:var(--dbd-sp-3);align-items:center;min-height:var(--dbd-tap)">
+              <input type="radio" name="payment_method" value="${p.key}"
+                style="width:22px;height:22px"${i === 0 ? ' checked' : ''} required>
+              <span>${p.label}${p.note ? html` <span class="variant__label">— ${p.note}</span>` : ''}</span>
+            </label>`)}
+          <p class="notice" style="margin-top:var(--dbd-sp-3)">${settings.get('payment_instructions')}</p>
+        </fieldset>
+
         <div class="card totals">
           <div class="totals__row"><span>Food subtotal</span><span id="t-sub">$0.00</span></div>
           <div class="totals__row" id="t-feerow" hidden><span>Delivery</span><span id="t-fee">$0.00</span></div>
@@ -226,7 +239,6 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
         <button type="submit" class="btn btn--primary btn--block" id="submitbtn">
           ${late ? 'Request late order' : 'Place order'}
         </button>
-        <p class="variant__label" style="margin-top:var(--dbd-sp-3)">${settings.get('payment_instructions')}</p>
       </div>
     </form>
 
@@ -294,6 +306,9 @@ function confirmationView({ order, lines, late }) {
             ${order.postal_norm}<br>${settings.get('delivery_window')}</p>`}
 
       <h3 class="subhead">Paying</h3>
+      ${order.payment_method
+        ? html`<p><strong>You chose ${O.PAYMENT_LABEL(order.payment_method)}.</strong>
+            Nothing has been charged — payment happens with Derek directly.</p>` : ''}
       <p>${settings.get('payment_instructions')}</p>
 
       <p style="margin-top:var(--dbd-sp-5)"><a class="btn btn--secondary" href="/">Back to the menu</a></p>
