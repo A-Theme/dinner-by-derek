@@ -93,6 +93,32 @@ Generate a secret or a key:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
+### Turning email on later
+
+The app is built to run without it. With `SMTP_HOST` blank every message is
+logged and dropped — orders are still saved, still appear in the dashboard,
+and the customer still gets their confirmation on screen. Nothing is lost,
+nothing is queued for later; the email simply never happens.
+
+When there is a domain and a mailbox, four things switch on together:
+
+| Set | To | Why it cannot wait |
+|---|---|---|
+| `SMTP_HOST` / `PORT` / `USER` / `PASS` | The sending mailbox | Nothing sends until these exist |
+| `SMTP_FROM` | An address on the domain | **The customer sees this.** It is the From line on their confirmation and where a reply goes |
+| `BASE_URL` | The public https address | Every owner email carries a link into the dashboard. Unset, they all point at `localhost:3000` and are dead from a phone |
+| `notify_email` (Settings) | Where alerts land | Already set; add a second address here, comma separated, if someone else needs to see orders |
+
+Turning SMTP on **without** `BASE_URL` is the one combination worth avoiding:
+the mail arrives, looks right, and every button in it is broken.
+
+A note on the sending account. Receiving alerts at a consumer mailbox is fine.
+Sending *through* one is a fight — Microsoft and Google have both tightened
+SMTP auth for consumer accounts, and mail sent from a personal address on
+behalf of a business tends to land in spam because the domain's SPF and DKIM
+records do not vouch for it. A mailbox on the same domain as the site is the
+path of least resistance.
+
 `DB_PATH`, `UPLOAD_DIR` and `GRAPHICS_DIR` must survive a redeploy. If your host
 wipes the app directory on deploy, point all three at a persistent volume. The
 graphics matter here because they are now made from a phone rather than from a
