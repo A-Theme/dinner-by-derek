@@ -767,27 +767,36 @@ PNGs.
 
 ## Sticker
 
-A 54 × 70 mm label: the line-art mark and a QR, for a thermal printer.
+A 54 × 70 mm label — the line-art mark and a QR — for a thermal printer, in
+both orientations.
 
 ```bash
 npm run sticker
 ```
 
-| File | For |
-|---|---|
-| `sticker-203dpi.png` | 432 × 559 — Zebra, Rollo, most direct-thermal label printers |
-| `sticker-300dpi.png` | 638 × 827 — Brother QL and other higher-resolution units |
+| File | Shape | Pixels | For |
+|---|---|---|---|
+| `sticker-portrait-203dpi.png` | 54 × 70 | 432 × 559 | Zebra, Rollo, most direct-thermal printers |
+| `sticker-portrait-300dpi.png` | 54 × 70 | 638 × 827 | Brother QL and other higher-resolution units |
+| `sticker-landscape-203dpi.png` | 70 × 54 | 559 × 432 | as above |
+| `sticker-landscape-300dpi.png` | 70 × 54 | 827 × 638 | as above |
 
-**Print the one that matches your printer and do not scale it.** Both are
-black and transparent only: every pixel is fully opaque black or fully
-transparent, with no antialiasing. A thermal head has no greys — it burns a
-dot or it does not — so a soft edge gets dithered into a scatter, which on a
-small QR is the difference between scanning and not. Resampling one of these
-to fit reintroduces exactly the greys the file exists to avoid.
+Portrait stacks the mark over the code. Landscape sets them side by side,
+which is the only arrangement that uses the extra width rather than leaving a
+band of blank stock down each side.
+
+**Print the one that matches your printer and your stock, and do not scale**
+**it.** All four are black and transparent only: every pixel is fully opaque
+black or fully transparent, with no antialiasing. A thermal head has no greys
+— it burns a dot or it does not — so a soft edge gets dithered into a scatter,
+which on a small QR is the difference between scanning and not. Resampling one
+of these to fit reintroduces exactly the greys the file exists to avoid.
 
 The QR is drawn at a whole number of dots per module (4 at 203 dpi, 7 at 300)
 so module edges land on dot boundaries. It carries the standard four-module
-quiet zone, and the label margin adds more.
+quiet zone, and the label margin adds more. Its size is set by what scans
+rather than by what fits — in landscape, where space is tighter, the mark
+gives up width and the code keeps its own.
 
 Like the card, the code points at `BASE_URL`, and the script says so loudly
 when that is unset. Scan the file with your own phone before printing a roll.

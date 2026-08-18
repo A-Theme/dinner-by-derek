@@ -1,6 +1,6 @@
 'use strict';
 /**
- * The 54 × 70 mm sticker, for a thermal printer.
+ * The sticker, for a thermal printer — 54 × 70 mm, portrait and landscape.
  *
  *   npm run sticker
  *
@@ -8,18 +8,21 @@
  * is not, and "white" is whatever the label stock already is. So this file
  * outputs BLACK AND TRANSPARENT ONLY: every pixel is either fully opaque black
  * or fully transparent, with no antialiasing anywhere. A soft edge would be
- * dithered by the printer driver into a scatter of dots, which on a 22 mm QR
+ * dithered by the printer driver into a scatter of dots, which on a 20 mm QR
  * code is the difference between scanning and not.
  *
- * Two files, because label printers come in two resolutions and resampling a
- * 1-bit image is exactly the thing that ruins it. Print the one that matches
- * your printer; do not scale either to fit.
+ * Two orientations, two resolutions, four files. Label printers come in two
+ * resolutions and resampling a 1-bit image is exactly the thing that ruins it,
+ * so each is drawn at its own. Print the one that matches your printer and the
+ * shape of your stock; do not scale any of them to fit.
  *
  *   203 dpi — Zebra, Rollo, most direct-thermal label printers
  *   300 dpi — Brother QL, higher-resolution desktop units
  *
- * The QR is drawn at an integer number of dots per module, so module edges
- * land on dot boundaries rather than between them.
+ * The QR is drawn at an integer number of dots per module, so module edges land
+ * on dot boundaries rather than between them. Its size is set by what scans,
+ * not by what fits: in the tighter layout the mark gives up width, never the
+ * code.
  */
 
 const fs = require('fs');
@@ -31,12 +34,19 @@ const root = path.join(__dirname, '..');
 const LINEART = path.join(root, 'brand', 'logo-lineart.png');
 const OUT = path.join(process.env.GRAPHICS_DIR || path.join(root, 'data', 'graphics'), 'print');
 
-/* --- The sheet ------------------------------------------------------------ */
-const W_MM = 54;
-const H_MM = 70;
+/* --- The sheets -----------------------------------------------------------
+ * One label in two orientations. Portrait stacks the mark over the code;
+ * landscape sets them side by side, which is the only arrangement that uses
+ * the extra width instead of leaving a band of blank stock down each side.
+ */
 const MARGIN_MM = 3.5;   // thermal feeds drift; keep ink off the edge
 const QR_MM = 22;        // target, rounded down to a whole number of dots per module
 const GAP_MM = 3;        // between the mark and the code
+
+const LAYOUTS = [
+  { name: 'portrait', w: 54, h: 70, stack: 'vertical' },
+  { name: 'landscape', w: 70, h: 54, stack: 'horizontal' },
+];
 
 /**
  * Ink as alpha: white in this mask means burn a dot.
@@ -75,8 +85,7 @@ function qrMask(url, maxDots) {
   }
   return {
     mask: sharp(buf, { raw: { width: n, height: n, channels: 1 } })
-      .resize(side, side, { kernel: 'nearest' })   // integer, so edges stay hard
-      .png(),
+      .resize(side, side, { kernel: 'nearest' }),   // integer, so edges stay hard
     side,
     scale,
     version: code.version,
@@ -92,37 +101,56 @@ async function inkOn(mask, width, height) {
     .toBuffer();
 }
 
-async function sheet(dpi, url) {
+async function sheet(layout, dpi, url) {
   const dots = (mm) => Math.round((mm / 25.4) * dpi);
-  const W = dots(W_MM);
-  const H = dots(H_MM);
-  const inner = W - dots(MARGIN_MM) * 2;
+  const W = dots(layout.w);
+  const H = dots(layout.h);
+  const margin = dots(MARGIN_MM);
+  const gap = dots(GAP_MM);
+  const innerW = W - margin * 2;
+  const innerH = H - margin * 2;
 
-  const q = qrMask(url, dots(QR_MM));
-  const qrPng = await inkOn(await q.mask.toBuffer(), q.side, q.side);
+  // The code is sized first and never squeezed: it is the part that has to
+  // survive being scanned in a doorway. What is left over belongs to the mark.
+  const q = qrMask(url, Math.min(dots(QR_MM), innerW, innerH));
+  const qrPng = await inkOn(await q.mask.png().toBuffer(), q.side, q.side);
 
-  // The mark takes the width it can have; the code keeps the size it needs.
-  const markW = Math.min(inner, W - dots(MARGIN_MM) * 2);
+  const horizontal = layout.stack === 'horizontal';
+  const markW = horizontal
+    ? Math.min(innerW - q.side - gap, innerH)   // beside the code, and no taller than the label
+    : innerW;
   const markMask = await lineartMask(markW);
   const markH = (await sharp(markMask).metadata()).height;
   const markPng = await inkOn(markMask, markW, markH);
 
-  const block = markH + dots(GAP_MM) + q.side;
-  const top = Math.round((H - block) / 2);
-
-  const file = `sticker-${dpi}dpi.png`;
-  await sharp({ create: { width: W, height: H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
-    .composite([
+  let place;
+  if (horizontal) {
+    const blockW = markW + gap + q.side;
+    const left = Math.round((W - blockW) / 2);
+    place = [
+      { input: markPng, left, top: Math.round((H - markH) / 2) },
+      { input: qrPng, left: left + markW + gap, top: Math.round((H - q.side) / 2) },
+    ];
+  } else {
+    const blockH = markH + gap + q.side;
+    const top = Math.round((H - blockH) / 2);
+    place = [
       { input: markPng, top, left: Math.round((W - markW) / 2) },
-      { input: qrPng, top: top + markH + dots(GAP_MM), left: Math.round((W - q.side) / 2) },
-    ])
+      { input: qrPng, top: top + markH + gap, left: Math.round((W - q.side) / 2) },
+    ];
+  }
+
+  const file = `sticker-${layout.name}-${dpi}dpi.png`;
+  await sharp({ create: { width: W, height: H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite(place)
     .png({ compressionLevel: 9 })
     .toFile(path.join(OUT, file));
 
   return {
     file, W, H, dpi,
+    mm: `${layout.w}×${layout.h}`,
     mark: `${markW}×${markH}`,
-    qr: `${q.side}px, ${q.modules} modules at ${q.scale} dots each (v${q.version}, level Q)`,
+    qr: `${q.modules} modules at ${q.scale} dots (v${q.version}, level Q)`,
     qrMm: ((q.side / dpi) * 25.4).toFixed(1),
   };
 }
@@ -135,7 +163,9 @@ async function generate() {
   const url = base || 'https://dinner-by-derek.example';
 
   const sheets = [];
-  for (const dpi of [203, 300]) sheets.push(await sheet(dpi, url));
+  for (const layout of LAYOUTS) {
+    for (const dpi of [203, 300]) sheets.push(await sheet(layout, dpi, url));
+  }
 
   return {
     dir: OUT,
@@ -153,10 +183,10 @@ module.exports = { generate, OUT };
 if (require.main === module) {
   generate()
     .then((out) => {
-      console.log(`\nSticker — ${W_MM}×${H_MM}mm, black and transparent only\n`);
+      console.log('\nSticker — black and transparent only\n');
       for (const s of out.sheets) {
-        console.log(`  ${s.file.padEnd(22)} ${s.W}×${s.H} px at ${s.dpi} dpi`);
-        console.log(`  ${' '.repeat(22)} mark ${s.mark} · QR ${s.qr} = ${s.qrMm}mm`);
+        console.log(`  ${s.file.padEnd(30)} ${s.mm}mm — ${s.W}×${s.H} px at ${s.dpi} dpi`);
+        console.log(`  ${' '.repeat(30)} mark ${s.mark} · QR ${s.qrMm}mm, ${s.qr}`);
       }
       console.log(`\n  QR points at ${out.url}`);
       for (const w of out.warnings) console.log(`\n  ⚠  ${w}`);
