@@ -203,14 +203,25 @@ a { color: var(--dbd-olive-deep); }
 .optioncard__desc { font-size: var(--dbd-step--1); }
 
 /* --- Variant rows / quantity ------------------------------------------- */
+/* Three columns, not space-between. With space-between the price sat wherever
+   the label left it, so "Meal for one" pushed its price 15px right of the one
+   above it and the column of figures read as a mistake. The stepper column is
+   held at a fixed width and the price is right-aligned against it, so every
+   price in a card ends on the same pixel whatever its label says, whatever it
+   costs, and whether the row is orderable or sold out. */
+:root { --dbd-qty-col: calc(var(--dbd-tap) * 2 + 2ch + var(--dbd-sp-2) * 2); }
+
 .variant {
-  display: flex; align-items: center; justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto var(--dbd-qty-col);
+  align-items: center;
   gap: var(--dbd-sp-3); padding: var(--dbd-sp-2) 0;
   border-top: 1px solid var(--dbd-rule-olive);
 }
 .variant__label { font-size: var(--dbd-step--1); }
-.variant__price { font-weight: 700; font-variant-numeric: tabular-nums; }
-.qty { display: flex; align-items: center; gap: var(--dbd-sp-2); }
+.variant__price { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+.variant .chip--soldout { justify-self: end; }
+.qty { display: flex; align-items: center; justify-content: flex-end; gap: var(--dbd-sp-2); }
 .qty button {
   width: var(--dbd-tap); height: var(--dbd-tap);
   font-size: var(--dbd-step-2); font-family: var(--dbd-body); line-height: 1;
