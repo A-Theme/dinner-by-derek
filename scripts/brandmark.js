@@ -1,14 +1,23 @@
 'use strict';
 /**
- * The leather medallion, cropped to its own edge and clipped to a circle.
+ * The two ways this app draws its own logo, from two source files that are
+ * only ever READ:
  *
- * Shared by make-icons.js (the site header mark) and card.js (the seal on the
- * back of the business card) so both crop the badge identically — the artwork
- * sits in a larger transparent-turned-grey canvas, and finding its real edge is
- * the fiddly part worth doing once. The social graphics use the wordmark, not
- * this.
+ *   circle()    the leather medallion, cropped to its edge and clipped round.
+ *               Used at the two small sizes where a photographed object beats
+ *               thin lines: the 84px site header mark, and the 96px seal on
+ *               the back of the business card.
  *
- * The source file is only ever READ.
+ *   wordmark()  the line-art badge, filled with the brand's gold. Used
+ *               everywhere the mark is shown large — the card front, the five
+ *               social graphics, the README banner.
+ *
+ * The app icons are cut from the same line art by make-icons.js, in ink rather
+ * than gold, which is why the ink threshold is defined here and read there.
+ *
+ * brand/logo-wordmark.svg — the coloured vector of the mark — is deliberately
+ * not referenced. It is a trace of a soft render and loses to the line art at
+ * every size; the README says so, so nobody has to rediscover it.
  */
 
 const path = require('path');
@@ -17,7 +26,6 @@ const { palette } = require('../server/theme');
 
 const SOURCE = path.join(__dirname, '..', 'brand', 'logo-medallion.jpg');
 const LINEART = path.join(__dirname, '..', 'brand', 'logo-lineart.png');
-const WORDMARK = path.join(__dirname, '..', 'brand', 'logo-wordmark.svg');
 
 /** Ink threshold: pixels darker than this are logo, lighter are paper. */
 const INK_GAIN = 3.0;
@@ -178,6 +186,4 @@ async function wordmark({ width, height }) {
   return { data: out, width: meta.width, height: meta.height };
 }
 
-module.exports = {
-  SOURCE, LINEART, WORDMARK, INK_GAIN, INK_BIAS, bounds, circle, wordmark,
-};
+module.exports = { SOURCE, LINEART, INK_GAIN, INK_BIAS, bounds, circle, wordmark };
