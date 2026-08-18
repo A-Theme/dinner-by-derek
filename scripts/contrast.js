@@ -39,6 +39,10 @@ const PAIRS = [
   ['Header / footer links', 'parchment', 'olive', 4.5],
   ['Badge text on tan', 'umber-deep', 'tan', 4.5],
   ['Tan-toned labels on cards', 'tan-deep', 'parchment', 4.5],
+  // The "Closed" line on the menu poster, and muted labels generally. Held to
+  // the 4.5 of normal text even though the poster sets it large: it is the one
+  // line on that image somebody needs to read from a phone in a feed.
+  ['Muted text on cards', 'umber-soft', 'parchment', 4.5],
   ['Active nav indicator', 'tan-lift', 'olive', 3.0],
   ['Card border on parchment', 'olive', 'parchment', 3.0],
 ];

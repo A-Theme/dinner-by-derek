@@ -115,10 +115,19 @@ function loadWeek() {
     // server has not started against it yet. Ask before relying on them.
     const hasClosed = db.prepare('PRAGMA table_info(service_days)').all()
       .some((c) => c.name === 'closed');
-    const days = db.prepare(`SELECT service_date, dish_name, full_price FROM service_days
-      WHERE week_id = ? AND TRIM(dish_name) != ''${hasClosed ? ' AND closed = 0' : ''}
+
+    // A closed day is ON the poster, not missing from it. Leaving it out
+    // produces a week with a hole in the middle, which reads as an oversight —
+    // and the whole reason for closing a day rather than leaving it blank is
+    // to tell people. Blank days stay out: those are the ones nobody decided.
+    const days = db.prepare(`
+      SELECT service_date, dish_name, full_price
+             ${hasClosed ? ', closed, closed_note' : ', 0 AS closed, \'\' AS closed_note'}
+      FROM service_days
+      WHERE week_id = ? AND (TRIM(dish_name) != ''${hasClosed ? ' OR closed = 1' : ''})
       ORDER BY service_date`).all(week.id);
     if (!days.length) return null;
+    if (days.every((d) => d.closed)) return null;   // nothing to advertise
 
     return {
       title: week.title,
@@ -126,6 +135,8 @@ function loadWeek() {
       tz: setting('timezone', 'America/Toronto'),
       pickup: [setting('pickup_start', '16:00'), setting('pickup_end', '19:00')],
       cutoffHour: Number(setting('cutoff_hour', '22')),
+      lateCutoff: `${String(setting('late_cutoff_hour', '6')).padStart(2, '0')}:`
+        + `${String(setting('late_cutoff_minute', '0')).padStart(2, '0')}`,
       business: setting('business_name', 'Dinner By Derek'),
     };
   } finally {
@@ -137,12 +148,15 @@ const SAMPLE = {
   title: 'Sample week',
   days: [
     { service_date: '2026-08-18', dish_name: 'Braised Beef Short Rib', full_price: 2200 },
-    { service_date: '2026-08-19', dish_name: 'Butter Chicken', full_price: 1900 },
+    // A closed day in the sample too, so the template can be judged with one
+    // in it rather than only discovering how it looks on a real post.
+    { service_date: '2026-08-19', dish_name: '', full_price: null, closed: 1, closed_note: 'Back Thursday' },
     { service_date: '2026-08-20', dish_name: 'Pork Schnitzel', full_price: 1800 },
   ],
   tz: 'America/Toronto',
   pickup: ['16:00', '19:00'],
   cutoffHour: 22,
+  lateCutoff: '06:00',
   business: 'Dinner By Derek',
   sample: true,
 };
@@ -219,12 +233,23 @@ async function menu(w) {
       const top = startY + i * rowH;
       const dayY = Math.round(top + rowH * 0.30);
       const dishY = Math.round(top + rowH * 0.68);
-      const price = money(d.full_price);
+      // A closed day keeps its date and its row, and says so where the dish
+      // would be — in the muted ink, with no price, so the eye reads it as a
+      // gap in the cooking rather than as a dish called "Closed".
+      const shut = !!d.closed;
+      const note = String(d.closed_note || '').trim();
+      // Separated by a middot, not a dash: the note is the owner's own
+      // sentence and often contains a dash of its own, and "Closed — Back
+      // Wednesday — kitchen deep clean" reads as one long stutter.
+      const line = shut ? (note ? `Closed · ${note}` : 'Closed') : d.dish_name;
+      const price = shut ? '' : money(d.full_price);
       return [
         label(T.fmtDayLong(d.service_date, w.tz),
           { x: panelX + 40, y: dayY, size: dayySize, fill: palette['tan-deep'], track: 4 }),
-        text(fit(d.dish_name, dishSize, dishMax),
-          { x: panelX + 40, y: dishY, size: dishSize, fill: palette.espresso, font: DISPLAY }),
+        text(fit(line, dishSize, shut ? panelW - 80 : dishMax), {
+          x: panelX + 40, y: dishY, size: dishSize, font: DISPLAY,
+          fill: shut ? palette['umber-soft'] : palette.espresso,
+        }),
         price ? text(price, {
           x: panelX + panelW - 40, y: dishY, size: priceSize,
           fill: palette['tan-deep'], anchor: 'end', font: DISPLAY,
@@ -251,7 +276,9 @@ async function menu(w) {
 async function lastCall(w) {
   const S = 1080, mid = S / 2;
   const mark = await brandmark.wordmark({ height: 190 });
-  const day = T.fmtDayLong(w.days[0].service_date, w.tz).split(',')[0];
+  // The first day being cooked, which is not necessarily the first day listed.
+  const first = w.days.find((d) => !d.closed) || w.days[0];
+  const day = T.fmtDayLong(first.service_date, w.tz).split(',')[0];
   const hour = w.cutoffHour > 12 ? w.cutoffHour - 12 : w.cutoffHour;
   const body = [
     label('Last call', { x: mid, y: 502, size: 32, fill: palette.ochre, anchor: 'middle', track: 12 }),
@@ -259,7 +286,10 @@ async function lastCall(w) {
     rule(mid - 220, 696, mid + 220, palette.tan, 0.5),
     text(`Orders close tonight at ${hour}:00 PM`,
       { x: mid, y: 776, size: 40, fill: palette.parchment, anchor: 'middle', font: DISPLAY }),
-    label('After that it becomes a request, not an order',
+    // The second line has to name the end of the late window as well as its
+    // start, or "it becomes a request" reads as an invitation to ask at four
+    // the next afternoon — which the app now refuses.
+    label(`Requests only after that, until ${T.fmtClock(w.lateCutoff || '06:00')} tomorrow`,
       { x: mid, y: 836, size: 22, fill: palette['tan-lift'], anchor: 'middle', track: 3 }),
   ].join('');
   return render('last-call.png', S, S, palette['umber-deep'], body,
