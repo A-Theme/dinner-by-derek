@@ -9,6 +9,7 @@
     "icons": "node scripts/make-icons.js",
     "social": "node scripts/social.js",
     "card": "node scripts/card.js",
+    "sticker": "node scripts/sticker.js",
     "readme-art": "node scripts/readme-art.js",
     "contrast": "node scripts/contrast.js",
     "test": "node scripts/acceptance.js && node scripts/flow.js",

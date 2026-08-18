@@ -41,6 +41,7 @@ website that installs to a home screen and works like an app.
 - 📱 [Icons](#icons)
 - 📣 [Social graphics](#social-graphics)
 - 💳 [Business card](#business-card)
+- 🏷️ [Sticker](#sticker)
 - ✨ [README artwork](#readme-artwork)
 - 👍 [Facebook](#facebook)
 - 💾 [Backup and restore](#backup-and-restore)
@@ -764,6 +765,34 @@ PNGs.
 
 ---
 
+## Sticker
+
+A 54 × 70 mm label: the line-art mark and a QR, for a thermal printer.
+
+```bash
+npm run sticker
+```
+
+| File | For |
+|---|---|
+| `sticker-203dpi.png` | 432 × 559 — Zebra, Rollo, most direct-thermal label printers |
+| `sticker-300dpi.png` | 638 × 827 — Brother QL and other higher-resolution units |
+
+**Print the one that matches your printer and do not scale it.** Both are
+black and transparent only: every pixel is fully opaque black or fully
+transparent, with no antialiasing. A thermal head has no greys — it burns a
+dot or it does not — so a soft edge gets dithered into a scatter, which on a
+small QR is the difference between scanning and not. Resampling one of these
+to fit reintroduces exactly the greys the file exists to avoid.
+
+The QR is drawn at a whole number of dots per module (4 at 203 dpi, 7 at 300)
+so module edges land on dot boundaries. It carries the standard four-module
+quiet zone, and the label margin adds more.
+
+Like the card, the code points at `BASE_URL`, and the script says so loudly
+when that is unset. Scan the file with your own phone before printing a roll.
+
+---
 ## README artwork
 
 The banner at the top of this file, the badges under it, and the colour chips
