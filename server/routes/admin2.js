@@ -525,7 +525,10 @@ router.get('/settings', (req, res) => {
         <label for="oc">How customers reach you</label>
         <input type="text" id="oc" name="owner_contact" value="${settings.get('owner_contact')}">
         <label for="ne">Where new orders are emailed</label>
-        <input type="email" id="ne" name="notify_email" value="${settings.get('notify_email')}">
+        <input type="email" multiple id="ne" name="notify_email" value="${settings.get('notify_email')}">
+        <p class="also">More than one address is fine — separate them with commas. Everything
+          addressed to you goes to all of them: new orders, late requests, a refused publish,
+          and the reminder when no week has been built.</p>
         <button class="btn btn--primary" type="submit">Save settings</button>
       </form>
     </div>
@@ -687,8 +690,14 @@ function facebookPanel(conn) {
 router.post('/settings', (req, res) => {
   const t = String(req.body.cutoff_time || '22:00').split(':');
   const l = String(req.body.late_cutoff_time || '06:00').split(':');
-  for (const k of ['business_name', 'timezone', 'payment_instructions', 'owner_contact', 'notify_email']) {
+  for (const k of ['business_name', 'timezone', 'payment_instructions', 'owner_contact']) {
     if (req.body[k] !== undefined) settings.set(k, String(req.body[k]).trim());
+  }
+  // Stored tidy rather than raw: the field takes a comma-separated list, and a
+  // trailing comma would otherwise reach nodemailer as an empty recipient.
+  if (req.body.notify_email !== undefined) {
+    settings.set('notify_email', String(req.body.notify_email)
+      .split(',').map((a) => a.trim()).filter(Boolean).join(', '));
   }
   settings.set('cutoff_hour', Number(t[0]) || 22);
   settings.set('cutoff_minute', Number(t[1]) || 0);

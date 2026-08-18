@@ -2,9 +2,21 @@
 const nodemailer = require('nodemailer');
 const config = require('./config');
 const { settings } = require('./db');
+
 const { palette } = require('./theme');
 const T = require('./time');
 const O = require('./orders');
+
+/**
+ * Who the owner-facing mail goes to.
+ *
+ * One address or several, comma separated. Kept as a plain string because that
+ * is what nodemailer takes and what the Settings field holds; the split here
+ * only tidies stray spaces and empty entries, so a trailing comma cannot
+ * produce an invalid recipient and lose the whole message.
+ */
+const owners = () => String(settings.get('notify_email', ''))
+  .split(',').map((a) => a.trim()).filter(Boolean).join(', ');
 
 let transport = null;
 function tx() {
@@ -126,7 +138,7 @@ async function ownerOrderEmail(order, lines) {
       border-radius:6px;text-decoration:none;display:inline-block">Open in dashboard</a></p>`);
 
   return send({
-    to: settings.get('notify_email'),
+    to: owners(),
     subject,
     html,
     text: plain(order, lines, late ? 'LATE REQUEST' : 'New order'),
@@ -202,7 +214,7 @@ async function tokenExpiryEmail(days, pageName) {
       style="background:${palette.tan};color:${palette.espresso};padding:10px 16px;
       border-radius:6px;text-decoration:none;display:inline-block">Reconnect Facebook</a></p>`);
   return send({
-    to: settings.get('notify_email'),
+    to: owners(),
     subject: `Facebook connection expires in ${days} days`,
     html,
     text: `The Facebook connection for ${pageName} expires in ${days} days. Reconnect at ${config.baseUrl}/admin/settings`,
@@ -219,7 +231,7 @@ async function weekPublishedEmail(week) {
       style="background:${palette.tan};color:${palette.espresso};padding:10px 16px;
       border-radius:6px;text-decoration:none;display:inline-block">Open This Week</a></p>`);
   return send({
-    to: settings.get('notify_email'),
+    to: owners(),
     subject: `Published: ${title}`,
     html,
     text: `${title} went live on schedule. ${config.baseUrl}/admin/week`,
@@ -245,7 +257,7 @@ async function weekPublishRefusedEmail(week, blockers) {
       style="background:${palette.tan};color:${palette.espresso};padding:10px 16px;
       border-radius:6px;text-decoration:none;display:inline-block">Finish the review</a></p>`);
   return send({
-    to: settings.get('notify_email'),
+    to: owners(),
     subject: `Not published: ${title} still needs an allergen review`,
     html,
     text: `${title} did not publish. Still to do:\n\n${blockers.map((b) => `- ${b}`).join('\n')}\n\n`
@@ -282,7 +294,7 @@ async function weekMissingEmail({ weekStart, publishAt }) {
       style="background:${palette.tan};color:${palette.espresso};padding:10px 16px;
       border-radius:6px;text-decoration:none;display:inline-block">Open This Week</a></p>`);
   return send({
-    to: settings.get('notify_email'),
+    to: owners(),
     subject: `No menu built for ${range}`,
     html,
     text: `Nothing is built for ${range}.`

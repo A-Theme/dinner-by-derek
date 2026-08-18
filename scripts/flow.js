@@ -772,6 +772,36 @@ const PAST_DATE = T.addDays(today, -2);
     ok('and customers can pick a day again', /daylist/.test(back.text));
   }
 
+  /* --- Owner emails can go to more than one address ----------------------
+   The field is a comma-separated list, so a second recipient is a text
+   edit rather than a code change. Stored tidy, because a trailing comma
+   would otherwise reach nodemailer as an empty recipient and take the
+   whole message down with it. */
+  {
+    await POST('/admin/login', { password: 'flow-test-password', next: '/admin' });
+    const { settings } = require('../server/db');
+    const base = {
+      business_name: 'Dinner By Derek', timezone: 'America/Toronto',
+      cutoff_time: '22:00', late_cutoff_time: '06:00',
+      payment_instructions: 'Pay at pickup.', owner_contact: 'Call us.',
+    };
+
+    await POST('/admin/settings', { ...base, notify_email: 'one@example.com' });
+    check('a single address saves as it was typed',
+      settings.get('notify_email'), 'one@example.com');
+
+    await POST('/admin/settings', { ...base, notify_email: '  one@example.com ,  two@example.com , ' });
+    check('a messy list is stored tidy, with no empty recipient',
+      settings.get('notify_email'), 'one@example.com, two@example.com');
+
+    const form = await GET('/admin/settings');
+    ok('and the field accepts a list rather than refusing it',
+      /name="notify_email"/.test(form.text) && /<input type="email" multiple/.test(form.text));
+
+    await POST('/admin/settings', { ...base, notify_email: '' });
+    check('clearing it leaves nothing behind', settings.get('notify_email'), '');
+  }
+
   /* --- The reminder settings are wired to the form ------------------------ */
   {
     await POST('/admin/login', { password: 'flow-test-password', next: '/admin' });
