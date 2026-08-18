@@ -52,9 +52,10 @@ const paper = () => {
   return paperPromise;
 };
 
-/** Ink threshold: pixels darker than this are logo, lighter are paper. */
-const INK_GAIN = 3.0;
-const INK_BIAS = -180;
+/* Ink threshold: pixels darker than this are logo, lighter are paper. Defined
+   in brandmark.js, which cuts the lockup from the same line art — one set of
+   numbers tuned against one file, not two that can drift apart. */
+const { INK_GAIN, INK_BIAS } = brandmark;
 
 function hexToRgb(hex) {
   const h = hex.replace('#', '');

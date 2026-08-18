@@ -13,9 +13,15 @@
 
 const path = require('path');
 const sharp = require('sharp');
+const { palette } = require('../server/theme');
 
 const SOURCE = path.join(__dirname, '..', 'brand', 'logo-medallion.jpg');
+const LINEART = path.join(__dirname, '..', 'brand', 'logo-lineart.png');
 const WORDMARK = path.join(__dirname, '..', 'brand', 'logo-wordmark.svg');
+
+/** Ink threshold: pixels darker than this are logo, lighter are paper. */
+const INK_GAIN = 3.0;
+const INK_BIAS = -180;
 
 /**
  * Bounding box of the coloured artwork, grown to a square.
@@ -92,42 +98,67 @@ async function circle(size, file = SOURCE) {
 }
 
 /**
- * The full logo lockup — ring, cutlery, "Dinner" script, "BY DEREK" — knocked
- * out of its own background so it can sit on any dark brand colour.
+ * The full logo lockup — double ring, cutlery, "Dinner" script, "BY DEREK" —
+ * in the brand's gold, on a transparent ground so it can sit on any dark brand
+ * colour.
  *
- * It is supplied as gold-and-cream artwork on a cool charcoal ground, which is
- * off-palette. Rather than reproduce the mark, the charcoal is removed: the
- * artwork is light and its ground is dark, so luminance makes a usable alpha.
- * Squaring that alpha twice collapses the faint rectangular wash left by the
- * source's vignette — a plain threshold high enough to kill the wash also eats
- * the darker gold strokes, and a hard threshold jags the script.
+ * CUT FROM THE LINE ART, NOT FROM THE GOLD ARTWORK. Both exist. The gold
+ * version is a trace of a soft render: its strokes carry the original's
+ * blur, its outer ring is broken, and it arrives on a charcoal ground that has
+ * to be keyed out by luminance — which eats the darker strokes at exactly the
+ * edges that matter. The line art is the same mark drawn cleanly, with real
+ * transparency and an unbroken ring, so the shape comes from there and only
+ * the colour is applied here.
+ *
+ * The colour is a gradient of three palette stops, light at the top left and
+ * deepening to the bottom right, which is what the gold artwork does and what
+ * a stamped metal badge does. Nothing is sampled from the old file; the stops
+ * are palette names, so the lockup moves when the palette moves.
  *
  * Light artwork: this belongs on olive, espresso or umber, never on parchment.
  */
+const GOLD = [
+  [0, palette.parchment],
+  [0.55, palette['tan-lift']],
+  [1, palette.tan],
+];
+
+function goldFill(width, height) {
+  const stops = GOLD.map(([offset, colour]) =>
+    `<stop offset="${offset}" stop-color="${colour}"/>`).join('');
+  return Buffer.from(`<svg width="${width}" height="${height}">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="0.35" y2="1">${stops}</linearGradient></defs>
+    <rect width="${width}" height="${height}" fill="url(#g)"/></svg>`);
+}
+
 let masterPromise = null;
-const MASTER = 1200;
 
 function master() {
   if (!masterPromise) {
     masterPromise = (async () => {
-      const rgb = await sharp(WORDMARK, { density: 300 })
-        .resize(MASTER, MASTER, { fit: 'inside' })
-        .removeAlpha()
+      // Built at the source's own size and resized once, on the way out, so a
+      // caller asking for 296px gets one interpolation rather than an upscale
+      // to some master size and a downscale back again.
+      const alpha = await sharp(LINEART)
+        .flatten({ background: { r: 255, g: 255, b: 255 } })
+        .greyscale()
+        .negate()                      // ink becomes bright
+        .linear(INK_GAIN, INK_BIAS)    // crush the paper to nothing, keep soft edges
+        .toColourspace('b-w')
+        .png()
         .toBuffer();
-      let alpha = await sharp(rgb).greyscale().linear(2.4, -130).toColourspace('b-w').toBuffer();
-      for (let i = 0; i < 2; i++) {
-        alpha = await sharp(alpha)
-          .composite([{ input: alpha, blend: 'multiply' }])
-          .toColourspace('b-w')
-          .toBuffer();
-      }
-      const cut = await sharp(rgb).joinChannel(alpha).png().toBuffer();
-      // Trimmed to the artwork's own edge, in a second pass: trim inspects the
-      // pipeline's input, so chaining it onto joinChannel would test the opaque
-      // charcoal and find nothing to cut. The source centres the lockup in a
-      // square with wide margins, and leaving those in lands the mark far
-      // smaller than the size asked for and drags whitespace into every layout.
-      return sharp(cut).trim({ threshold: 25 }).png({ compressionLevel: 9 }).toBuffer();
+      const { width, height } = await sharp(alpha).metadata();
+
+      // removeAlpha before joining: the rasterised gradient already carries an
+      // alpha channel, and joining onto four channels makes a fifth that sharp
+      // keeps as a band rather than as transparency — a fully opaque rectangle.
+      const fill = await sharp(goldFill(width, height)).removeAlpha().png().toBuffer();
+      const cut = await sharp(fill).joinChannel(alpha).png().toBuffer();
+
+      // Trimmed in a second pass: trim inspects the pipeline's input, so
+      // chaining it onto joinChannel would test the opaque gradient and find
+      // nothing to cut.
+      return sharp(cut).trim({ threshold: 10 }).png({ compressionLevel: 9 }).toBuffer();
     })();
   }
   return masterPromise;
@@ -147,4 +178,6 @@ async function wordmark({ width, height }) {
   return { data: out, width: meta.width, height: meta.height };
 }
 
-module.exports = { SOURCE, WORDMARK, bounds, circle, wordmark };
+module.exports = {
+  SOURCE, LINEART, WORDMARK, INK_GAIN, INK_BIAS, bounds, circle, wordmark,
+};

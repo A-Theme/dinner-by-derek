@@ -580,8 +580,12 @@ can be unreadable on a phone in a bright kitchen.
 
 Source artwork is in `brand/`:
 
-- `logo-lineart.png` — the black line-art mark, transparent. **This is what the
-  icons are built from.**
+- `logo-lineart.png` — the black line-art mark, transparent, 646×664. **This is
+  what everything carrying the logo is built from**: the icons, and the gold
+  lockup on the business card, the social graphics and the README banner. The
+  lines are clean, the double ring is unbroken, and the transparency is real,
+  so the shape is taken from here and only the colour is applied — a gradient
+  of palette stops, light at the top left and deepening to the bottom right.
 - `logo-lineart.jpg` — the same mark, flattened onto white. Superseded by the
   PNG above and kept only because it is what the first icons were cut from.
 - `logo-medallion.jpg` — the leather version, 1000×1027 with the badge about
@@ -590,9 +594,11 @@ Source artwork is in `brand/`:
   genuinely transparent, which is why `brandmark.js` finds the badge by colour
   and clips 3% inside its edge. Replacing it with a larger export is the single
   cheapest upgrade to both; nothing else needs changing.
-- `logo-wordmark.svg` — the full gold lockup, vector. **This is what the social
-  graphics and the README banner are built from**, because it is the only
-  source that stays sharp at poster size.
+- `logo-wordmark.svg` — the gold lockup, vector. **Nothing reads it any more.**
+  It is a trace of a soft render: the strokes carry the original's blur, the
+  outer ring is broken, and it arrives on a charcoal ground that has to be
+  keyed out by luminance, which eats the darker strokes at the edges. Kept
+  because it is the only coloured vector of the mark.
 - `logo-source.ai` — the Illustrator master. Nothing reads it; it is here so
   the artwork can be edited rather than re-traced.
 - `IDENTITY.txt` — the brand guide the palette came from, verbatim.

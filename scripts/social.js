@@ -323,7 +323,7 @@ async function linkPreview(w) {
  * a function call doesn't already give — including the real error text.
  */
 async function generate() {
-  for (const f of [brandmark.WORDMARK, brandmark.SOURCE]) {
+  for (const f of [brandmark.LINEART, brandmark.SOURCE]) {
     if (!fs.existsSync(f)) throw new Error(`Missing brand artwork: ${f}`);
   }
   fs.mkdirSync(OUT, { recursive: true });

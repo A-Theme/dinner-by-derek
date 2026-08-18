@@ -167,7 +167,12 @@ const hour12 = (h) => `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? 'AM' : 'PM'}`;
  * set in type up here except the one line saying what this is and where.
  */
 async function front() {
-  const mark = await brandmark.wordmark({ height: 296 });
+  // Sized to the badge's width, not its height. The lockup used to be a wide
+  // mark about 400px across at this height; cut from the line art it is very
+  // nearly square, so holding the old height would have quietly shrunk it by a
+  // quarter and left the card looking underfilled. Grown until it carries the
+  // same width as before, and its centre held where it was.
+  const mark = await brandmark.wordmark({ height: 340 });
   const body = [
     rule(0, 100, W, palette.tan, 0.32, 2),
     rule(0, 576, W, palette.tan, 0.32, 2),
@@ -176,7 +181,7 @@ async function front() {
   ].join('');
 
   return render('card-front.png', palette.olive, body,
-    [{ input: mark.data, top: 146, left: Math.round(MID - mark.width / 2) }]);
+    [{ input: mark.data, top: 124, left: Math.round(MID - mark.width / 2) }]);
 }
 
 /* --- Back -----------------------------------------------------------------
@@ -238,7 +243,7 @@ async function back(d, url) {
 
 /* --- Run ------------------------------------------------------------------ */
 async function generate() {
-  for (const f of [brandmark.WORDMARK, brandmark.SOURCE]) {
+  for (const f of [brandmark.LINEART, brandmark.SOURCE]) {
     if (!fs.existsSync(f)) throw new Error(`Missing brand artwork: ${f}`);
   }
   fs.mkdirSync(OUT, { recursive: true });

@@ -179,8 +179,8 @@ const SWATCHES = ['olive', 'tan', 'umber', 'parchment', 'espresso', 'ochre',
 
 /* --- Run ------------------------------------------------------------------ */
 async function generate() {
-  if (!fs.existsSync(brandmark.WORDMARK)) {
-    throw new Error(`Missing brand artwork: ${brandmark.WORDMARK}`);
+  if (!fs.existsSync(brandmark.LINEART)) {
+    throw new Error(`Missing brand artwork: ${brandmark.LINEART}`);
   }
   fs.mkdirSync(OUT, { recursive: true });
 
