@@ -9,6 +9,7 @@ const M = require('../menu');
 const A = require('../allergens');
 const O = require('../orders');
 const P = require('../publish');
+const DISH = require('../dishes');
 const S = require('../signin');
 const mail = require('../mailer');
 const images = require('../images');
@@ -284,6 +285,105 @@ router.post('/week/:id/weekdays', (req, res) => {
   tx();
   if (req.get('X-Draft')) return res.json({ ok: true });
   back(res, req, 'This week\'s days saved.');
+});
+
+/* --- Saved dishes ---------------------------------------------------------
+ * Kept by name, so the list is the length of the repertoire rather than the
+ * length of the history. The acknowledgement is never part of what is kept or
+ * what comes back — see the note at the top of dishes.js.
+ */
+function weekdayDate(week, wd) {
+  const offset = T.WEEKDAYS_MON_FIRST.indexOf(String(wd));
+  if (offset === -1) return null;
+  return T.addDays(week.week_start || T.mondayOnOrAfter(T.todayIn(tz())), offset);
+}
+
+router.post('/week/:id/dish/:wd/save', (req, res) => {
+  const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(Number(req.params.id));
+  if (!week) return back(res, req, null, 'That week no longer exists.');
+  const date = weekdayDate(week, req.params.wd);
+  const day = date && db.prepare(
+    'SELECT * FROM service_days WHERE week_id = ? AND service_date = ?').get(week.id, date);
+
+  if (!day || !day.dish_name.trim()) {
+    return back(res, req, null, 'There is no dish on that day yet. '
+      + 'Fill it in, save the week, then save the dish.');
+  }
+  const what = DISH.save({ ...day, name: day.dish_name });
+  back(res, req, what === 'updated'
+    ? `"${day.dish_name}" was already on your list — it now holds this week's wording and prices.`
+    : `"${day.dish_name}" saved. You can put it on any day from now on.`);
+});
+
+router.post('/week/:id/dish/:wd/use', (req, res) => {
+  const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(Number(req.params.id));
+  if (!week) return back(res, req, null, 'That week no longer exists.');
+  const dish = DISH.byId(req.body.dish_id);
+  if (!dish) return back(res, req, null, 'Pick one of your saved dishes first.');
+  const date = weekdayDate(week, req.params.wd);
+  if (!date) return back(res, req, null, 'That isn\'t a day of the week.');
+
+  // The day may not exist yet — an empty weekday box has no row behind it
+  // until something is entered. Putting a dish on it is something entered.
+  let day = db.prepare(
+    'SELECT * FROM service_days WHERE week_id = ? AND service_date = ?').get(week.id, date);
+  if (!day) {
+    const id = db.prepare('INSERT INTO service_days (week_id, service_date) VALUES (?,?)')
+      .run(week.id, date).lastInsertRowid;
+    day = db.prepare('SELECT * FROM service_days WHERE id = ?').get(id);
+  }
+  if (day.closed) {
+    return back(res, req, null, `${T.fmtDayShort(date, tz())} is marked closed. `
+      + 'Reopen it first, then put a dish on it.');
+  }
+
+  DISH.applyToDay(dish.id, day.id);
+  back(res, req, `"${dish.name}" is on ${T.fmtDayShort(date, tz())}, with its allergen tags. `
+    + 'The review box is unticked — tick it before you publish.');
+});
+
+router.get('/dishes', (req, res) => {
+  const dishes = DISH.all();
+  const body = html`
+    <h1>Saved dishes</h1>
+    <p class="also">Dishes you can put on any day. A week adds its dishes here when it
+      publishes, and the Save button on a day adds one before that. Saving a dish that is
+      already here writes over it, so the list stays the length of what you cook rather
+      than the length of what you have cooked.</p>
+    <div class="notice">
+      <strong>Allergen reviews are not saved with a dish.</strong> Putting one on a day
+      brings back its description, prices, photo and tags, but the review box comes back
+      unticked every time — the tick says you have checked this dish for the menu it is
+      going on, and that is not something a recipe can carry with it.
+    </div>
+    ${dishes.length ? html`
+      <table class="dtable">
+        <thead><tr><th>Dish</th><th>Sizes</th><th>Used</th><th></th></tr></thead>
+        <tbody>${dishes.map((d) => html`<tr>
+          <td data-label="Dish"><strong>${d.name}</strong>
+            ${d.description ? html`<br><span class="variant__label">${d.description}</span>` : ''}</td>
+          <td data-label="Sizes">
+            ${d.full_on && d.full_price != null ? html`${d.full_label} ${money(d.full_price)}` : ''}
+            ${d.single_on && d.single_price != null ? html`<br>${d.single_label} ${money(d.single_price)}` : ''}</td>
+          <td data-label="Used">${d.used_count === 0 ? 'not yet' : `${d.used_count}×`}</td>
+          <td data-label="">${V.confirmForm({
+            action: `/admin/dishes/${d.id}/delete`,
+            buttonLabel: 'Remove',
+            message: `Remove "${d.name}" from your saved dishes? Days already using it keep what they have.`,
+          })}</td>
+        </tr>`)}</tbody>
+      </table>`
+      : html`<div class="card"><p>Nothing saved yet. Publish a week, or use the Save button
+        on a day in This Week, and dishes will collect here.</p></div>`}`;
+
+  res.type('html').send(String(V.shell({ title: 'Saved dishes', body, current: 'dishes' })));
+});
+
+router.post('/dishes/:id/delete', (req, res) => {
+  const dish = DISH.byId(req.params.id);
+  if (!dish) return back(res, req, null, 'That dish is already gone.');
+  DISH.remove(dish.id);
+  back(res, req, `"${dish.name}" removed. Days already using it are untouched.`);
 });
 
 router.post('/week/:id/dates', (req, res) => {

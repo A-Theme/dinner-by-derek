@@ -6,11 +6,13 @@ const T = require('../time');
 const M = require('../menu');
 const A = require('../allergens');
 const P = require('../publish');
+const DISH = require('../dishes');
 const V = require('./admin');
 
 const tz = () => settings.get('timezone', 'America/Toronto');
 
 function weekPage({ week, days, items, hasPrevious }) {
+  const saved = DISH.all();
   const published = week.status === 'published';
   const cutoffHour = settings.getInt('cutoff_hour', 22);
   const cutoffMin = settings.getInt('cutoff_minute', 0);
@@ -100,7 +102,22 @@ function weekPage({ week, days, items, hasPrevious }) {
                 value="${item.closed_note || ''}" placeholder="e.g. Back on Thursday">
             </fieldset>
 
+            <!-- Saved dishes. These controls belong to the day they sit under
+                 but post to their own routes, so they are associated by their form attribute
+                 with the little forms at the foot of the page — the weekday
+                 boxes are one big form and HTML has no nested ones. -->
+            ${saved.length ? html`
+              <div class="dl-row" style="align-items:flex-end;margin-bottom:var(--dbd-sp-3)">
+                <label style="flex:1 1 200px">Put a saved dish here
+                  <select name="dish_id" form="usedish-${wd}">
+                    ${saved.map((s) => html`<option value="${s.id}">${s.name}</option>`)}
+                  </select></label>
+                <button class="btn btn--secondary" type="submit" form="usedish-${wd}">Use it</button>
+              </div>` : ''}
             ${V.itemEditor({ prefix: wd, item, nameLabel: 'Featured dish' })}
+            ${item.dish_name && item.dish_name.trim() ? html`
+              <p><button class="btn btn--secondary" type="submit" form="savedish-${wd}">
+                Save "${item.dish_name}" to my dishes</button></p>` : ''}
             <label for="cap_${wd}">How many this day (both sizes together)</label>
             <input type="number" id="cap_${wd}" name="${wd}_daily_cap" min="0" step="1"
               value="${item.daily_cap == null ? '' : item.daily_cap}"
@@ -110,6 +127,12 @@ function weekPage({ week, days, items, hasPrevious }) {
         <button class="btn btn--primary" type="submit">Save this week's days</button>
         <span class="saveflag" data-saveflag></span>
       </form>
+
+      <!-- The targets of the form attributes above. Empty on purpose: the
+           select and the buttons up in each day carry the values. -->
+      ${T.WEEKDAYS_MON_FIRST.map((wd) => html`
+        <form method="post" action="/admin/week/${week.id}/dish/${wd}/use" id="usedish-${wd}"></form>
+        <form method="post" action="/admin/week/${week.id}/dish/${wd}/save" id="savedish-${wd}"></form>`)}
     </div>
 
     <details class="daycard-edit" style="margin-bottom:var(--dbd-sp-5)">

@@ -31,6 +31,7 @@ ${extraHead || ''}
 <nav class="admin-nav no-print"><ul>
   <li><a href="/admin"${current === 'today' ? ' aria-current="page"' : ''}>Today</a></li>
   <li><a href="/admin/week"${current === 'week' ? ' aria-current="page"' : ''}>This Week</a></li>
+  <li><a href="/admin/dishes"${current === 'dishes' ? ' aria-current="page"' : ''}>Saved Dishes</a></li>
   <li><a href="/admin/other-options"${current === 'other' ? ' aria-current="page"' : ''}>Other Options</a></li>
   <li><a href="/admin/orders"${current === 'orders' ? ' aria-current="page"' : ''}>Orders</a></li>
   <li><a href="/admin/locations"${current === 'locations' ? ' aria-current="page"' : ''}>Locations &amp; Delivery</a></li>

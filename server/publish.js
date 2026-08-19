@@ -21,6 +21,7 @@ const { db, settings } = require('./db');
 const T = require('./time');
 const A = require('./allergens');
 const M = require('./menu');
+const D = require('./dishes');
 
 const tz = () => settings.get('timezone', 'America/Toronto');
 
@@ -78,12 +79,21 @@ function isEmpty(weekId) {
   return !(soup && soup.name.trim()) && !(salad && salad.name.trim());
 }
 
-/** Retire whatever is live and put this week in its place. One live week. */
+/**
+ * Retire whatever is live and put this week in its place. One live week.
+ *
+ * Publishing is also what files the week's dishes in the saved list. A dish
+ * that has gone in front of customers is one worth being able to cook again,
+ * and this is the moment it is finished being edited — earlier than this and
+ * the list fills with half-typed names. Saving by name means the same dish
+ * published a second time refreshes its entry instead of adding another.
+ */
 function publishNow(weekId) {
   db.transaction(() => {
     db.prepare(`UPDATE weeks SET status='retired' WHERE status='published' AND id != ?`).run(weekId);
     db.prepare(`UPDATE weeks SET status='published', published_at=datetime('now'),
       publish_warned_at=NULL WHERE id=?`).run(weekId);
+    D.saveFromWeek(weekId);
   })();
 }
 

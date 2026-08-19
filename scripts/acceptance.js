@@ -597,6 +597,76 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   settings.set('remind_missing_week', '1');
 }
 
+/* --- Saved dishes, and the one thing they must never carry ------------------
+   A dish can be kept and put on another day. The acknowledgement cannot: it
+   says the owner checked THIS dish for the menu it is going on, and a copy of
+   that sentence attached to a different week is how an untagged allergen
+   reaches somebody. Everything else travels so the re-review is one tap. */
+{
+  const DISH = require('../server/dishes');
+  db.prepare('DELETE FROM saved_dishes').run();
+
+  const source = {
+    dish_name: 'Braised Beef', description: 'Slow braised with buttered mash',
+    photo: 'abc123.jpg', halal: 0, allergens: '["milk"]', dismissed: '["gluten"]',
+    ack: 1, ack_of: 'Braised Beef\nSlow braised with buttered mash',
+    full_on: 1, full_label: 'Full size', full_price: 2200, full_cap: 8,
+    single_on: 1, single_label: 'Meal for one', single_price: 1400, single_cap: null,
+  };
+
+  check('a dish is saved', DISH.save({ ...source, name: source.dish_name }), 'saved');
+  check('and saving it again writes over it', DISH.save({ ...source, name: 'Braised Beef' }), 'updated');
+  check('so the list holds one of it', DISH.count(), 1);
+  check('the name match ignores case', DISH.save({ ...source, name: 'braised beef' }), 'updated');
+  check('still one', DISH.count(), 1);
+  check('a dish with no name is not filed', DISH.save({ name: '   ' }), null);
+
+  const saved = DISH.all()[0];
+  check('the description travels', saved.description, 'Slow braised with buttered mash');
+  check('the price travels', saved.full_price, 2200);
+  check('the accepted allergens travel', saved.allergens, '["milk"]');
+  check('the dismissed suggestions travel too', saved.dismissed, '["gluten"]');
+  ok('but the acknowledgement is not even a column', !('ack' in saved) && !('ack_of' in saved));
+
+  const cols = DISH.asDayColumns(saved);
+  check('a day written from it is unacknowledged', cols.ack, 0);
+  check('with nothing recorded as reviewed', cols.ack_of, null);
+  check('and still carries the tags', cols.allergens, '["milk"]');
+
+  // End to end: onto a day that was already reviewed for something else.
+  const wid = db.prepare(`INSERT INTO weeks (slug, title) VALUES ('sd-week','SD')`).run().lastInsertRowid;
+  const did = db.prepare(`INSERT INTO service_days
+    (week_id, service_date, dish_name, description, ack, ack_of)
+    VALUES (?,?,?,?,1,?)`)
+    .run(wid, '2026-09-04', 'Something Else', 'and its description',
+      'Something Else\nand its description').lastInsertRowid;
+
+  DISH.applyToDay(saved.id, did);
+  const day = db.prepare('SELECT * FROM service_days WHERE id = ?').get(did);
+  check('the dish lands on the day', day.dish_name, 'Braised Beef');
+  check('with its price', day.full_price, 2200);
+  check('and the review the day used to hold is cleared', day.ack, 0);
+  check('including what it was given against', day.ack_of, null);
+  ok('so the day cannot publish until it is reviewed again',
+    !A.reviewState(day).ok && A.reviewState(day).reason === 'not_acknowledged');
+  check('and the dish counts a use', DISH.byId(saved.id).used_count, 1);
+
+  // Publishing files the week's dishes without needing to be asked.
+  db.prepare('DELETE FROM saved_dishes').run();
+  db.prepare(`INSERT INTO service_days (week_id, service_date, dish_name, closed)
+    VALUES (?,?,?,0)`).run(wid, '2026-09-05', 'Chicken Pie');
+  db.prepare(`INSERT INTO service_days (week_id, service_date, dish_name, closed)
+    VALUES (?,?,?,1)`).run(wid, '2026-09-06', 'Never Cooked');
+  check('publishing keeps the dishes that ran', DISH.saveFromWeek(wid), 2);
+  const names = DISH.all().map((d) => d.name).sort();
+  check('and skips the closed day', names, ['Braised Beef', 'Chicken Pie']);
+
+  ok('a saved dish can be removed', DISH.remove(DISH.all()[0].id));
+  db.prepare('DELETE FROM saved_dishes').run();
+  db.prepare('DELETE FROM service_days WHERE week_id = ?').run(wid);
+  db.prepare('DELETE FROM weeks WHERE id = ?').run(wid);
+}
+
 /* --- Words the matcher cannot split ----------------------------------------
    The inflection rule tolerates a trailing plural and a past participle, so
    "buttered" finds butter. It cannot see a word fused to the next one, and

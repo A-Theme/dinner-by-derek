@@ -232,6 +232,43 @@ CREATE TABLE IF NOT EXISTS oauth_states (
   created_at INTEGER NOT NULL
 );
 
+/* Dishes worth cooking again.
+ *
+ * A featured dish belongs to one day and dies with the week. This is the
+ * catalogue it can be copied out of — name, description, prices, photo and
+ * the allergen answers already given for it.
+ *
+ * There is deliberately NO ack or ack_of column. The acknowledgement is a
+ * statement about a dish going on a menu this week, not a property of the
+ * recipe, so it cannot be stored here and cannot travel with a copy. Reusing
+ * a dish brings back everything except the tick.
+ *
+ * One row per name: saving a dish already on the list writes over it rather
+ * than growing a second copy, so publishing the same thing every fortnight
+ * keeps the list the length of the repertoire rather than the length of the
+ * history. */
+CREATE TABLE IF NOT EXISTS saved_dishes (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT NOT NULL,
+  description   TEXT NOT NULL DEFAULT '',
+  photo         TEXT,
+  halal         INTEGER NOT NULL DEFAULT 0,
+  allergens     TEXT NOT NULL DEFAULT '[]',
+  dismissed     TEXT NOT NULL DEFAULT '[]',
+  full_on       INTEGER NOT NULL DEFAULT 1,
+  full_label    TEXT NOT NULL DEFAULT 'Full size',
+  full_price    INTEGER,
+  full_cap      INTEGER,
+  single_on     INTEGER NOT NULL DEFAULT 0,
+  single_label  TEXT NOT NULL DEFAULT 'Meal for one',
+  single_price  INTEGER,
+  single_cap    INTEGER,
+  saved_at      TEXT NOT NULL DEFAULT (datetime('now')),
+  used_count    INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_dishes_name
+  ON saved_dishes(name COLLATE NOCASE);
+
 /* Every refused sign-in. The rate limiter already slows a run of guesses down,
    but it forgets: it lives in memory, it empties on restart, and it never told
    anyone. This is the record that survives, so the dashboard can say a thing
