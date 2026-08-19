@@ -2,7 +2,6 @@
 const express = require('express');
 const crypto = require('crypto');
 const { db, settings } = require('../db');
-const config = require('../config');
 const auth = require('../auth');
 const T = require('../time');
 const M = require('../menu');
@@ -25,14 +24,7 @@ const tz = () => settings.get('timezone', 'America/Toronto');
 /* Nothing in the dashboard is ever cached. */
 router.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 
-function back(res, req, ok, err) {
-  const base = req.get('referer') || '/admin';
-  const u = new URL(base, config.baseUrl);
-  u.searchParams.delete('ok'); u.searchParams.delete('err');
-  if (ok) u.searchParams.set('ok', ok);
-  if (err) u.searchParams.set('err', err);
-  res.redirect(303, u.pathname + u.search);
-}
+const { back } = require('./back');
 
 /* --- Auth ---------------------------------------------------------------- */
 router.get('/login', (req, res) => {

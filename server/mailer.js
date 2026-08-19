@@ -32,8 +32,14 @@ function tx() {
 }
 
 const money = (c) => `$${(Number(c || 0) / 100).toFixed(2)}`;
+/* Quotes as well as angle brackets. Every value this is wrapped around today
+ * lands in text, where the quotes make no difference — but the name says
+ * "escape", the next person to reach for it will put something in an
+ * attribute, and an escaper that half-works is worse than one that looks
+ * like it doesn't. */
 const esc = (s) => String(s == null ? '' : s)
-  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 function shell(title, inner) {
   return `<!doctype html><html><body style="margin:0;padding:24px;background:${palette.parchment};

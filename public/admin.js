@@ -123,7 +123,19 @@
         d.pending.forEach(function (p) {
           var w = document.createElement('span');
           w.className = 'sugg';
-          w.innerHTML = '<span>' + p.allergen + ' <span style="opacity:.7">(' + p.terms.join(', ') + ')</span></span>';
+          /* Built as nodes, not as a string. The allergen and its matched
+             terms come from the dictionary, which the owner edits and a
+             restored backup can rewrite — so they are content, and content
+             goes in through textContent. The page's CSP would stop a script
+             either way; markup that rearranges the editor it sits in is
+             reason enough on its own. */
+          var chip = document.createElement('span');
+          chip.textContent = p.allergen + ' ';
+          var terms = document.createElement('span');
+          terms.style.opacity = '.7';
+          terms.textContent = '(' + p.terms.join(', ') + ')';
+          chip.appendChild(terms);
+          w.appendChild(chip);
           var yes = document.createElement('button');
           yes.type = 'button'; yes.dataset.accept = '1'; yes.textContent = '✓';
           yes.setAttribute('aria-label', 'Accept ' + p.allergen);

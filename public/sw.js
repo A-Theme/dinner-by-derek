@@ -6,12 +6,19 @@
  * cached allergen tag would be a food-safety failure, so no HTML document and
  * no /api response is ever read from cache.
  *
- * Bump CACHE_VERSION on any shell change. The old cache is deleted on
- * activate, and clients are claimed immediately, so an owner who changes a
- * price never has customers pinned to the previous build.
+ * CACHE_VERSION is the fingerprint of the shell files themselves, and the
+ * acceptance suite recomputes it. Change one of them without changing this
+ * and the suite fails with the string to paste in — which is the whole
+ * point: the old rule was "remember to bump it", and nothing anywhere said
+ * a word when you did not. A stale version means returning visitors keep
+ * the previous build, so an owner who fixes a price can watch customers go
+ * on reading the old one.
+ *
+ * The old cache is deleted on activate and clients are claimed immediately,
+ * so nobody stays on the previous build once a new one is live.
  */
 
-var CACHE_VERSION = 'dbd-shell-v3';
+var CACHE_VERSION = 'dbd-shell-890a4e69e9';
 var SHELL = [
   '/theme.css',
   '/app.css',

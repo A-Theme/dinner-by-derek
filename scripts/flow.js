@@ -1120,6 +1120,117 @@ const PAST_DATE = T.addDays(today, -2);
     check("and the price in the table above matches",
       /data-label="Prices">([^<]*)/.exec(page.text.split(item.name)[1] || "") ? true : true, true);
   }
+  /* --- A graphics set named by the URL ------------------------------------
+   * The route looked the name up with SETS[req.params.set]. Every object
+   * inherits __proto__, constructor and toString, so those three answered as
+   * a set, walked past the `if (!set)` guard, and arrived at the generator
+   * with no key — which then complained about "undefined" to an owner who had
+   * tapped a button. Checked here rather than only on the helper, because the
+   * route is where the name comes off the wire.
+   */
+  {
+    const refused = async (name) => {
+      const r = await POST(`/admin/graphics/${name}`, {});
+      const q = new URLSearchParams(String(r.location || '').split('?')[1] || '');
+      return q.get('err') || '';
+    };
+    for (const name of ['__proto__', 'constructor', 'toString', 'valueOf', 'nope']) {
+      const err = await refused(name);
+      ok(`"${name}" is not something this app draws`,
+        err.includes("isn't something this app draws"), `${name}: ${err}`);
+    }
+  }
+
+  /* --- Where "back" goes when the browser names somewhere strange ---------
+   * back() takes its destination from the Referer header, which is the
+   * browser's word and never was checked. It was not an open redirect — only
+   * the path and query survive, so another host reduces to a path on this one
+   * — but "javascript:alert(1)" parses to the relative path `alert(1)`, and
+   * the owner who had just saved a form landed on a 404.
+   */
+  {
+    const savedTo = async (referer) => {
+      const r = await POST('/admin/settings/capacity', { featured_daily_cap: '25' },
+        { headers: referer === null ? {} : { Referer: referer } });
+      return String(r.location || '');
+    };
+
+    let to = await savedTo(`${BASE}/admin/settings`);
+    ok('an ordinary referer sends you back to the page you were on',
+      to.startsWith('/admin/settings'), to);
+    ok('and carries the confirmation', to.includes('ok='), to);
+
+    to = await savedTo('javascript:alert(1)');
+    ok('a referer that is not a page lands on the dashboard, not a 404',
+      to.startsWith('/admin?') || to === '/admin', to);
+    ok('and still carries the confirmation', to.includes('ok='), to);
+
+    /* The rule is about the PATH, not the origin. Only the path and query ever
+     * survive, so a foreign host reduces to one of our own admin pages, which
+     * is a harmless place to land. Judging the origin instead would break the
+     * ordinary case here: BASE_URL is frequently not the address the owner
+     * actually typed — a phone on the LAN, a bare IP — and every save would
+     * bounce to the dashboard. */
+    to = await savedTo('https://example.com/admin/settings');
+    ok('a foreign host still only chooses among our own admin pages',
+      to.startsWith('/admin/settings'), to);
+
+    to = await savedTo(`${BASE}/w/some-week`);
+    ok('nor does a customer page, which no admin form is posted from',
+      to.startsWith('/admin?') || to === '/admin', to);
+
+    to = await savedTo(null);
+    ok('and no referer at all is the dashboard too',
+      to.startsWith('/admin?') || to === '/admin', to);
+  }
+
+  /* --- Two orders drawing the same reference ------------------------------
+   * ref is four random bytes under a UNIQUE column, so a collision arrived as
+   * a constraint error thrown at a customer whose order was perfectly fine.
+   * Forced here by making the next four-byte draw return one already taken.
+   */
+  {
+    const O2 = require('../server/orders');
+    const crypto = require('crypto');
+    const live = db.prepare(`SELECT w.slug, d.id AS day_id, d.service_date
+      FROM weeks w JOIN service_days d ON d.week_id = w.id
+      WHERE w.status = 'published' AND d.closed = 0 ORDER BY d.service_date LIMIT 1`).get();
+    const loc = db.prepare('SELECT id FROM locations WHERE active = 1 LIMIT 1').get();
+    const taken = db.prepare('SELECT ref FROM orders ORDER BY id LIMIT 1').get();
+    ok('there is a published day and an existing order to collide with',
+      !!live && !!loc && !!taken);
+
+    const realRandom = crypto.randomBytes;
+    let forced = 1;
+    // Four bytes is the reference and nothing else on this path: photos draw
+    // eight, the OAuth state draws thirty-two.
+    crypto.randomBytes = function (n) {
+      if (n === 4 && forced > 0) { forced--; return Buffer.from(taken.ref, 'hex'); }
+      return realRandom.apply(crypto, arguments);
+    };
+
+    let placed = null, threw = null;
+    try {
+      placed = O2.create({
+        week: live.slug, date: live.service_date,
+        lines: JSON.stringify([{ key: `service_days:${live.day_id}`, variant: 'full', qty: 1 }]),
+        name: 'Collision Test', phone: '519-555-0199', email: '',
+        payment_method: 'cash', method: 'pickup', location_id: loc.id,
+      });
+    } catch (e) {
+      threw = e;
+    } finally {
+      crypto.randomBytes = realRandom;
+    }
+
+    ok('an order that draws a reference already taken is still placed',
+      !threw, threw && threw.message);
+    ok('and is given a different one',
+      !!placed && placed.order.ref !== taken.ref, placed && placed.order.ref);
+    check('leaving the order that had it first alone',
+      db.prepare('SELECT COUNT(*) n FROM orders WHERE ref = ?').get(taken.ref).n, 1);
+  }
+
   /* --- Signing in against a HASHED password, over HTTP --------------------
    * The suite runs on a plaintext ADMIN_PASSWORD, so the branch a real install
    * uses — scrypt against ADMIN_PASSWORD_HASH — was never exercised through a

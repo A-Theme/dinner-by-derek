@@ -19,13 +19,7 @@ const tz = () => settings.get('timezone', 'America/Toronto');
 router.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 router.use(auth.required);
 
-function back(res, req, ok, err) {
-  const u = new URL(req.get('referer') || '/admin', config.baseUrl);
-  u.searchParams.delete('ok'); u.searchParams.delete('err');
-  if (ok) u.searchParams.set('ok', ok);
-  if (err) u.searchParams.set('err', err);
-  res.redirect(303, u.pathname + u.search);
-}
+const { back } = require('./back');
 
 /* ======================= OTHER OPTIONS (level 3) ======================== */
 router.get('/other-options', (req, res) => {
@@ -219,8 +213,8 @@ router.get('/orders', (req, res) => {
   if (req.query.status) { where.push('status = ?'); args.push(req.query.status); }
   if (req.query.location) { where.push('location_id = ?'); args.push(Number(req.query.location)); }
   if (req.query.q) {
-    where.push('(name LIKE ? OR phone LIKE ?)');
-    args.push(`%${req.query.q}%`, `%${req.query.q}%`);
+    where.push("(name LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\')");
+    args.push(X.likeContains(req.query.q), X.likeContains(req.query.q));
   }
   const sql = `SELECT * FROM orders ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
     ORDER BY CASE status WHEN 'late_request' THEN 0 ELSE 1 END, service_date DESC, id DESC LIMIT 400`;

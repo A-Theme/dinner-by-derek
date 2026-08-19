@@ -51,6 +51,19 @@ function filename(kind, date, ext) {
 
 const money = (c) => (Number(c || 0) / 100).toFixed(2);
 
+/**
+ * A search box holds words, not patterns.
+ *
+ * LIKE reads % as "anything" and _ as "any one character", so a customer
+ * called O_Brien matched every four-letter O-something-Brien on the list and
+ * a bare % matched all of them. Escaped, and declared with ESCAPE, so what
+ * the owner typed is what gets looked for. The backslash is replaced first,
+ * or it would go on to escape the escapes.
+ */
+function likeContains(q) {
+  return `%${String(q).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
 function ordersCsv(filters = {}) {
   const where = [];
   const args = [];
@@ -58,7 +71,10 @@ function ordersCsv(filters = {}) {
   if (filters.method) { where.push('o.method = ?'); args.push(filters.method); }
   if (filters.status) { where.push('o.status = ?'); args.push(filters.status); }
   if (filters.location) { where.push('o.location_id = ?'); args.push(Number(filters.location)); }
-  if (filters.q) { where.push('(o.name LIKE ? OR o.phone LIKE ?)'); args.push(`%${filters.q}%`, `%${filters.q}%`); }
+  if (filters.q) {
+    where.push("(o.name LIKE ? ESCAPE '\\' OR o.phone LIKE ? ESCAPE '\\')");
+    args.push(likeContains(filters.q), likeContains(filters.q));
+  }
 
   const rows = db.prepare(`
     SELECT o.*, l.source_level, l.subcategory, l.item_name, l.variant_label,
@@ -240,4 +256,4 @@ function restore(json) {
   };
 }
 
-module.exports = { ordersCsv, contactsCsv, backup, restore, filename, csv, money };
+module.exports = { ordersCsv, contactsCsv, backup, restore, filename, csv, money, likeContains };

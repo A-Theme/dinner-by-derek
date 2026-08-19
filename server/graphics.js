@@ -89,6 +89,20 @@ const SHIPPED = {
  * case, not the adversarial one. The second tap is told what is already
  * happening instead of starting a second pass over the same files.
  */
+/**
+ * The set by name, or null.
+ *
+ * `SETS[key]` looked right and answered for names nobody defined: every object
+ * inherits __proto__, constructor and toString, so those three walked past an
+ * `if (!set)` guard and arrived as a set with no key and no title. Nothing
+ * broke — the route is behind the session and the error text is odd rather
+ * than dangerous — but a lookup that says yes to a word it has never heard of
+ * is worth not having.
+ */
+function get(key) {
+  return Object.prototype.hasOwnProperty.call(SETS, String(key)) ? SETS[key] : null;
+}
+
 let running = null;
 
 function busy() {
@@ -96,7 +110,7 @@ function busy() {
 }
 
 async function run(key, opts) {
-  const set = SETS[key];
+  const set = get(key);
   if (!set) throw new Error(`Unknown graphics set: ${key}`);
   if (running) {
     const err = new Error(`${SETS[running.key].title} is being generated right now. Give it a moment.`);
@@ -123,7 +137,7 @@ async function run(key, opts) {
  * button is broken.
  */
 function list(key) {
-  const set = SETS[key];
+  const set = get(key);
   // A set whose filenames are not known ahead of time reads them off disk.
   const entries = set.listFiles ? set.listFiles() : set.files;
   return entries.map(([name, label, size]) => {
@@ -145,4 +159,4 @@ function list(key) {
   });
 }
 
-module.exports = { SETS, run, list, busy, dirs: { social: social.OUT, card: card.OUT } };
+module.exports = { SETS, get, run, list, busy, dirs: { social: social.OUT, card: card.OUT } };

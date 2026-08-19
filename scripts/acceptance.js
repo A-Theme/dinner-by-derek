@@ -1074,6 +1074,84 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     r.subject.service_date, D(2));
   ok('which is not tonight either', !r.tonight);
 }
+
+/* --- The shell cache carries its own version --------------------------------
+   The rule used to be "bump CACHE_VERSION when you change a shell file", kept
+   by memory alone — and a missed bump is silent: returning visitors keep the
+   previous build, so an owner who fixes a price watches customers go on
+   reading the old one. Nothing failed, nothing said anything.
+
+   The version IS the fingerprint now, and this recomputes it. When it fails,
+   the string it prints is the one to paste into sw.js. */
+{
+  const crypto = require('crypto');
+  const pub = path.join(__dirname, '..', 'public');
+  // The files a browser actually caches by URL. /offline and the manifest are
+  // rendered by routes, so they change with the code rather than with a file.
+  const SHELL_FILES = ['theme.css', 'app.css', 'app.js', 'order.js',
+    'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
+  const h = crypto.createHash('sha256');
+  for (const n of SHELL_FILES) h.update(n).update(fs.readFileSync(path.join(pub, n)));
+  const expected = `dbd-shell-${h.digest('hex').slice(0, 10)}`;
+
+  const sw = fs.readFileSync(path.join(pub, 'sw.js'), 'utf8');
+  const found = (/var CACHE_VERSION = '([^']+)'/.exec(sw) || [])[1];
+  check(`the service worker names the shell it is caching (paste ${expected} into sw.js if this fails)`,
+    found, expected);
+
+  const listed = [...sw.matchAll(/^\s*'(\/[^']+)',/gm)].map((m) => m[1]);
+  for (const n of SHELL_FILES) {
+    ok(`${n} is in the shell list it was fingerprinted from`, listed.includes(`/${n}`), listed.join(' '));
+  }
+  ok('and the dashboard is not cached at any version',
+    !listed.includes('/admin.js') && !listed.includes('/admin.css'));
+}
+
+/* --- Odds and ends the audit turned up ------------------------------------ */
+{
+  /* A graphics set is looked up by a name off the URL. Every object inherits
+     __proto__, constructor and toString, so a plain SETS[key] answered for all
+     three and they walked past the route's `if (!set)` guard. */
+  const G = require('../server/graphics');
+  ok('a real graphics set is found', !!G.get('social') && !!G.get('card'));
+  for (const k of ['__proto__', 'constructor', 'toString', 'valueOf', 'nope']) {
+    ok(`"${k}" is not a graphics set`, G.get(k) === null);
+  }
+
+  /* A search box holds words, not patterns. */
+  const X2 = require('../server/exports');
+  check('an ordinary search is wrapped for a contains match',
+    X2.likeContains('Smith'), '%Smith%');
+  check('an underscore is escaped, not left as "any character"',
+    X2.likeContains('O_Brien'), '%O\\_Brien%');
+  check('and a percent is escaped, not left as "everything"',
+    X2.likeContains('100%'), '%100\\%%');
+  check('the escape character escapes itself',
+    X2.likeContains('a' + String.fromCharCode(92) + 'b'),
+    '%a' + String.fromCharCode(92, 92) + 'b%');
+
+  /* The mail escaper is used on text today, but it is named "escape". */
+  const mailerSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'mailer.js'), 'utf8');
+  ok('the mail escaper handles double quotes', mailerSrc.includes('&quot;'));
+  ok('and single quotes', mailerSrc.includes('&#39;'));
+
+  /* The allergen chips are built from dictionary terms, which the owner
+     edits and a restored backup can rewrite. There is no browser here to
+     drive, so this pins the construction: nodes and textContent, not a
+     string glued together and assigned to innerHTML. */
+  const adminJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.js'), 'utf8');
+  ok('the suggestion chip is built from nodes',
+    adminJs.includes('terms.textContent') && adminJs.includes('chip.textContent'));
+  ok('and no dictionary term is glued into innerHTML',
+    !/innerHTML\s*=\s*.*p\.(allergen|terms)/.test(adminJs));
+
+  /* One back(), not three copies drifting apart. */
+  for (const r of ['admin.js', 'admin2.js', 'admin3.js']) {
+    const src = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', r), 'utf8');
+    ok(`${r} uses the shared back()`, src.includes("require('./back')"));
+    ok(`${r} does not keep its own copy`, !src.includes('function back(res, req'));
+  }
+}
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {

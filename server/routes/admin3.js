@@ -36,13 +36,7 @@ const noStore = (req, res, next) => { res.set('Cache-Control', 'no-store'); next
 strict.use(noStore);
 router.use(noStore);
 
-function back(res, req, ok, err) {
-  const u = new URL(req.get('referer') || '/admin', config.baseUrl);
-  u.searchParams.delete('ok'); u.searchParams.delete('err');
-  if (ok) u.searchParams.set('ok', ok);
-  if (err) u.searchParams.set('err', err);
-  res.redirect(303, u.pathname + u.search);
-}
+const { back } = require('./back');
 
 /* ============================== EXPORTS =================================
    Personal data lives behind requiredStrict: a 401, never a redirect, and
@@ -304,7 +298,7 @@ router.get('/graphics', (req, res) => {
 });
 
 router.post('/graphics/:set', async (req, res) => {
-  const set = G.SETS[req.params.set];
+  const set = G.get(req.params.set);
   if (!set) return back(res, req, null, 'That isn\'t something this app draws.');
 
   const opts = set.sizes ? {

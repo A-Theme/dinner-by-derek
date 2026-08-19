@@ -265,13 +265,25 @@ function create(payload) {
   const { order: o, lines } = quote(payload);
   o.submission_key = key;
 
-  /* --- Persist --------------------------------------------------------- */
-  const tx = db.transaction(() => {
-    const cols = Object.keys(o);
+  /* --- Persist ---------------------------------------------------------
+   * The reference is four random bytes and the column is UNIQUE, so two
+   * orders drawing the same eight characters is a constraint error — and it
+   * would have been thrown at a customer as "something went wrong" on an
+   * order that was perfectly fine. Rare is not never: eight hex characters
+   * collide at even odds somewhere around sixty-five thousand orders, and
+   * the failure lands on whoever happens to be second.
+   *
+   * Redrawn and retried instead. Only for the reference: the submission key
+   * has its own unique index and a clash there is the double-tap this whole
+   * function exists to absorb, which is handled above and must never be
+   * retried into a second order.
+   */
+  const insert = db.transaction((order) => {
+    const cols = Object.keys(order);
     const stmt = db.prepare(
       `INSERT INTO orders (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`
     );
-    const id = stmt.run(...cols.map((c) => o[c])).lastInsertRowid;
+    const id = stmt.run(...cols.map((c) => order[c])).lastInsertRowid;
     const ins = db.prepare(`INSERT INTO order_lines
       (order_id, source_level, ref_table, ref_id, item_name, subcategory,
        variant, variant_label, unit_price, qty)
@@ -283,7 +295,19 @@ function create(payload) {
     return id;
   });
 
-  const id = tx();
+  const isRefClash = (e) => String(e && e.message).includes('orders.ref');
+
+  let id = null;
+  for (let attempt = 0; id === null; attempt++) {
+    try {
+      id = insert(o);
+    } catch (e) {
+      // Five draws that all collide is not a coincidence any more; let it
+      // through rather than spinning, so the log names something real.
+      if (!isRefClash(e) || attempt >= 4) throw e;
+      o.ref = ref();
+    }
+  }
   return { order: db.prepare('SELECT * FROM orders WHERE id = ?').get(id), lines, repeat: false };
 }
 
