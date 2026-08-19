@@ -73,9 +73,22 @@ strict.post('/restore', auth.requiredStrict, (req, res) => {
   }
   try {
     const n = X.restore(req.uploadBuffer ? req.uploadBuffer.toString('utf8') : req.body.backup);
-    back(res, req, `Restored ${n.weeks} weeks, ${n.orders} orders and ${n.standing} standing items.`);
+    // A skipped setting is worth a sentence. It means the file held a value
+    // that would have broken the app — an unusable timezone throws out of
+    // every date on every page — so the one already stored was kept instead,
+    // and the owner should know which to go and check.
+    const kept = n.skipped && n.skipped.length
+      ? ` ${n.skipped.length} setting${n.skipped.length === 1 ? '' : 's'} in the file `
+        + `couldn't be used and ${n.skipped.length === 1 ? 'was' : 'were'} left as ${
+          n.skipped.length === 1 ? 'it is' : 'they are'}: ${n.skipped.join(', ')}.`
+      : '';
+    back(res, req, `Restored ${n.weeks} weeks, ${n.orders} orders and `
+      + `${n.standing} standing items.${kept}`);
   } catch (e) {
-    back(res, req, null, 'That file couldn\'t be restored. Check it\'s the backup you downloaded from here.');
+    // The message names what was wrong with the file when the file was the
+    // problem, because "check it's the right backup" is no help to someone
+    // holding the only copy they have.
+    back(res, req, null, `That file couldn't be restored. ${e.message}`);
   }
 });
 

@@ -123,6 +123,45 @@ function backup() {
   }, null, 2);
 }
 
+/** The columns a table actually has, so a file cannot invent one. */
+function columnsOf(table) {
+  return new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+}
+
+/** A time zone Intl will accept. An unusable one throws from inside every
+ *  date the app renders, which is the whole site rather than one page. */
+function usableTimezone(v) {
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: String(v) });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function clampInt(v, lo, hi) {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n >= lo && n <= hi ? String(n) : null;
+}
+
+/**
+ * Settings a bad value can break the app with, and what a good one looks like.
+ *
+ * Everything else in the file is stored as written — a wrong business name is
+ * a typo, not an outage. These are the ones where the app stops rendering:
+ * a nonsense timezone throws out of Intl on every date on every page, and the
+ * clock values feed the cutoff. A value that fails is skipped and named, and
+ * whatever was already stored stays, because a restore that half-works and
+ * says so beats one that takes the menu down silently.
+ */
+const SETTING_GUARDS = {
+  timezone: (v) => (usableTimezone(v) ? String(v) : null),
+  cutoff_hour: (v) => clampInt(v, 0, 23),
+  cutoff_minute: (v) => clampInt(v, 0, 59),
+  late_cutoff_hour: (v) => clampInt(v, 0, 23),
+  late_cutoff_minute: (v) => clampInt(v, 0, 59),
+};
+
 function restore(json) {
   const data = JSON.parse(json);
   if (data.format !== 'dinner-by-derek-backup') {
@@ -131,11 +170,30 @@ function restore(json) {
   const tables = ['order_lines', 'orders', 'service_days', 'week_items', 'weeks',
     'standing_items', 'locations', 'fsas', 'zones', 'allergen_terms'];
 
+  const skipped = [];
+
   const tx = db.transaction(() => {
     for (const name of tables) db.prepare(`DELETE FROM ${name}`).run();
     const insertAll = (name, rows) => {
-      if (!rows || !rows.length) return;
+      if (!Array.isArray(rows) || !rows.length) return;
+      if (rows.some((r) => !r || typeof r !== 'object' || Array.isArray(r))) {
+        throw new Error(`The "${name}" section of that backup isn't a list of rows.`);
+      }
+      /* Column names come out of the file, and until they are checked against
+       * the table they are a string this code is about to put inside a SQL
+       * statement. Anything the table doesn't have stops the restore by name
+       * rather than being dropped quietly — a backup carrying columns this
+       * app has never heard of is either from a newer version or has been
+       * edited, and silently discarding part of a restore is worse than
+       * refusing the whole of it. */
+      const known = columnsOf(name);
       const cols = Object.keys(rows[0]);
+      const unknown = cols.filter((c) => !known.has(c));
+      if (unknown.length) {
+        throw new Error(`The "${name}" rows in that backup have a column this app `
+          + `doesn't have: ${unknown[0]}. It may have come from a newer version.`);
+      }
+      if (!cols.length) return;
       const stmt = db.prepare(
         `INSERT INTO ${name} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`);
       for (const r of rows) stmt.run(...cols.map((c) => r[c]));
@@ -150,13 +208,24 @@ function restore(json) {
     insertAll('orders', data.orders);
     insertAll('order_lines', data.order_lines);
     insertAll('allergen_terms', data.allergen_terms);
-    for (const [k, v] of Object.entries(data.settings || {})) settings.set(k, v);
+    const incoming = data.settings;
+    if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+      for (const [k, v] of Object.entries(incoming)) {
+        if (v === null || typeof v === 'object') { skipped.push(k); continue; }
+        const guard = SETTING_GUARDS[k];
+        if (!guard) { settings.set(k, v); continue; }
+        const clean = guard(v);
+        if (clean === null) skipped.push(k);
+        else settings.set(k, clean);
+      }
+    }
   });
   tx();
   return {
     weeks: (data.weeks || []).length,
     orders: (data.orders || []).length,
     standing: (data.standing_items || []).length,
+    skipped,
   };
 }
 

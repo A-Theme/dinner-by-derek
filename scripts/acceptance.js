@@ -917,6 +917,74 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('a quiet hour is not worth an email', !S.shouldAlert(now));
 }
 
+/* --- Restoring a backup ----------------------------------------------------
+   The one route that writes to every table at once, from a file. It runs last
+   here because it empties those tables on its way in — and it puts everything
+   back at the end, which is the round trip it exists to do.
+
+   Two things it must not do: build SQL out of names the file chose, and store
+   a value that stops the app rendering. */
+{
+  const X = require('../server/exports');
+  const { settings } = require('../server/db');
+  const good = X.backup();                       // the state everything above left
+
+  const wrap = (extra) => JSON.stringify({ format: 'dinner-by-derek-backup', ...extra });
+  const refuses = (payload, label) => {
+    let msg = null;
+    try { X.restore(payload); } catch (e) { msg = e.message; }
+    ok(label, msg !== null, 'it was accepted');
+    return msg || '';
+  };
+
+  check('a file that is not a backup is refused',
+    (() => { try { X.restore('{"format":"something-else"}'); return null; }
+      catch (e) { return e.message; } })(),
+    'That file isn\'t a Dinner By Derek backup.');
+
+  // A column name is a string from the file that ends up inside a statement.
+  const injected = refuses(
+    wrap({ weeks: [{ 'id, slug) SELECT 99, 99 -- ': 1 }] }),
+    'a column the table does not have stops the restore');
+  ok('and the refusal names it', injected.includes('SELECT 99'));
+  ok('and says where it might have come from', /newer version/.test(injected));
+
+  refuses(wrap({ weeks: [{ id: 1, slug: 'a', title: 'T', nonsense_column: 1 }] }),
+    'an unknown column stops it even when the others are real');
+  refuses(wrap({ weeks: ['not a row'] }), 'a section that is not rows is refused');
+
+  // Nothing above may have gone through: the whole restore is one transaction.
+  ok('a refused restore leaves the dictionary where it was',
+    db.prepare('SELECT COUNT(*) n FROM allergen_terms').get().n > 300);
+
+  // Settings that would take the app down are skipped, not stored.
+  const before = settings.get('timezone');
+  const out = X.restore(wrap({
+    settings: {
+      timezone: 'Not/AZone', cutoff_hour: '99', late_cutoff_minute: 'x',
+      business_name: 'Restored By Derek',
+    },
+  }));
+  check('the unusable timezone is kept out', settings.get('timezone'), before);
+  check('an hour outside the clock is kept out', settings.getInt('cutoff_hour', 22), 22);
+  check('and so is a minute that is not one', settings.getInt('late_cutoff_minute', 0), 0);
+  check('an ordinary setting still lands', settings.get('business_name'), 'Restored By Derek');
+  check('and the caller is told which were skipped', out.skipped.sort(),
+    ['cutoff_hour', 'late_cutoff_minute', 'timezone']);
+
+  // The app still renders dates, which is what all of that was protecting.
+  let threw = null;
+  try { T.todayIn(settings.get('timezone')); } catch (e) { threw = e; }
+  ok('so the clock still works after a hostile file', !threw, threw && threw.message);
+
+  // And the round trip that is the point of the feature.
+  const back = X.restore(good);
+  check('a real backup restores', back.skipped.length, 0);
+  ok('with the dictionary intact',
+    db.prepare('SELECT COUNT(*) n FROM allergen_terms').get().n > 300);
+  check('and the timezone as it was', settings.get('timezone'), before);
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {
