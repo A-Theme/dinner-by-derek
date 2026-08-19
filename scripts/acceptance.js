@@ -1246,6 +1246,33 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('auth answers an autosave with 401 rather than the login page',
     /req\.get\(\'X-Draft\'\)/.test(authJs));
 }
+
+/* --- A broken section must not take the rest of the page with it -----------
+   admin.js runs every section at load, in order, in one function. A throw
+   anywhere in it used to stop everything after that point from being wired up:
+   a mistake in the photo uploader would silently take autosave with it, and
+   the page would look completely normal with half its behaviour missing. That
+   is the shape of both failures this dashboard has already had — a control
+   that does nothing, quietly.
+
+   Verified in a browser by sabotaging one section and watching the rest come
+   up regardless, named on screen and in the console. */
+{
+  const adminJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.js'), 'utf8');
+  ok('there is a runner that confines a failure to one section',
+    /function section\(name, run\)/.test(adminJs));
+  ok('it catches rather than letting the throw escape', /\}\s*catch \(e\) \{/.test(adminJs));
+  ok('it names the section in the console', /console\.error\(\"\[admin\] \" \+ name/.test(adminJs));
+  ok('and says so on screen, where the owner is looking',
+    /toast\(name \+ \" isn/.test(adminJs));
+
+  const names = [...adminJs.matchAll(/^  section\(\"([^\"]+)\"/gm)].map((m) => m[1]);
+  check('every part of the dashboard runs inside one', names.length, 7);
+  ok('including the two that have already broken once',
+    names.includes('The confirmation step') && names.includes('Autosave'), names.join(' | '));
+  ok('and nothing is left outside them',
+    !/^  document\.querySelectorAll/m.test(adminJs), 'a top-level querySelectorAll is unguarded');
+}
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {
