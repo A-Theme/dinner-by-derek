@@ -14,12 +14,50 @@ function req(name) {
   return v;
 }
 
+/**
+ * The password is kept either hashed (ADMIN_PASSWORD_HASH, written by
+ * `npm run password`) or in the clear (ADMIN_PASSWORD). One or the other is
+ * required; the hash wins when both are present.
+ */
+const adminPasswordHash = (process.env.ADMIN_PASSWORD_HASH || '').trim();
+const adminPassword = adminPasswordHash
+  ? (process.env.ADMIN_PASSWORD || '')
+  : req('ADMIN_PASSWORD');
+
+const baseUrl = (process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`)
+  .replace(/\/$/, '');
+
+/**
+ * How many proxies stand in front of us, and so how far to believe
+ * X-Forwarded-For. Off unless stated, because `req.ip` is what the login
+ * limiter counts against: trusting a header nobody is rewriting lets a caller
+ * name a fresh address on every request and never reach the limit. Behind
+ * nginx, set TRUST_PROXY=1. Forgetting it is the harmless direction — every
+ * caller shares one bucket, which is strict rather than open.
+ */
+function trustProxySetting() {
+  const v = (process.env.TRUST_PROXY || '').trim();
+  if (!v || v === 'false' || v === '0') return false;
+  if (v === 'true') return 1;
+  if (/^\d+$/.test(v)) return Number(v);
+  return v;                       // 'loopback', a CIDR, a comma-separated list
+}
+
 module.exports = {
   root,
   port: Number(process.env.PORT || 3000),
-  baseUrl: (process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, ''),
-  adminPassword: req('ADMIN_PASSWORD'),
+  baseUrl,
+  adminPassword,
+  adminPasswordHash,
+  /* What the session cookie is signed against, so that changing the password
+   * retires every cookie issued under the old one. */
+  adminVerifier: adminPasswordHash || adminPassword,
   sessionSecret: req('SESSION_SECRET'),
+  trustProxy: trustProxySetting(),
+  /* Secure cookies follow the address the browser actually used rather than
+   * NODE_ENV: an https BASE_URL with NODE_ENV unset used to hand the session
+   * out in the clear. */
+  cookieSecure: baseUrl.startsWith('https://'),
   tokenKey: process.env.TOKEN_ENCRYPTION_KEY || '',
   dbPath: process.env.DB_PATH || path.join(root, 'data', 'dinnerbyderek.db'),
   uploadDir: process.env.UPLOAD_DIR || path.join(root, 'data', 'uploads'),

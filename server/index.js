@@ -20,8 +20,10 @@ const { db } = require('./db');
 
 const app = express();
 
-/* Behind nginx, so req.ip and req.protocol should reflect the real client. */
-app.set('trust proxy', 1);
+/* Only when TRUST_PROXY says so — see the note in config.js. Behind nginx it
+ * makes req.ip and req.protocol reflect the real client; exposed directly it
+ * would let the caller name their own address and walk past the login limit. */
+app.set('trust proxy', config.trustProxy);
 app.disable('x-powered-by');
 app.set('etag', 'strong');
 
@@ -222,13 +224,38 @@ function runScheduledPublish() {
   }
 }
 
-/* --- Start --------------------------------------------------------------- */
+/* --- Start ---------------------------------------------------------------
+ * Three settings are safe on a laptop and wrong on a public address, and each
+ * fails silently rather than loudly, so they are said out loud at boot.
+ */
+function warnAboutExposure() {
+  const notes = [];
+  if (config.baseUrl.startsWith('https://') === false && config.isProd) {
+    notes.push('BASE_URL is not https, so the login cookie is sent in the clear.');
+  }
+  if (!config.adminPasswordHash) {
+    notes.push('ADMIN_PASSWORD is stored in the clear. Run `npm run password` to hash it.');
+  } else if (config.adminPassword) {
+    notes.push('ADMIN_PASSWORD is still in .env next to the hash, which is the '
+      + 'copy that matters. Delete that line.');
+  }
+  if (config.isProd && config.trustProxy === false) {
+    notes.push('TRUST_PROXY is off. Behind nginx set TRUST_PROXY=1, or every '
+      + 'visitor shares one rate-limit bucket.');
+  }
+  if (!notes.length) return;
+  console.log('  Worth fixing before this is public:');
+  for (const n of notes) console.log(`    - ${n}`);
+  console.log('');
+}
+
 const server = app.listen(config.port, () => {
   console.log(`\nDinner By Derek is running.`);
   console.log(`  Customers:  ${config.baseUrl}/`);
   console.log(`  Dashboard:  ${config.baseUrl}/admin`);
   console.log(`  Database:   ${config.dbPath}`);
   console.log(`  Uploads:    ${config.uploadDir}\n`);
+  warnAboutExposure();
   checkTokenExpiry();
   setInterval(checkTokenExpiry, 60 * 60 * 1000).unref();
   runScheduledPublish();

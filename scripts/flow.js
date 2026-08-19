@@ -49,8 +49,8 @@ function ok(label, condition, detail) {
 /* --- A cookie jar, so the session survives redirects --------------------- */
 let cookie = '';
 
-async function req(method, url, { body, json, redirect = 'manual' } = {}) {
-  const headers = {};
+async function req(method, url, { body, json, redirect = 'manual', headers: extra } = {}) {
+  const headers = { ...extra };
   if (cookie) headers.Cookie = cookie;
   let payload;
   if (json) {
@@ -911,6 +911,28 @@ const PAST_DATE = T.addDays(today, -2);
     P.runDue();
     check('a week opted out of the schedule stays a draft',
       db.prepare('SELECT status FROM weeks WHERE id=?').get(id2).status, 'draft');
+  }
+
+  /* --- A forged X-Forwarded-For buys no extra login attempts ---------------
+     The limiter counts against req.ip, and req.ip believes X-Forwarded-For
+     only when TRUST_PROXY says a proxy is writing it. Unset here, as on a
+     server reachable without nginx in front — so naming a fresh address on
+     every attempt must not reset the count. */
+  {
+    const RL = require('../server/ratelimit');
+    RL.reset();
+    const statuses = [];
+    for (let i = 0; i < 10; i++) {
+      const r = await POST('/admin/login', { password: 'not-it' },
+        { headers: { 'X-Forwarded-For': `203.0.113.${i}` } });
+      statuses.push(r.status);
+    }
+    ok('the first forged attempt is judged on the password, not refused outright',
+      statuses[0] === 401);
+    ok('a fresh forwarded address per attempt still reaches the limit',
+      statuses[statuses.length - 1] === 429);
+    RL.reset();
+    await POST('/admin/login', { password: 'flow-test-password', next: '/admin' });
   }
 
   /* --- Report -------------------------------------------------------------- */

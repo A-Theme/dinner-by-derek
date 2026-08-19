@@ -75,10 +75,12 @@ any change — nothing in this file is read again while the app is running.
 
 | Variable | Required | What it does |
 |---|---|---|
-| `ADMIN_PASSWORD` | **Yes** | The password for `/admin`. There is no reset link; changing it means editing this file and restarting. |
-| `SESSION_SECRET` | **Yes** | Signs your login cookie. Changing it signs you out everywhere, which is the fastest way to kill a session on a lost phone. |
+| `ADMIN_PASSWORD_HASH` | **Yes**, or the one below | The password for `/admin`, stored hashed. Run `npm run password`, paste the line it prints, delete `ADMIN_PASSWORD`. |
+| `ADMIN_PASSWORD` | Only without the hash | The same password in the clear. Works, but anyone who reads the file has the dashboard — a backup, a screen share, a copy on the wrong laptop. |
+| `SESSION_SECRET` | **Yes** | Signs your login cookie, together with the password. Changing either signs you out everywhere. |
 | `PORT` | No | Defaults to 3000. |
-| `BASE_URL` | Recommended | The public https address, no trailing slash. Used in emails, share links, the Facebook post, and the OAuth redirect. Must match exactly. |
+| `BASE_URL` | Recommended | The public https address, no trailing slash. Used in emails, share links, the Facebook post, and the OAuth redirect. Must match exactly. An `https://` address is also what turns on secure cookies. |
+| `TRUST_PROXY` | Behind nginx | Set to `1` when a proxy is in front, so the app reads the real visitor address. Leave unset when it isn't — see below. |
 | `DB_PATH` | No | SQLite file. Defaults to `./data/dinnerbyderek.db`. |
 | `UPLOAD_DIR` | No | Photo storage. Defaults to `./data/uploads`. |
 | `GRAPHICS_DIR` | No | Generated social graphics and business card. Defaults to `./data/graphics`. |
@@ -86,7 +88,21 @@ any change — nothing in this file is read again while the app is running.
 | `FB_APP_ID`, `FB_APP_SECRET` | No | Only for one-tap publishing to a Facebook Page. |
 | `FB_GRAPH_VERSION` | No | Defaults to `v21.0`. |
 | `TOKEN_ENCRYPTION_KEY` | If using Facebook | 64 hex characters. Encrypts the Facebook token before it touches the database. |
-| `NODE_ENV` | On the server | Set to `production`. Turns on secure cookies and long-lived static caching. |
+| `NODE_ENV` | On the server | Set to `production`. Turns on long-lived static caching, and makes the app say out loud at boot anything still set up for a laptop. |
+
+**Changing the password.** `npm run password` asks for it twice, echoes nothing,
+and prints the `ADMIN_PASSWORD_HASH=` line to paste into `.env`. The password
+itself is never written anywhere. Restarting signs out every device: the login
+cookie is signed against the password, so changing it retires the sessions the
+old one authorised — including the one on a phone you no longer have.
+
+**`TRUST_PROXY`.** The login limiter allows eight attempts per address per ten
+minutes, and the address comes from `X-Forwarded-For` when this is set. That
+header is written by nginx and can equally be written by whoever is knocking:
+switched on with nothing in front to overwrite it, a caller names a new address
+each time and never reaches the limit. So it stays off unless you say otherwise.
+Forgetting it behind nginx is the safe mistake — every visitor then counts
+against one shared bucket, which is strict rather than open.
 
 Generate a secret or a key:
 
@@ -981,6 +997,7 @@ ExecStart=/usr/bin/node server/index.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
+Environment=TRUST_PROXY=1
 
 [Install]
 WantedBy=multi-user.target

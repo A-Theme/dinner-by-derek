@@ -1,12 +1,24 @@
 'use strict';
 const crypto = require('crypto');
 const config = require('./config');
+const P = require('./password');
 
 const COOKIE = 'dbd_admin';
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;   // a month; the owner shouldn't relogin daily
 
+/**
+ * The signing key folds in the current password, so changing the password
+ * stops every outstanding cookie from verifying. Without that, a leaked
+ * session outlived the password that produced it by up to a month, and the
+ * only real revocation lever was rotating SESSION_SECRET — which nothing told
+ * you about at the moment you needed it. Rotating the secret still works.
+ */
+const KEY = crypto.createHmac('sha256', config.sessionSecret)
+  .update(`dbd-session-v1:${config.adminVerifier}`)
+  .digest();
+
 function sign(payload) {
-  const h = crypto.createHmac('sha256', config.sessionSecret).update(payload).digest('base64url');
+  const h = crypto.createHmac('sha256', KEY).update(payload).digest('base64url');
   return `${payload}.${h}`;
 }
 
@@ -27,7 +39,7 @@ function issue(res) {
   res.cookie(COOKIE, token, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: config.isProd,
+    secure: config.cookieSecure,
     maxAge: TTL_MS,
     path: '/',
   });
@@ -37,16 +49,11 @@ function clear(res) {
   res.clearCookie(COOKIE, { path: '/' });
 }
 
-/** Constant-time password comparison. */
+/** Constant-time password check, hashed or plain depending on what's set. */
 function passwordMatches(given) {
-  const a = Buffer.from(String(given || ''));
-  const b = Buffer.from(config.adminPassword);
-  if (a.length !== b.length) {
-    // Still burn the comparison so length isn't a timing oracle.
-    crypto.timingSafeEqual(b, b);
-    return false;
-  }
-  return crypto.timingSafeEqual(a, b);
+  const s = String(given || '');
+  if (config.adminPasswordHash) return P.matches(s, config.adminPasswordHash);
+  return P.sameBytes(Buffer.from(s), Buffer.from(config.adminPassword));
 }
 
 /** HTML routes redirect to login; API routes get a bare 401. */

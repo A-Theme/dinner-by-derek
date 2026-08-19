@@ -597,6 +597,66 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   settings.set('remind_missing_week', '1');
 }
 
+/* --- How the password is stored -------------------------------------------
+   Stored hashed when ADMIN_PASSWORD_HASH is set, so the file that survives a
+   backup, a screen share or a stray copy doesn't hand over the dashboard. */
+{
+  const PW = require('../server/password');
+  const hash = PW.hash('a-long-enough-password');
+
+  ok('the right password is recognised', PW.matches('a-long-enough-password', hash));
+  ok('a wrong one is not', !PW.matches('a-long-enough-passwore', hash));
+  ok('and neither is the empty string', !PW.matches('', hash));
+
+  const parts = hash.split('$');
+  check('the stored form names its algorithm', parts[0], 'scrypt');
+  check('and carries its own cost, so it can be raised later', parts.slice(1, 4), ['16384', '8', '1']);
+
+  ok('the same password hashes differently every time',
+    PW.hash('a-long-enough-password') !== hash);
+  ok('a hash that has been damaged refuses everything',
+    !PW.matches('a-long-enough-password', hash.slice(0, -4)));
+  ok('and so does a string that was never a hash',
+    !PW.matches('a-long-enough-password', 'plaintext'));
+}
+
+/* --- What a session is signed against -------------------------------------
+   The cookie is bound to the password, not only to SESSION_SECRET. Changing
+   the password has to end the sessions it authorised: without that, a leaked
+   cookie outlived its password by up to a month and the only lever that
+   actually worked was rotating the secret. */
+{
+  const crypto = require('crypto');
+  const auth = require('../server/auth');
+
+  const sessionFor = (secret, verifier) => {
+    const key = crypto.createHmac('sha256', secret)
+      .update(`dbd-session-v1:${verifier}`).digest();
+    const payload = `admin:${Date.now()}`;
+    return `${payload}.${crypto.createHmac('sha256', key).update(payload).digest('base64url')}`;
+  };
+  const secret = process.env.SESSION_SECRET;
+  const password = process.env.ADMIN_PASSWORD;
+
+  ok('a session signed under the current password is accepted',
+    auth.verify(sessionFor(secret, password)));
+  ok('the same session is refused once the password changes',
+    !auth.verify(sessionFor(secret, 'whatever-derek-changes-it-to')));
+  ok('rotating the secret still retires it too',
+    !auth.verify(sessionFor('a-different-secret', password)));
+
+  const good = sessionFor(secret, password);
+  ok('a session with its signature altered is refused',
+    !auth.verify(good.slice(0, -1) + (good.endsWith('A') ? 'B' : 'A')));
+  ok('and one carrying no signature at all is refused', !auth.verify('admin:' + Date.now()));
+
+  const old = `admin:${Date.now() - 31 * 24 * 60 * 60 * 1000}`;
+  const key = crypto.createHmac('sha256', secret)
+    .update(`dbd-session-v1:${password}`).digest();
+  ok('a correctly signed session still expires after a month',
+    !auth.verify(`${old}.${crypto.createHmac('sha256', key).update(old).digest('base64url')}`));
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {
