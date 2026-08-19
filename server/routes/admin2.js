@@ -727,8 +727,22 @@ function facebookPanel(conn) {
 router.post('/settings', (req, res) => {
   const t = String(req.body.cutoff_time || '22:00').split(':');
   const l = String(req.body.late_cutoff_time || '06:00').split(':');
+  /* The timezone box is free text, and one transposed letter in it used to
+   * take the site down: Intl throws on an unknown zone, every date on every
+   * page goes through Intl, so "Amercia/Toronto" turned the live menu and the
+   * dashboard into 500s while the form said "Settings saved."
+   *
+   * The same guard a restored backup goes through now stands here. Refused
+   * rather than corrected to a default — quietly moving the kitchen to a zone
+   * the owner never typed would shift every cutoff in the app — and the rest
+   * of the form still saves, so a typo in one box does not cost the edits made
+   * in the others. */
+  let rejected = null;
   for (const k of ['business_name', 'timezone', 'payment_instructions', 'owner_contact']) {
-    if (req.body[k] !== undefined) settings.set(k, String(req.body[k]).trim());
+    if (req.body[k] === undefined) continue;
+    const clean = settings.guard(k, String(req.body[k]).trim());
+    if (clean === null) { rejected = k; continue; }
+    settings.set(k, clean);
   }
   // Stored tidy rather than raw: the field takes a comma-separated list, and a
   // trailing comma would otherwise reach nodemailer as an empty recipient.
@@ -756,6 +770,11 @@ router.post('/settings', (req, res) => {
   settings.set('cutoff_minute', cutoffMinute);
   settings.set('late_cutoff_hour', lateHour);
   settings.set('late_cutoff_minute', lateMinute);
+  if (rejected === 'timezone') {
+    return back(res, req, 'Everything else was saved.',
+      `That timezone isn't one this system knows, so the previous one was kept. `
+      + `Use a name like America/Toronto.`);
+  }
   back(res, req, 'Settings saved.');
 });
 

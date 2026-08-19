@@ -499,10 +499,57 @@ function getInt(key, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 function set(key, value) { setRow.run(key, String(value)); }
+
+/* --- Settings a bad value can break the app with -------------------------
+ * Most settings are stored as written: a wrong business name is a typo, not
+ * an outage. These are the ones where the app stops rendering. A nonsense
+ * timezone throws out of Intl on every date on every page, which is the whole
+ * customer menu and the whole dashboard, not one field; the clock values feed
+ * the cutoff that decides whether a day is still taking orders.
+ *
+ * They live here rather than beside the backup format because they are a fact
+ * about the setting, not about restoring. Both ways in — the Settings form and
+ * a restored file — ask the same question of the same value, and a guard only
+ * one of them consults is the bug this pair keeps producing.
+ */
+function usableTimezone(v) {
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: String(v) });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function clampInt(v, lo, hi) {
+  const n = Math.floor(Number(v));
+  return Number.isFinite(n) && n >= lo && n <= hi ? String(n) : null;
+}
+
+const GUARDS = {
+  timezone: (v) => (usableTimezone(v) ? String(v) : null),
+  cutoff_hour: (v) => clampInt(v, 0, 23),
+  cutoff_minute: (v) => clampInt(v, 0, 59),
+  late_cutoff_hour: (v) => clampInt(v, 0, 23),
+  late_cutoff_minute: (v) => clampInt(v, 0, 59),
+};
+
+/**
+ * The value to store, or null when it cannot be stored at all.
+ *
+ * Null means "keep what is already there and tell the owner". Never means
+ * "store a default": silently correcting a timezone to somewhere the owner
+ * does not live would move every cutoff in the app without saying so.
+ */
+function guard(key, value) {
+  const g = GUARDS[key];
+  if (!g) return value === null || value === undefined ? null : String(value);
+  return g(value);
+}
 function all() {
   const out = {};
   for (const r of db.prepare('SELECT key, value FROM settings').all()) out[r.key] = r.value;
   return out;
 }
 
-module.exports = { db, settings: { get, getInt, set, all } };
+module.exports = { db, settings: { get, getInt, set, all, guard, usableTimezone } };

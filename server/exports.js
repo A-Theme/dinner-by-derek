@@ -128,39 +128,26 @@ function columnsOf(table) {
   return new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
 }
 
-/** A time zone Intl will accept. An unusable one throws from inside every
- *  date the app renders, which is the whole site rather than one page. */
-function usableTimezone(v) {
-  try {
-    new Intl.DateTimeFormat('en-CA', { timeZone: String(v) });
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-function clampInt(v, lo, hi) {
-  const n = Math.floor(Number(v));
-  return Number.isFinite(n) && n >= lo && n <= hi ? String(n) : null;
-}
-
 /**
- * Settings a bad value can break the app with, and what a good one looks like.
+ * Columns holding a JSON array, wherever they appear.
  *
- * Everything else in the file is stored as written — a wrong business name is
- * a typo, not an outage. These are the ones where the app stops rendering:
- * a nonsense timezone throws out of Intl on every date on every page, and the
- * clock values feed the cutoff. A value that fails is skipped and named, and
- * whatever was already stored stays, because a restore that half-works and
- * says so beats one that takes the menu down silently.
+ * Their names are checked against the table, but until now their VALUES were
+ * written through untouched — and a backup is a text file people edit. A
+ * standing item whose `allergens` reads `milk, wheat` instead of
+ * `["milk","wheat"]` restores without complaint, reports success, and then
+ * throws out of JSON.parse inside the allergen review, which every menu render
+ * goes through. One edited word in a file, and the customer menu is a 500.
+ *
+ * Refused rather than coerced. Turning an unreadable value into `[]` would
+ * drop allergen tags off a dish silently, which is the one failure this whole
+ * app is arranged to prevent — better to hand back the file and say which row.
  */
-const SETTING_GUARDS = {
-  timezone: (v) => (usableTimezone(v) ? String(v) : null),
-  cutoff_hour: (v) => clampInt(v, 0, 23),
-  cutoff_minute: (v) => clampInt(v, 0, 59),
-  late_cutoff_hour: (v) => clampInt(v, 0, 23),
-  late_cutoff_minute: (v) => clampInt(v, 0, 59),
-};
+const JSON_ARRAY_COLUMNS = new Set(['allergens', 'dismissed', 'weekdays']);
+
+function isJsonArray(v) {
+  if (typeof v !== 'string') return false;
+  try { return Array.isArray(JSON.parse(v)); } catch (e) { return false; }
+}
 
 function restore(json) {
   const data = JSON.parse(json);
@@ -185,15 +172,41 @@ function restore(json) {
        * rather than being dropped quietly — a backup carrying columns this
        * app has never heard of is either from a newer version or has been
        * edited, and silently discarding part of a restore is worse than
-       * refusing the whole of it. */
+       * refusing the whole of it.
+       *
+       * Read across every row, not just the first. Taking the shape from
+       * rows[0] made that promise true of one row and no other. A stray column
+       * further down was never compared against the table at all and was
+       * dropped in silence. A row missing one bound NULL: a NOT NULL column
+       * refused it with a constraint message naming neither the row nor the
+       * file, and a nullable column simply took it — so a dish came back from
+       * a restore that reported success with no price at all, which is how it
+       * leaves the customer menu without anyone being told. */
       const known = columnsOf(name);
-      const cols = Object.keys(rows[0]);
+      const cols = [];
+      for (const r of rows) {
+        for (const c of Object.keys(r)) if (!cols.includes(c)) cols.push(c);
+      }
       const unknown = cols.filter((c) => !known.has(c));
       if (unknown.length) {
         throw new Error(`The "${name}" rows in that backup have a column this app `
           + `doesn't have: ${unknown[0]}. It may have come from a newer version.`);
       }
       if (!cols.length) return;
+      /* Row numbers are 1-based and count the rows in the file, because that
+       * is what the owner is looking at when they open it. */
+      rows.forEach((r, i) => {
+        for (const c of cols) {
+          if (!Object.prototype.hasOwnProperty.call(r, c)) {
+            throw new Error(`Row ${i + 1} of "${name}" in that backup is missing `
+              + `the ${c} column that the other rows have.`);
+          }
+          if (JSON_ARRAY_COLUMNS.has(c) && !isJsonArray(r[c])) {
+            throw new Error(`Row ${i + 1} of "${name}" in that backup has a value in `
+              + `${c} that isn't a list: ${JSON.stringify(r[c])}.`);
+          }
+        }
+      });
       const stmt = db.prepare(
         `INSERT INTO ${name} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`);
       for (const r of rows) stmt.run(...cols.map((c) => r[c]));
@@ -212,9 +225,7 @@ function restore(json) {
     if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
       for (const [k, v] of Object.entries(incoming)) {
         if (v === null || typeof v === 'object') { skipped.push(k); continue; }
-        const guard = SETTING_GUARDS[k];
-        if (!guard) { settings.set(k, v); continue; }
-        const clean = guard(v);
+        const clean = settings.guard(k, v);
         if (clean === null) skipped.push(k);
         else settings.set(k, clean);
       }

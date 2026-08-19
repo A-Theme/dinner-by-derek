@@ -1120,6 +1120,68 @@ const PAST_DATE = T.addDays(today, -2);
     check("and the price in the table above matches",
       /data-label="Prices">([^<]*)/.exec(page.text.split(item.name)[1] || "") ? true : true, true);
   }
+  /* --- One typo in the timezone box used to take the site down ------------
+   * Intl throws on a zone it doesn't know, and every date on every page goes
+   * through Intl, so a transposed letter turned the live menu and the whole
+   * dashboard into 500s while the form answered "Settings saved."
+   *
+   * Checked from the outside, on the published week built above, because the
+   * damage was never visible at the point of the typo — it was visible on the
+   * pages a customer was looking at.
+   */
+  {
+    const good = 'America/Toronto';
+    // The live week, not the slug captured at the top: by now the suite has
+    // unpublished, duplicated and republished.
+    const live = db.prepare(`SELECT slug FROM weeks WHERE status = 'published' LIMIT 1`).get();
+    ok('a published week exists to check this against', !!live);
+    let r = await GET(`/w/${live.slug}`);
+    check('the published menu renders before any of this', r.status, 200);
+
+    r = await POST('/admin/settings', {
+      business_name: 'Dinner By Derek',
+      timezone: 'Amercia/Toronto',                 // one transposed letter
+      payment_instructions: 'Pay at pickup.',
+      owner_contact: 'Call the kitchen.',
+      cutoff_time: '22:00', late_cutoff_time: '06:00',
+    });
+    ok('a timezone the system cannot use is not stored',
+      String(r.location || '').includes('err='), r.location);
+    /* Read through URLSearchParams: the query is form-encoded, so spaces
+     * come back as '+' and a plain decodeURIComponent leaves them there. */
+    const said = (loc) => new URLSearchParams(String(loc || '').split('?')[1] || '');
+    ok('and the owner is told the previous one was kept',
+      (said(r.location).get('err') || '').includes('previous one was kept'), r.location);
+    ok('while the rest of the form still saves',
+      (said(r.location).get('ok') || '').includes('Everything else was saved'), r.location);
+
+    const page = await GET('/admin/settings');
+    ok('the box still shows the timezone that works', page.text.includes(good));
+    ok('and the setting that came in beside the bad one landed',
+      page.text.includes('Pay at pickup.'));
+
+    r = await GET(`/w/${live.slug}`);
+    check('the customer menu still renders', r.status, 200);
+    r = await GET('/admin');
+    check('and so does the dashboard', r.status, 200);
+
+    // A real zone still goes in, or the guard would be a lock rather than a check.
+    r = await POST('/admin/settings', {
+      business_name: 'Dinner By Derek', timezone: 'America/Vancouver',
+      payment_instructions: 'Pay at pickup.', owner_contact: 'Call the kitchen.',
+      cutoff_time: '22:00', late_cutoff_time: '06:00',
+    });
+    ok('a different real timezone is accepted', !String(r.location || '').includes('err='), r.location);
+    const moved = await GET('/admin/settings');
+    ok('and is what the box reads afterwards', moved.text.includes('America/Vancouver'));
+
+    await POST('/admin/settings', {
+      business_name: 'Dinner By Derek', timezone: good,
+      payment_instructions: 'Pay at pickup.', owner_contact: 'Call the kitchen.',
+      cutoff_time: '22:00', late_cutoff_time: '06:00',
+    });
+  }
+
   /* --- Multipart is the owner's shape, and nobody else's ------------------
    * The upload middleware used to run on every request, before routing and
    * before auth: 25 MB from a stranger, at a path that need not exist, read

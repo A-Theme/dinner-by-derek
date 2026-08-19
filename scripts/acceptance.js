@@ -953,6 +953,53 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     'an unknown column stops it even when the others are real');
   refuses(wrap({ weeks: ['not a row'] }), 'a section that is not rows is refused');
 
+  /* Every row, not just the first.
+   *
+   * The shape used to be read off rows[0], so a file could disagree with
+   * itself from row two onward and never be looked at. A stray column further
+   * down was dropped without a word; a missing one was bound as NULL, which a
+   * NOT NULL column refused with a constraint message naming neither the row
+   * nor the file — and a nullable column simply took, so a dish came back from
+   * a restore that reported success with no price and left the menu.
+   *
+   * The rows here come out of a real backup, so the shape being checked is the
+   * shape the app actually writes. */
+  const rowsOf = (name) => JSON.parse(good)[name];
+  const withRows = (name, rows) => wrap({ [name]: rows });
+  const mutate = (name, i, f) => {
+    const rows = rowsOf(name);
+    f(rows[i]);
+    return withRows(name, rows);
+  };
+
+  ok('a real backup has rows to test this on', rowsOf('standing_items').length >= 4);
+
+  const strayLate = refuses(mutate('standing_items', 3, (r) => { r.invented_column = 'x'; }),
+    'a stray column on a later row stops the restore too');
+  ok('and the refusal names that column', strayLate.includes('invented_column'), strayLate);
+
+  const missingLate = refuses(mutate('standing_items', 3, (r) => { delete r.subcategory; }),
+    'a later row missing a column the others have stops it');
+  ok('and the refusal counts the row in the file', missingLate.includes('Row 4'), missingLate);
+  ok('and names the column that is missing', missingLate.includes('subcategory'), missingLate);
+
+  refuses(mutate('standing_items', 3, (r) => { delete r.full_price; }),
+    'including when the missing column is one that allows NULL');
+
+  /* A JSON column is a string in the file, and a file is a thing people edit.
+   * An unreadable one used to restore clean and then throw out of the allergen
+   * review, which every menu render goes through. */
+  const badJson = refuses(mutate('standing_items', 3, (r) => { r.allergens = 'milk, wheat'; }),
+    'a JSON column holding something that is not a list stops it');
+  ok('and the refusal says which row and which column',
+    badJson.includes('Row 4') && badJson.includes('allergens'), badJson);
+  ok('and quotes what it found there', badJson.includes('milk, wheat'), badJson);
+
+  refuses(mutate('standing_items', 0, (r) => { r.dismissed = '{}'; }),
+    'an object where a list belongs is refused as well');
+  refuses(mutate('standing_items', 2, (r) => { r.weekdays = 'mon'; }),
+    'and so is a weekday list that is not a list');
+
   // Nothing above may have gone through: the whole restore is one transaction.
   ok('a refused restore leaves the dictionary where it was',
     db.prepare('SELECT COUNT(*) n FROM allergen_terms').get().n > 300);
