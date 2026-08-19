@@ -186,6 +186,16 @@
         }),
       }).then(function (r) { return r.json(); }).then(function (d) {
         list.innerHTML = '';
+        /* Anything other than a list of suggestions is not a list of
+           suggestions. A 401 from an expired session answers {error:...},
+           and reading .length off that threw inside the promise — so the
+           chips simply stopped appearing, with nothing said and nothing in
+           the console the owner would ever look at. */
+        if (!d || !Array.isArray(d.pending)) {
+          box.hidden = true;
+          if (d && d.error) toast(d.error, 'bad');
+          return;
+        }
         box.hidden = !d.pending.length;
         d.pending.forEach(function (p) {
           var w = document.createElement('span');
@@ -383,11 +393,29 @@
       var fd = new FormData(form);
       fd.append('draft', '1');
       if (flag) flag.textContent = 'Saving…';
-      fetch(form.action, { method: 'POST', body: fd, headers: { 'X-Draft': '1' } })
+      /* redirect: 'manual' so a redirect cannot be mistaken for a save. On
+         success these routes answer 200 with {ok:true}; only a lost session
+         redirects, and following it produced the login page with a 200, which
+         read as r.ok and wrote "Saved" over work that was never stored.
+         The server now answers 401 to an X-Draft post, so both the status and
+         the opaque redirect say the same thing. */
+      fetch(form.action, {
+        method: 'POST', body: fd,
+        headers: { 'X-Draft': '1' },
+        redirect: 'manual',
+      })
         .then(function (r) {
-          if (flag) flag.textContent = r.ok ? 'Saved' : 'Not saved — check your connection';
+          if (!flag) return;
+          if (r.ok) { flag.textContent = 'Saved'; return; }
+          var signedOut = r.status === 401 || r.type === 'opaqueredirect' || r.status === 0;
+          flag.textContent = signedOut
+            ? 'NOT SAVED — your sign-in expired. Open the dashboard in a new tab, sign in, then save again.'
+            : 'Not saved — check your connection';
+          toast(flag.textContent, 'bad');
         })
-        .catch(function () { if (flag) flag.textContent = 'Not saved — check your connection'; });
+        .catch(function () {
+          if (flag) flag.textContent = 'Not saved — check your connection';
+        });
     }
     form.addEventListener('input', function () {
       if (flag) flag.textContent = 'Unsaved changes';

@@ -64,10 +64,21 @@ async function passwordMatches(given) {
   return P.sameBytes(Buffer.from(s), Buffer.from(config.adminPassword));
 }
 
-/** HTML routes redirect to login; API routes get a bare 401. */
+/**
+ * HTML routes redirect to login; API routes get a bare 401.
+ *
+ * The autosave posts count as API routes even though their paths do not say so.
+ * They are fetches, and a redirect answered a fetch with the login page and a
+ * 200 — so `r.ok` was true, the week builder wrote "Saved", and nothing had
+ * been saved. An owner could type a whole week into a dashboard whose session
+ * had quietly expired, be told it was saved after every keystroke, and lose all
+ * of it. The X-Draft header is the same marker the routes already use to answer
+ * an autosave with JSON instead of a redirect.
+ */
 function required(req, res, next) {
   if (verify(req.cookies && req.cookies[COOKIE])) return next();
-  if (req.path.startsWith('/api/') || req.accepts(['html', 'json']) === 'json') {
+  if (req.path.startsWith('/api/') || req.get('X-Draft')
+      || req.accepts(['html', 'json']) === 'json') {
     return res.status(401).json({ error: 'Sign in to continue.' });
   }
   return res.redirect(`/admin/login?next=${encodeURIComponent(req.originalUrl)}`);

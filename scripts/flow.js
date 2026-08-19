@@ -49,9 +49,12 @@ function ok(label, condition, detail) {
 /* --- A cookie jar, so the session survives redirects --------------------- */
 let cookie = '';
 
-async function req(method, url, { body, json, redirect = 'manual', headers: extra } = {}) {
+/* noCookie sends the request with no session at all, for the checks that are
+   about being signed out. Without it the jar below puts the live session back
+   on and the check passes for the wrong reason — which it did, once. */
+async function req(method, url, { body, json, redirect = 'manual', headers: extra, noCookie } = {}) {
   const headers = { ...extra };
-  if (cookie) headers.Cookie = cookie;
+  if (cookie && !noCookie) headers.Cookie = cookie;
   let payload;
   if (json) {
     headers['Content-Type'] = 'application/json';
@@ -1181,6 +1184,39 @@ const PAST_DATE = T.addDays(today, -2);
       auto_publish: '1', auto_publish_weekday: 'sat', auto_publish_time: wasTime,
       remind_missing_week: '1', remind_missing_week_days: '2',
     });
+  }
+
+  /* --- Autosave must never claim a save it did not make -------------------
+   * The week builder posts every keystroke and shows "Saved" from r.ok. A lost
+   * session used to redirect that fetch to the login page, which follows to a
+   * 200 — so r.ok was true and the flag wrote "Saved" over work that was never
+   * stored. An owner could type a whole week into an expired dashboard, be
+   * reassured after every keystroke, and lose all of it.
+   *
+   * X-Draft is the marker the routes already use to answer an autosave with
+   * JSON instead of a redirect; auth now reads it too.
+   */
+  {
+    const draft = (signedIn) => POST(`/admin/week/${weekId}/basics`,
+      { description: 'autosave probe' },
+      { headers: { 'X-Draft': '1' }, noCookie: !signedIn });
+
+    let r = await draft(true);
+    check('an autosave with a session is answered 200', r.status, 200);
+    ok('and says so as JSON, not as a redirect', r.text.includes('"ok":true'), r.text.slice(0, 60));
+
+    const wasDesc = db.prepare('SELECT description FROM weeks WHERE id = ?').get(weekId).description;
+
+    r = await draft(false);
+    check('an autosave without one is refused 401, not redirected', r.status, 401);
+    ok('so the browser cannot read it as a save', r.status !== 302 && r.status !== 200, String(r.status));
+    ok('and it is told why', r.text.includes('Sign in'), r.text.slice(0, 60));
+    check('and nothing was written',
+      db.prepare('SELECT description FROM weeks WHERE id = ?').get(weekId).description, wasDesc);
+
+    // A form post without the marker still goes to the login page, as before.
+    const plain = await POST(`/admin/week/${weekId}/basics`, { description: 'x' }, { noCookie: true });
+    check('an ordinary form post is still sent to sign in', plain.status, 302);
   }
 
   /* --- A graphics set named by the URL ------------------------------------

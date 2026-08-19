@@ -1218,6 +1218,34 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('and the unguarded value is what used to reach the page',
     T.fmtWindow('four pm', '25:00').includes('NaN'));
 }
+
+/* --- Autosave says "Saved" only when something was saved --------------------
+   The week builder posts every keystroke and set the flag from r.ok. A lost
+   session redirected that fetch to the login page, fetch followed it, the 200
+   read as ok, and the flag wrote "Saved" over work that was never stored —
+   a whole week typed into an expired dashboard, reassured all the way, gone.
+
+   Verified in a browser both ways. This pins the client half; flow.js checks
+   the 401 the server now answers. */
+{
+  const adminJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.js'), 'utf8');
+  const save = adminJs.slice(adminJs.indexOf('function save()'), adminJs.indexOf("form.addEventListener('input'"));
+  ok('the autosave post does not follow redirects', /redirect:\s*'manual'/.test(save), save.slice(0, 200));
+  ok('and does not set the flag straight from r.ok alone',
+    !/flag\.textContent = r\.ok \? /.test(save));
+  ok('a lost session is named as such, not as a connection problem',
+    /sign-in expired/i.test(save));
+  ok('and it says NOT SAVED where it used to say Saved', /NOT SAVED/.test(save));
+
+  /* The suggestion fetch used to read .length off whatever came back. */
+  ok('the suggestion handler checks it got a list before using it',
+    /Array\.isArray\(d\.pending\)/.test(adminJs));
+
+  /* And the server half: X-Draft is treated as an API call, not a page. */
+  const authJs = fs.readFileSync(path.join(__dirname, '..', 'server', 'auth.js'), 'utf8');
+  ok('auth answers an autosave with 401 rather than the login page',
+    /req\.get\(\'X-Draft\'\)/.test(authJs));
+}
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {
