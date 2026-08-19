@@ -11,10 +11,12 @@
  * dithered by the printer driver into a scatter of dots, which on a 20 mm QR
  * code is the difference between scanning and not.
  *
- * Two orientations, two resolutions, four files. Label printers come in two
- * resolutions and resampling a 1-bit image is exactly the thing that ruins it,
- * so each is drawn at its own. Print the one that matches your printer and the
- * shape of your stock; do not scale any of them to fit.
+ * Two files, one per orientation, each overwritten when you draw it again.
+ * Label printers come in two resolutions and resampling a 1-bit image is
+ * exactly the thing that ruins it, so a sticker is drawn at the resolution it
+ * will print at — chosen in the dashboard, or 203 from the command line. Print
+ * the one that matches your printer and the shape of your stock; never scale
+ * one to fit.
  *
  *   203 dpi — Zebra, Rollo, most direct-thermal label printers
  *   300 dpi — Brother QL, higher-resolution desktop units
@@ -39,7 +41,11 @@ const OUT = path.join(process.env.GRAPHICS_DIR || path.join(root, 'data', 'graph
  * landscape sets them side by side, which is the only arrangement that uses
  * the extra width instead of leaving a band of blank stock down each side.
  */
-const MARGIN_MM = 3.5;   // thermal feeds drift; keep ink off the edge
+const MARGIN_MM = 5;     // thermal feeds drift; keep ink well off the edge
+/* And the mark never takes the whole of what is left. A logo running edge to
+ * edge reads as an overflow even when it is inside the margin — it wants air
+ * around it to look placed rather than crammed. */
+const MARK_SHARE = 0.86; // of the inner width, at most
 const QR_MM = 22;        // target, rounded down to a whole number of dots per module
 const GAP_MM = 3;        // between the mark and the code
 
@@ -158,7 +164,11 @@ async function sheet(layout, dpi, url) {
   const aspect = await markAspect();
   const roomW = horizontal ? innerW - q.side - gap : innerW;
   const roomH = horizontal ? innerH : innerH - gap - q.side;
-  const markW = Math.max(0, Math.min(roomW, Math.round(roomH * aspect)));
+  const markW = Math.max(0, Math.min(
+    roomW,
+    Math.round(roomH * aspect),
+    Math.round(innerW * MARK_SHARE),
+  ));
 
   /* On a label with no room for both, the code wins and says so. It is the
    * part that does something; the mark is decoration, and a 4 mm smear of it
@@ -195,9 +205,14 @@ async function sheet(layout, dpi, url) {
     ];
   }
 
-  const file = `sticker-${layout.name}-${dpi}dpi.png`;
+  /* One file per orientation, overwritten. The size and resolution live in
+     the PNG's own density chunk rather than in its name, so re-rendering at
+     the other dpi replaces the sticker instead of adding to a pile of them —
+     and a printer driver reading the file knows how big it is meant to be. */
+  const file = `sticker-${horizontal ? 'landscape' : 'portrait'}.png`;
   await sharp({ create: { width: W, height: H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
     .composite(place)
+    .withMetadata({ density: dpi })
     .png({ compressionLevel: 9 })
     .toFile(path.join(OUT, file));
 
@@ -228,19 +243,46 @@ function mm(v) {
  * Graphics tab cannot hold a fixed list of filenames the way the card and the
  * social set do. It reads what is there instead.
  */
+/** Width, height and dpi straight out of a PNG header. Synchronous, because
+ *  the Graphics tab renders in one pass and sharp is async. */
+function sizeOf(file) {
+  const buf = fs.readFileSync(file);
+  if (buf.length < 33 || buf.readUInt32BE(12) !== 0x49484452) throw new Error("not a PNG");
+  const width = buf.readUInt32BE(16);
+  const height = buf.readUInt32BE(20);
+  let density = null;
+  let at = 8;
+  while (at + 8 <= buf.length) {
+    const len = buf.readUInt32BE(at);
+    const type = buf.toString("ascii", at + 4, at + 8);
+    if (type === "pHYs" && buf.length >= at + 8 + 9) {
+      const perMetre = buf.readUInt32BE(at + 8);
+      if (buf[at + 8 + 8] === 1) density = Math.round(perMetre * 0.0254);
+      break;
+    }
+    if (type === "IDAT" || type === "IEND") break;
+    at += 12 + len;
+  }
+  return { width, height, density };
+}
 function made() {
-  let names;
-  try { names = fs.readdirSync(OUT); } catch (e) { return []; }
-  return names
-    .filter((f) => /^sticker-.+-\d+dpi\.png$/.test(f))
-    .sort()
-    .map((f) => {
-      const [, shape, dpi] = f.match(/^sticker-(.+)-(\d+)dpi\.png$/);
-      const label = /^\d+x\d+mm$/.test(shape)
-        ? shape.replace('x', ' × ').replace('mm', ' mm')
-        : shape.charAt(0).toUpperCase() + shape.slice(1);
-      return [f, label, `${dpi} dpi`];
-    });
+  const out = [];
+  for (const [file, label] of [
+    ['sticker-portrait.png', 'Portrait'],
+    ['sticker-landscape.png', 'Landscape'],
+  ]) {
+    let size = "";
+    try {
+      const { width, height, density } = sizeOf(path.join(OUT, file));
+      const dpi = density || 203;
+      const mm = (px) => Math.round((px / dpi) * 25.4);
+      size = `${mm(width)} × ${mm(height)} mm at ${dpi} dpi`;
+    } catch (e) {
+      continue;                       // not drawn yet
+    }
+    out.push([file, label, size]);
+  }
+  return out;
 }
 
 /**
@@ -259,7 +301,7 @@ async function generate(opts = {}) {
   const url = base || 'https://dinner-by-derek.example';
 
   let layouts = LAYOUTS;
-  let dpis = DPI_CHOICES;
+  let dpis = [DPI_CHOICES[0]];   // one resolution per run; the tab picks the other
 
   if (opts.widthMm !== undefined || opts.heightMm !== undefined) {
     const w = mm(opts.widthMm);
