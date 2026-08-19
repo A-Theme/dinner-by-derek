@@ -54,8 +54,21 @@ const LAYOUTS = [
  * nothing. A label that cannot hold one is refused by name rather than
  * quietly printed. */
 const MIN_QR_MM = 15;
+/* Smaller than this the mark is a smudge rather than a logo, and the label is
+ * better off carrying the code alone. */
+const MIN_MARK_MM = 10;
 const SIZE_LIMITS = { min: 20, max: 200 };   // mm, per side
 const DPI_CHOICES = [203, 300];
+
+/** The artwork's own proportions, read once. */
+let aspectCache = null;
+async function markAspect() {
+  if (aspectCache === null) {
+    const m = await sharp(LINEART).metadata();
+    aspectCache = m.width / m.height;
+  }
+  return aspectCache;
+}
 
 /**
  * Ink as alpha: white in this mask means burn a dot.
@@ -132,15 +145,41 @@ async function sheet(layout, dpi, url) {
   const qrPng = await inkOn(await q.mask.png().toBuffer(), q.side, q.side);
 
   const horizontal = layout.stack === 'horizontal';
-  const markW = horizontal
-    ? Math.min(innerW - q.side - gap, innerH)   // beside the code, and no taller than the label
-    : innerW;
-  const markMask = await lineartMask(markW);
-  const markH = (await sharp(markMask).metadata()).height;
-  const markPng = await inkOn(markMask, markW, markH);
+
+  /* The mark gets whatever the code and the gap leave — in BOTH directions.
+   *
+   * Only its width used to be constrained. Stacked, that handed it the full
+   * inner width and let the artwork's own proportions decide its height, so
+   * mark + gap + code came to more than the label was tall; the block was then
+   * centred on the whole canvas and the overflow went straight out through the
+   * margins. A 54 × 70 label was leaving 0.13 mm at the top, which a thermal
+   * feed eats. Fitting the height as well is what keeps the 3.5 mm honest at
+   * every size and in either orientation. */
+  const aspect = await markAspect();
+  const roomW = horizontal ? innerW - q.side - gap : innerW;
+  const roomH = horizontal ? innerH : innerH - gap - q.side;
+  const markW = Math.max(0, Math.min(roomW, Math.round(roomH * aspect)));
+
+  /* On a label with no room for both, the code wins and says so. It is the
+   * part that does something; the mark is decoration, and a 4 mm smear of it
+   * is worse than none. */
+  const withMark = markW >= dots(MIN_MARK_MM);
+  let markPng = null;
+  let markH = 0;
+  if (withMark) {
+    const markMask = await lineartMask(markW);
+    markH = (await sharp(markMask).metadata()).height;
+    markPng = await inkOn(markMask, markW, markH);
+  }
 
   let place;
-  if (horizontal) {
+  if (!withMark) {
+    place = [{
+      input: qrPng,
+      left: Math.round((W - q.side) / 2),
+      top: Math.round((H - q.side) / 2),
+    }];
+  } else if (horizontal) {
     const blockW = markW + gap + q.side;
     const left = Math.round((W - blockW) / 2);
     place = [
@@ -164,8 +203,9 @@ async function sheet(layout, dpi, url) {
 
   return {
     file, W, H, dpi,
+    withMark,
     mm: `${layout.w}×${layout.h}`,
-    mark: `${markW}×${markH}`,
+    mark: withMark ? `${markW}×${markH}` : "none — no room for one",
     qr: `${q.modules} modules at ${q.scale} dots (v${q.version}, level Q)`,
     qrMm: ((q.side / dpi) * 25.4).toFixed(1),
   };
