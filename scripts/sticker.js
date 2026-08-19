@@ -46,12 +46,17 @@ const MARGIN_MM = 4.5;   // thermal feeds drift; keep ink well off the edge
  * edge reads as an overflow even when it is inside the margin — it wants air
  * around it to look placed rather than crammed. */
 const MARK_SHARE = 0.9;  // of the inner width, at most
+/* The third sticker's wording, and how much of the label's height it takes.
+ * Small on purpose: the code is what gets used, the words only say so. */
+const SCAN_TEXT = 'SCAN ME';
+const SCAN_TEXT_SHARE = 0.07; // of the inner height
 const QR_MM = 21;        // target, rounded down to a whole number of dots per module
 const GAP_MM = 2.5;      // between the mark and the code
 
 const LAYOUTS = [
   { name: 'portrait', w: 54, h: 70, stack: 'vertical' },
   { name: 'landscape', w: 70, h: 54, stack: 'horizontal' },
+  { name: 'scan', w: 54, h: 70, stack: 'scan' },
 ];
 
 /* Below this the code stops being worth printing. A phone camera in a doorway
@@ -121,12 +126,107 @@ function qrMask(url, maxDots) {
   };
 }
 
+/**
+ * "SCAN ME", set the way the brandmark sets BY DEREK.
+ *
+ * The same face, weight and wide tracking as the lettering inside the
+ * medallion — a sticker that says something in a different voice from the logo
+ * two inches away looks like it came from somewhere else. Rendered large and
+ * thresholded like everything else here, so the letters end up as burned dots
+ * with hard edges rather than grey ones the printer will dither.
+ */
+const LABEL_FONT = "'Segoe UI',Roboto,'Helvetica Neue',Arial,'Liberation Sans',sans-serif";
+
+async function textMask(text, sizeDots) {
+  const track = Math.round(sizeDots * 0.18);       // the wide tracking of BY DEREK
+  const pad = Math.round(sizeDots);
+  const w = Math.round(sizeDots * (text.length + 2) * 0.9) + pad * 2;
+  const h = Math.round(sizeDots * 2.4);
+  const svg = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+       <rect width="100%" height="100%" fill="white"/>
+       <text x="${Math.round(w / 2)}" y="${Math.round(h / 2)}"
+             text-anchor="middle" dominant-baseline="central"
+             font-family="${LABEL_FONT}" font-size="${sizeDots}" font-weight="700"
+             letter-spacing="${track}" fill="black">${text}</text>
+     </svg>`);
+
+  const mask = await sharp(svg)
+    .greyscale()
+    .negate()                 // ink becomes bright, as in lineartMask
+    .threshold(128)
+    .toColourspace('b-w')
+    .trim()                   // crop to the lettering itself
+    .png()
+    .toBuffer();
+  const m = await sharp(mask).metadata();
+  return { mask, width: m.width, height: m.height };
+}
+
 /** Black pixels wherever the mask says burn, transparent everywhere else. */
 async function inkOn(mask, width, height) {
   return sharp({ create: { width, height, channels: 3, background: { r: 0, g: 0, b: 0 } } })
     .joinChannel(mask)
     .png({ compressionLevel: 9 })
     .toBuffer();
+}
+
+/**
+ * The third sticker: the code, as large as the label allows, and the two words
+ * telling somebody what to do with it.
+ *
+ * No medallion on this one. It goes beside the other two, which carry the
+ * name — this is the one for a takeaway lid or a jar, where the whole job is
+ * being scanned from arm's length and nothing else. The code takes everything
+ * it can get and the words take what is left.
+ */
+async function scanSheet(layout, dpi, url) {
+  const dots = (mm) => Math.round((mm / 25.4) * dpi);
+  const W = dots(layout.w);
+  const H = dots(layout.h);
+  const margin = dots(MARGIN_MM);
+  const gap = dots(GAP_MM);
+  const innerW = W - margin * 2;
+  const innerH = H - margin * 2;
+
+  const textSize = Math.max(dots(3), Math.round(innerH * SCAN_TEXT_SHARE));
+  const label = await textMask(SCAN_TEXT, textSize);
+
+  // Whatever is left after the words is the code's, which is the point of it.
+  const q = qrMask(url, Math.min(innerW, innerH - label.height - gap));
+  const qrMm = (q.side / dpi) * 25.4;
+  if (q.side > innerW || qrMm < MIN_QR_MM) {
+    throw new Error(
+      `A ${layout.w}×${layout.h} mm label leaves only ${qrMm.toFixed(1)} mm for the QR code `
+      + `once the ${MARGIN_MM} mm margins and the wording are taken off, and below `
+      + `${MIN_QR_MM} mm it stops scanning reliably. Use a bigger label.`);
+  }
+
+  const qrPng = await inkOn(await q.mask.png().toBuffer(), q.side, q.side);
+  const labelPng = await inkOn(label.mask, label.width, label.height);
+
+  const blockH = q.side + gap + label.height;
+  const top = Math.round((H - blockH) / 2);
+  const place = [
+    { input: qrPng, top, left: Math.round((W - q.side) / 2) },
+    { input: labelPng, top: top + q.side + gap, left: Math.round((W - label.width) / 2) },
+  ];
+
+  const file = 'sticker-scan.png';
+  await sharp({ create: { width: W, height: H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite(place)
+    .withMetadata({ density: dpi })
+    .png({ compressionLevel: 9 })
+    .toFile(path.join(OUT, file));
+
+  return {
+    file, W, H, dpi,
+    withMark: false,
+    mm: `${layout.w}×${layout.h}`,
+    mark: `"${SCAN_TEXT}" at ${((label.height / dpi) * 25.4).toFixed(1)} mm`,
+    qr: `${q.modules} modules at ${q.scale} dots (v${q.version}, level Q)`,
+    qrMm: ((q.side / dpi) * 25.4).toFixed(1),
+  };
 }
 
 async function sheet(layout, dpi, url) {
@@ -270,6 +370,7 @@ function made() {
   for (const [file, label] of [
     ['sticker-portrait.png', 'Portrait'],
     ['sticker-landscape.png', 'Landscape'],
+    ['sticker-scan.png', 'Scan me — code only'],
   ]) {
     let size = "";
     try {
@@ -321,13 +422,16 @@ async function generate(opts = {}) {
     layouts = [
       { name: 'portrait', w: short, h: long, stack: 'vertical' },
       { name: 'landscape', w: long, h: short, stack: 'horizontal' },
+      { name: 'scan', w: short, h: long, stack: 'scan' },
     ];
     dpis = [dpi];
   }
 
   const sheets = [];
   for (const layout of layouts) {
-    for (const dpi of dpis) sheets.push(await sheet(layout, dpi, url));
+    for (const dpi of dpis) {
+      sheets.push(await (layout.stack === 'scan' ? scanSheet : sheet)(layout, dpi, url));
+    }
   }
 
   return {
