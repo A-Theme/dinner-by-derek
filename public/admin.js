@@ -8,7 +8,7 @@
     el.className = 'toast toast--' + (kind === 'bad' ? 'bad' : 'ok');
     el.textContent = msg;
     document.getElementById('toasts').appendChild(el);
-    setTimeout(function () { el.remove(); }, kind === 'bad' ? 7000 : 3500);
+    setTimeout(function () { el.remove(); }, kind === 'bad' ? 7000 : 6000);
   }
   window.dbdToast = toast;
 

@@ -33,6 +33,8 @@ router.get('/other-options', (req, res) => {
   const editing = req.query.edit
     ? db.prepare('SELECT * FROM standing_items WHERE id = ?').get(Number(req.query.edit))
     : null;
+  const saved = req.query.saved === '1';
+  const savedState = editing ? A.reviewState(editing) : null;
   const blank = {
     name: '', subcategory: 'Mains', description: '', allergens: '[]', dismissed: '[]',
     availability: 'every_service_day', weekdays: '[]', full_on: 1, active: 1,
@@ -78,6 +80,25 @@ router.get('/other-options', (req, res) => {
 
     <div class="card" style="margin-top:var(--dbd-sp-5)">
       <h2>${editing ? `Edit ${editing.name}` : 'Add an item'}</h2>
+      ${saved && editing ? html`
+        <!-- A confirmation that outlasts a toast. The prices below and in the
+             table above are read back from the database, so this says what was
+             stored rather than what was typed — and for an item still waiting
+             on its allergen review it says the part that matters most, which
+             is that customers cannot see any of it yet. -->
+        <div class="card card--warn" style="margin-bottom:var(--dbd-sp-4)">
+          <strong>Saved.</strong>
+          ${savedState.ok
+            ? html` These are the prices customers see now.`
+            : html` ${A.reviewMessage(editing.name, savedState)}
+              <br><strong>Until that is done this item stays off the customer menu</strong>,
+              at any price.`}
+          <br><span class="variant__label">Stored just now:
+            ${editing.full_on && editing.full_price != null
+              ? html`${editing.full_label} ${money(editing.full_price)}` : 'no full size'}${
+              editing.single_on && editing.single_price != null
+                ? html` · ${editing.single_label} ${money(editing.single_price)}` : ''}</span>
+        </div>` : ''}
       ${editing ? html`<div class="notice notice--strong">
         Saving changes here updates what customers see straight away, including on the
         week that's already published.</div>` : ''}
@@ -152,7 +173,13 @@ router.post('/other-options/:id', (req, res) => {
       Number(req.params.id));
   const item = db.prepare('SELECT * FROM standing_items WHERE id=?').get(Number(req.params.id));
   const st = A.reviewState(item);
-  res.redirect(303, `/admin/other-options?ok=${encodeURIComponent(
+  /* Back to the item, not away from it. Landing on the list closed the editor,
+     dropped the owner at the top of a table and left a toast at the bottom of
+     the screen for three seconds to carry the whole story — including, for an
+     unreviewed item, the fact that none of it is visible to customers yet.
+     The editor reopens with what was actually stored, so the new prices are on
+     screen rather than taken on trust. */
+  res.redirect(303, `/admin/other-options?edit=${item.id}&saved=1&ok=${encodeURIComponent(
     st.ok ? `${f.name} updated on the live menu. Existing orders are unchanged.`
       : A.reviewMessage(f.name, st))}`);
 });

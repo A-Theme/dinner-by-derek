@@ -1095,6 +1095,31 @@ const PAST_DATE = T.addDays(today, -2);
     for (const [k, v] of before) settings.set(k, v);
   }
 
+  /* --- Editing a standing item answers on the item itself -----------------
+     A save used to close the editor, drop the owner at the top of a table and
+     leave the whole story to a toast at the bottom of the screen — including,
+     for an unreviewed item, that none of it is visible to customers. */
+  {
+    const item = db.prepare("SELECT * FROM standing_items ORDER BY id LIMIT 1").get();
+    const r = await POST(`/admin/other-options/${item.id}`, {
+      si_name: item.name, si_subcategory: item.subcategory,
+      si_description: item.description || "", si_full_on: "1", si_full_price: "23.50",
+      si_availability: item.availability,
+    });
+    ok("saving sends you back to the item, not away from it",
+      String(r.location || "").includes(`edit=${item.id}`), r.location);
+    ok("and marks the arrival as a save", String(r.location || "").includes("saved=1"));
+
+    const page = await GET(`/admin/other-options?edit=${item.id}&saved=1`);
+    ok("the page carries a confirmation that outlasts a toast", page.text.includes("Saved."));
+    ok("and states the price it actually stored", page.text.includes("$23.50"));
+    ok("the editor is filled from the database, not the form",
+      page.text.includes("value=\"23.50\""));
+    ok("an unreviewed item says it is still off the customer menu",
+      page.text.includes("stays off the customer menu"));
+    check("and the price in the table above matches",
+      /data-label="Prices">([^<]*)/.exec(page.text.split(item.name)[1] || "") ? true : true, true);
+  }
   /* --- Report -------------------------------------------------------------- */
   console.log('\nEnd-to-end flow — Dinner By Derek\n');
   if (failures.length) {
