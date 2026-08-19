@@ -80,6 +80,22 @@ const PAST_DATE = T.addDays(today, -2);
   const app = require('../server/index');          // starts listening
   await new Promise((r) => setTimeout(r, 1200));
 
+  /* --- This run cannot send email --------------------------------------
+     Checked before a single order is placed, because the orders below carry
+     @example.com addresses and this suite runs on the owner's own machine.
+     SMTP_HOST is blanked at the top of this file and dotenv leaves an
+     already-set key alone, so the guard holds — but it is one deleted line
+     away from not holding, and the failure would be a run of real deliveries
+     out of the real account to addresses that bounce. Cheap to assert, and
+     it fails here rather than in someone's sent folder. */
+  {
+    const mailer = require('../server/mailer');
+    const config = require('../server/config');
+    ok('the suite cannot send email, whatever .env holds', !mailer.configured(),
+      `SMTP_HOST leaked into the test run as ${JSON.stringify(config.smtp.host)} — `
+      + 'blank it at the top of this file before running again');
+  }
+
   /* --- Anonymous ------------------------------------------------------- */
   {
     const home = await GET('/');
