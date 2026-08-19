@@ -1120,6 +1120,41 @@ const PAST_DATE = T.addDays(today, -2);
     check("and the price in the table above matches",
       /data-label="Prices">([^<]*)/.exec(page.text.split(item.name)[1] || "") ? true : true, true);
   }
+  /* --- Signing in against a HASHED password, over HTTP --------------------
+   * The suite runs on a plaintext ADMIN_PASSWORD, so the branch a real install
+   * uses — scrypt against ADMIN_PASSWORD_HASH — was never exercised through a
+   * route. It is now the async one, and the way async verification fails is
+   * total: an un-awaited promise is an object, an object is truthy, and the
+   * door opens for every password ever typed. So it is checked here, where a
+   * wrong one has to come back 401 and the right one has to still work.
+   */
+  {
+    const RL = require('../server/ratelimit');
+    const P = require('../server/password');
+    const cfg = require('../server/config');
+    const wasHash = cfg.adminPasswordHash;
+    // The session key is derived at load from the verifier, so the cookie
+    // already held stays valid; only passwordMatches reads this at call time.
+    cfg.adminPasswordHash = P.hash('flow-test-password');
+    RL.reset();
+
+    const wrong = await POST('/admin/login', { password: 'not-it' });
+    check('a wrong password against a hashed store is refused', wrong.status, 401);
+    ok('and no session comes back with it', !/dbd_admin=[^;]/.test(String(wrong.text)));
+
+    const empty = await POST('/admin/login', { password: '' });
+    check('an empty password is refused too', empty.status, 401);
+
+    RL.reset();
+    const right = await POST('/admin/login', { password: 'flow-test-password', next: '/admin' });
+    check('the right password against a hashed store still signs in', right.status, 303);
+    ok('and lands on the dashboard', String(right.location || '').startsWith('/admin'));
+
+    cfg.adminPasswordHash = wasHash;
+    RL.reset();
+    await POST('/admin/login', { password: 'flow-test-password', next: '/admin' });
+  }
+
   /* --- One typo in the timezone box used to take the site down ------------
    * Intl throws on a zone it doesn't know, and every date on every page goes
    * through Intl, so a transposed letter turned the live menu and the whole

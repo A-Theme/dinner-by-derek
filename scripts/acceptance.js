@@ -817,9 +817,9 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   const PW = require('../server/password');
   const hash = PW.hash('a-long-enough-password');
 
-  ok('the right password is recognised', PW.matches('a-long-enough-password', hash));
-  ok('a wrong one is not', !PW.matches('a-long-enough-passwore', hash));
-  ok('and neither is the empty string', !PW.matches('', hash));
+  ok('the right password is recognised', PW.matchesSync('a-long-enough-password', hash));
+  ok('a wrong one is not', !PW.matchesSync('a-long-enough-passwore', hash));
+  ok('and neither is the empty string', !PW.matchesSync('', hash));
 
   const parts = hash.split('$');
   check('the stored form names its algorithm', parts[0], 'scrypt');
@@ -828,9 +828,9 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('the same password hashes differently every time',
     PW.hash('a-long-enough-password') !== hash);
   ok('a hash that has been damaged refuses everything',
-    !PW.matches('a-long-enough-password', hash.slice(0, -4)));
+    !PW.matchesSync('a-long-enough-password', hash.slice(0, -4)));
   ok('and so does a string that was never a hash',
-    !PW.matches('a-long-enough-password', 'plaintext'));
+    !PW.matchesSync('a-long-enough-password', 'plaintext'));
 }
 
 /* --- What a session is signed against -------------------------------------

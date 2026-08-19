@@ -40,7 +40,7 @@ router.get('/login', (req, res) => {
 });
 
 router.post('/login', rateLimit('login', 8, 10 * 60_000), async (req, res) => {
-  if (!auth.passwordMatches(req.body.password)) {
+  if (!(await auth.passwordMatches(req.body.password))) {
     /* Written down before the wait, so a caller who hangs up early is still
        counted — otherwise abandoning each request is how you avoid the record
        and the delay at the same time. */

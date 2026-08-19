@@ -49,8 +49,16 @@ function clear(res) {
   res.clearCookie(COOKIE, { path: '/' });
 }
 
-/** Constant-time password check, hashed or plain depending on what's set. */
-function passwordMatches(given) {
+/**
+ * Constant-time password check, hashed or plain depending on what's set.
+ *
+ * Returns a PROMISE. It has to be awaited — an un-awaited promise is an object,
+ * an object is truthy, and `if (!auth.passwordMatches(x))` would then admit
+ * everyone. There is one caller and it awaits; the flow suite posts a wrong
+ * password over HTTP and expects to be refused, which is the check that would
+ * catch this going wrong.
+ */
+async function passwordMatches(given) {
   const s = String(given || '');
   if (config.adminPasswordHash) return P.matches(s, config.adminPasswordHash);
   return P.sameBytes(Buffer.from(s), Buffer.from(config.adminPassword));

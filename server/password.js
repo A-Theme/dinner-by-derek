@@ -34,9 +34,15 @@ function hash(plain, params = PARAMS) {
   ].join('$');
 }
 
-function matches(given, stored) {
+/**
+ * What a stored hash says, or null if it doesn't say it.
+ *
+ * The two verifiers below differ only in which scrypt they call, so what
+ * counts as a usable stored form is decided once, here, rather than twice.
+ */
+function parse(stored) {
   const parts = String(stored).split('$');
-  if (parts.length !== 6 || parts[0] !== 'scrypt') return false;
+  if (parts.length !== 6 || parts[0] !== 'scrypt') return null;
   const [, N, r, p, salt, key] = parts;
   try {
     const expected = Buffer.from(key, 'base64url');
@@ -45,13 +51,60 @@ function matches(given, stored) {
      * necessary rather than decorative: without it a hash truncated in the
      * file would be compared against an equally truncated derivation and
      * still let the password through, quietly weakened. */
-    if (expected.length < 32) return false;
-    const actual = crypto.scryptSync(String(given), Buffer.from(salt, 'base64url'),
-      expected.length, { N: Number(N), r: Number(r), p: Number(p), maxmem: MAXMEM });
-    return sameBytes(actual, expected);
+    if (expected.length < 32) return null;
+    return {
+      salt: Buffer.from(salt, 'base64url'),
+      expected,
+      opts: { N: Number(N), r: Number(r), p: Number(p), maxmem: MAXMEM },
+    };
   } catch {
-    return false;                 // a malformed hash refuses everything
+    return null;
   }
 }
 
-module.exports = { hash, matches, sameBytes, PARAMS };
+/**
+ * Verify, without stopping the server to do it.
+ *
+ * scrypt is meant to be slow — that is the whole of its value — and scryptSync
+ * spends that slowness on the one thread everything else in this process runs
+ * on. A wrong password therefore cost every other request in flight: eight of
+ * them at once, which is all the rate limiter permits from one address, held
+ * an ordinary customer page for 280ms. Handed to the threadpool instead it
+ * costs the guesser exactly as much and everyone else nothing.
+ *
+ * Async is the only verifier the server has. A synchronous one kept beside it
+ * would eventually be the one somebody called, and the failure would not look
+ * like a bug — it would look like the site being slow under load.
+ */
+async function matches(given, stored) {
+  const p = parse(stored);
+  if (!p) return false;                 // a malformed hash refuses everything
+  try {
+    const actual = await new Promise((resolve, reject) => {
+      crypto.scrypt(String(given), p.salt, p.expected.length, p.opts,
+        (err, key) => (err ? reject(err) : resolve(key)));
+    });
+    return sameBytes(actual, p.expected);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The same answer, synchronously, for the two callers that are not the server:
+ * `npm run password`, which has nothing else to be getting on with, and the
+ * acceptance suite, which is a straight line of checks with no event loop to
+ * protect. Never reach for this from a route.
+ */
+function matchesSync(given, stored) {
+  const p = parse(stored);
+  if (!p) return false;
+  try {
+    return sameBytes(crypto.scryptSync(String(given), p.salt, p.expected.length, p.opts),
+      p.expected);
+  } catch {
+    return false;
+  }
+}
+
+module.exports = { hash, matches, matchesSync, sameBytes, PARAMS };
