@@ -597,6 +597,47 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   settings.set('remind_missing_week', '1');
 }
 
+/* --- Words the matcher cannot split ----------------------------------------
+   The inflection rule tolerates a trailing plural and a past participle, so
+   "buttered" finds butter. It cannot see a word fused to the next one, and
+   nothing warns you: "cheesecake" raised no milk, no anything, while "cheese
+   cake" read perfectly. The fix is dictionary entries, not looser matching —
+   substring matching would find butter inside butternut. */
+{
+  const expect = [
+    ['Cheesecake with berries', 'milk'],
+    ['Vanilla milkshake', 'milk'],
+    ['Carrot cake with buttercream', 'milk'],
+    ['Philly cheesesteak', 'milk'],
+    ['Scalloped potatoes', 'milk'],
+    ['Almondmilk latte', 'tree nuts'],
+    ['Oatmeal cookies', 'gluten'],
+    ['Sourdough loaf', 'wheat and triticale'],
+    ['Flatbread with dip', 'wheat and triticale'],
+    ['Shortbread', 'wheat and triticale'],
+    ['Chicken fettuccine', 'wheat and triticale'],
+    ['Vegetable tempura', 'wheat and triticale'],
+    ['Belgian waffles', 'eggs'],
+    ['Caesar salad', 'fish'],
+  ];
+  for (const [text, allergen] of expect) {
+    ok(`${JSON.stringify(text)} raises ${allergen}`,
+      A.detect(text).some((h) => h.allergen === allergen),
+      `got: ${A.detect(text).map((h) => h.allergen).join(', ') || 'nothing'}`);
+  }
+
+  // The boundary the word-boundary rule exists to hold. A squash is not a nut
+  // and nutmeg is not a nut, and no amount of wanting to catch "cheesecake"
+  // is worth finding butter inside butternut.
+  const raises = (t, a) => A.detect(t).some((h) => h.allergen === a);
+  ok('butternut squash is not butter', !raises('Butternut squash soup', 'milk'));
+  ok('and not a tree nut either', !raises('Butternut squash soup', 'tree nuts'));
+  ok('nutmeg is not a tree nut', !raises('Nutmeg and cinnamon', 'tree nuts'));
+  ok('buttercup squash is not butter', !raises('Buttercup squash', 'milk'));
+  ok('a porterhouse steak is not beer', !raises('Porterhouse steak', 'gluten'));
+  ok('but a stout still is', raises('Stout braised beef', 'gluten'));
+}
+
 /* --- A price box that doesn't hold a price ---------------------------------
    Blank leaves the size off the menu. Anything unreadable has to do the same:
    the stripping that lets "$22.00" through also reduced "free" to nothing,

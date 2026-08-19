@@ -27,12 +27,21 @@ module.exports = {
     'custard', 'ice cream', 'whey', 'casein', 'caseinate', 'lactose',
     'condensed milk', 'evaporated milk', 'milk powder', 'bechamel',
     'alfredo', 'au gratin', 'gratin', 'queso', 'paneer', 'kefir', 'curd',
+    // Closed compounds. The matcher tolerates a plural and a past participle
+    // but cannot see a word fused to the next one, so "cheesecake" read as
+    // nothing at all — no milk, no anything — while "cheese cake" read fine.
+    'cheesecake', 'cheeseburger', 'cheesesteak', 'milkshake', 'buttercream',
+    'shortbread', 'scalloped',
+    // Dishes that are dairy by construction rather than by name.
+    'bisque', 'gelato', 'panna cotta', 'creme brulee', 'burrata', 'halloumi',
+    'tzatziki', 'waffle', 'pancake', 'crepe', 'croissant', 'brioche',
   ],
   eggs: [
     'egg', 'eggs', 'egg white', 'egg yolk', 'yolk', 'albumen', 'meringue',
     'mayonnaise', 'mayo', 'aioli', 'hollandaise', 'custard', 'frittata',
     'omelette', 'omelet', 'quiche', 'egg wash', 'lysozyme', 'ovalbumin',
-    'caesar dressing',
+    'caesar dressing', 'caesar salad', 'waffle', 'pancake', 'crepe',
+    'brioche', 'challah', 'tempura', 'egg noodle', 'pavlova',
   ],
   peanuts: [
     'peanut', 'peanuts', 'peanut butter', 'groundnut', 'goober',
@@ -43,18 +52,20 @@ module.exports = {
     'cashew', 'cashews', 'hazelnut', 'filbert', 'macadamia', 'pecan',
     'pecans', 'pine nut', 'pignoli', 'pistachio', 'pistachios', 'walnut',
     'walnuts', 'nut', 'nuts', 'nutmeal', 'praline', 'nougat', 'gianduja',
-    'pesto', 'frangipane', 'chestnut',
+    'pesto', 'frangipane', 'chestnut', 'almondmilk', 'cashewmilk',
+    'baklava', 'hazelnut spread',
   ],
   'sesame seeds': [
     'sesame', 'sesame seed', 'sesame seeds', 'tahini', 'tahina', 'halva',
     'halvah', 'benne', 'gomashio', 'za\'atar', 'zaatar', 'hummus',
-    'sesame oil',
+    'sesame oil', 'baba ganoush', 'baba ghanoush',
   ],
   fish: [
     'fish', 'anchovy', 'anchovies', 'worcestershire', 'fish sauce', 'nam pla',
     'cod', 'haddock', 'halibut', 'salmon', 'tuna', 'trout', 'bass', 'sole',
     'tilapia', 'mackerel', 'sardine', 'sardines', 'herring', 'pickerel',
     'caviar', 'roe', 'bonito', 'dashi', 'surimi', 'caesar dressing',
+    'caesar salad', 'puttanesca',
   ],
   'crustaceans and molluscs': [
     'shrimp', 'prawn', 'prawns', 'crab', 'lobster', 'crayfish', 'crawfish',
@@ -78,6 +89,14 @@ module.exports = {
     'bun', 'buns', 'roll', 'rolls', 'crouton', 'croutons', 'semolina',
     'durum', 'spelt', 'farro', 'kamut', 'bulgur', 'seitan', 'cracker',
     'crackers', 'biscuit', 'pierogi', 'perogy', 'spaetzle',
+    // The pasta shapes and bakery words the list had not reached, plus the
+    // closed compounds the matcher cannot split.
+    'fettuccine', 'tagliatelle', 'rigatoni', 'ravioli', 'tortellini',
+    'fusilli', 'farfalle', 'rotini', 'vermicelli', 'udon', 'ramen',
+    'sourdough', 'flatbread', 'shortbread', 'baguette', 'ciabatta',
+    'focaccia', 'naan', 'scone', 'crumpet', 'pretzel', 'wonton',
+    'strudel', 'baklava', 'tempura', 'waffle', 'pancake', 'crepe',
+    'croissant', 'brioche', 'challah', 'gravy',
   ],
   gluten: [
     'gluten', 'wheat', 'triticale', 'barley', 'rye', 'oat', 'oats', 'malt',
@@ -86,6 +105,13 @@ module.exports = {
     'schnitzel', 'batter', 'pasta', 'noodle', 'noodles', 'roux', 'seitan',
     'couscous', 'orzo', 'semolina', 'durum', 'spelt', 'farro', 'bulgur',
     'soy sauce', 'pearl barley', 'cracker', 'crackers', 'pastry',
+    'oatmeal', 'oatcake', 'porridge', 'granola', 'muesli', 'lager',
+    'sourdough', 'flatbread', 'shortbread', 'baguette',
+    'ciabatta', 'focaccia', 'naan', 'scone', 'crumpet', 'pretzel',
+    'wonton', 'strudel', 'baklava', 'tempura', 'waffle', 'pancake',
+    'crepe', 'croissant', 'brioche', 'challah', 'gravy', 'fettuccine',
+    'tagliatelle', 'rigatoni', 'ravioli', 'tortellini', 'fusilli',
+    'farfalle', 'rotini', 'vermicelli', 'udon', 'ramen',
   ],
   mustard: [
     'mustard', 'dijon', 'dijon mustard', 'grainy mustard', 'mustard seed',
