@@ -316,7 +316,7 @@ const DEFAULTS = {
   remind_missing_week_days: '2',
   payment_instructions:
     'No online payment. Pay at pickup, on delivery, or by e-transfer to derek@example.com.',
-  owner_contact: 'Message Dinner By Derek on Facebook, or call (519) 555-0142.',
+  owner_contact: 'Message Dinner By Derek on Facebook, or call (226) 748-8378.',
   notify_email: '',
   full_label: 'Full size',
   single_label: 'Meal for one',

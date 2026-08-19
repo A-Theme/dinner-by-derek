@@ -131,7 +131,7 @@ function loadDetails() {
     cutoffHour: 22,
     deliveryOn: true,
     zone: 'Kitchener–Waterloo',
-    contact: 'Message Dinner By Derek on Facebook, or call (519) 555-0142.',
+    contact: 'Message Dinner By Derek on Facebook, or call (226) 748-8378.',
   };
 
   const dbPath = process.env.DB_PATH || path.join(root, 'data', 'dinnerbyderek.db');
