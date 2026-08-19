@@ -135,6 +135,10 @@ function loadWeek() {
       tz: setting('timezone', 'America/Toronto'),
       pickup: [setting('pickup_start', '16:00'), setting('pickup_end', '19:00')],
       cutoffHour: Number(setting('cutoff_hour', '22')),
+      /* As a clock string, because the poster prints a time and the minutes
+       * are part of it: a 22:30 cutoff used to be drawn as 10:00 PM. */
+      cutoff: `${String(setting('cutoff_hour', '22')).padStart(2, '0')}:`
+        + `${String(setting('cutoff_minute', '0')).padStart(2, '0')}`,
       lateCutoff: `${String(setting('late_cutoff_hour', '6')).padStart(2, '0')}:`
         + `${String(setting('late_cutoff_minute', '0')).padStart(2, '0')}`,
       business: setting('business_name', 'Dinner By Derek'),
@@ -156,6 +160,7 @@ const SAMPLE = {
   tz: 'America/Toronto',
   pickup: ['16:00', '19:00'],
   cutoffHour: 22,
+  cutoff: '22:00',
   lateCutoff: '06:00',
   business: 'Dinner By Derek',
   sample: true,
@@ -272,28 +277,85 @@ async function menu(w) {
     [{ input: mark.data, top: 84, left: Math.round(mid - mark.width / 2) }]);
 }
 
-/** Last call, 1080×1080. Umber is the palette's own closing/urgent tone. */
+/**
+ * Which day the last-call poster is about, and whether tonight is its cutoff.
+ *
+ * The cutoff is 22:00 on the day BEFORE service, so the answer is tomorrow's
+ * service day — not the week's first, which is what this used to draw. Made on
+ * a Tuesday the poster has to read Wednesday, because tonight's ten o'clock is
+ * what closes Wednesday. Naming the first day of the week meant that from
+ * Tuesday onward it advertised a cutoff already gone.
+ *
+ * Separate from the drawing so it can be checked without rendering a PNG, and
+ * so the rule lives in one readable place rather than inside an SVG template.
+ *
+ * Returns { subject, tonight, upcoming }:
+ *   subject   the day to name
+ *   tonight   true when the cutoff really is this evening
+ *   upcoming  false when nothing on this week is still ahead, so the caller
+ *             can say so instead of drawing a confident poster about a day
+ *             that has been and gone
+ */
+function lastCallDay(days, today) {
+  // A closed day is never the subject: there is no order to get in before it.
+  const cooking = days.filter((d) => !d.closed);
+  const tonight = cooking.find((d) => d.service_date === T.addDays(today, 1)) || null;
+  const next = tonight || cooking.find((d) => d.service_date > today) || null;
+  return {
+    subject: next || cooking[0] || days[0] || null,
+    tonight: !!tonight,
+    upcoming: !!next,
+  };
+}
+
+/**
+ * Last call, 1080×1080. Umber is the palette's own closing/urgent tone.
+ *
+ * "Tonight" is only said when tonight is really the cutoff — see lastCallDay.
+ * When the next day being cooked is further out, a Tuesday with nothing on
+ * until Friday, the evening is named instead: a poster that says "tonight"
+ * about Thursday is worse than one that says Thursday.
+ */
 async function lastCall(w) {
   const S = 1080, mid = S / 2;
   const mark = await brandmark.wordmark({ height: 190 });
-  // The first day being cooked, which is not necessarily the first day listed.
-  const first = w.days.find((d) => !d.closed) || w.days[0];
-  const day = T.fmtDayLong(first.service_date, w.tz).split(',')[0];
-  const hour = w.cutoffHour > 12 ? w.cutoffHour - 12 : w.cutoffHour;
+
+  const { subject, tonight, upcoming } = lastCallDay(w.days, T.todayIn(w.tz));
+  const dayName = (iso) => T.fmtDayLong(iso, w.tz).split(',')[0];
+  const day = dayName(subject.service_date);
+  const closes = T.fmtClock(w.cutoff || '22:00');
+  const lateEnds = T.fmtClock(w.lateCutoff || '06:00');
+
   const body = [
     label('Last call', { x: mid, y: 502, size: 32, fill: palette.ochre, anchor: 'middle', track: 12 }),
     text(day, { x: mid, y: 638, size: 104, fill: palette.parchment, anchor: 'middle', font: DISPLAY }),
     rule(mid - 220, 696, mid + 220, palette.tan, 0.5),
-    text(`Orders close tonight at ${hour}:00 PM`,
+    text(tonight
+      ? `Orders close tonight at ${closes}`
+      : `Orders close ${dayName(T.addDays(subject.service_date, -1))} at ${closes}`,
       { x: mid, y: 776, size: 40, fill: palette.parchment, anchor: 'middle', font: DISPLAY }),
     // The second line has to name the end of the late window as well as its
     // start, or "it becomes a request" reads as an invitation to ask at four
-    // the next afternoon — which the app now refuses.
-    label(`Requests only after that, until ${T.fmtClock(w.lateCutoff || '06:00')} tomorrow`,
+    // the next afternoon — which the app now refuses. "Tomorrow" only works
+    // when the cutoff is tonight; otherwise the day itself is named.
+    label(tonight
+      ? `Requests only after that, until ${lateEnds} tomorrow`
+      : `Requests only after that, until ${lateEnds} ${day}`,
       { x: mid, y: 836, size: 22, fill: palette['tan-lift'], anchor: 'middle', track: 3 }),
   ].join('');
-  return render('last-call.png', S, S, palette['umber-deep'], body,
+
+  const out = await render('last-call.png', S, S, palette['umber-deep'], body,
     [{ input: mark.data, top: 228, left: Math.round(mid - mark.width / 2) }]);
+
+  /* Said out loud rather than drawn wrong. With every day on the week behind
+   * us there is no last call to make, and the poster falls back to naming one
+   * that has already gone. */
+  return upcoming ? out : {
+    ...out,
+    note: 'The last-call reminder has no upcoming day to point at — every day on '
+      + 'this week has passed, so it names one that is over. Publish the next week '
+      + 'before posting it.',
+  };
 }
 
 /**
@@ -339,10 +401,15 @@ async function generate() {
     await linkPreview(w),
   ];
 
+  /* A piece that could not say the true thing says so here rather than
+   * drawing it anyway — the dashboard prints these beside the button. */
+  const notes = live ? [] : ['No week is published yet, so the menu post uses sample dishes.'];
+  for (const f of files) if (f.note) notes.push(f.note);
+
   return {
     dir: OUT,
     files,
-    notes: live ? [] : ['No week is published yet, so the menu post uses sample dishes.'],
+    notes,
   };
 }
 
@@ -361,4 +428,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { generate, OUT };
+module.exports = { generate, OUT, lastCallDay };

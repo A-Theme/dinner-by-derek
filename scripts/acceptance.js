@@ -1032,6 +1032,48 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('and the timezone as it was', settings.get('timezone'), before);
 }
 
+
+/* --- Which day the last-call poster is about --------------------------------
+   The cutoff is 22:00 on the day BEFORE service, so the poster made tonight is
+   about tomorrow. It used to name the week's first cooking day whatever the
+   date was, which meant that from Tuesday onward it advertised a cutoff that
+   had already gone — drawn on Tuesday for a Mon–Wed week it said Monday.
+
+   Dates here are relative to today, so these stay true tomorrow. */
+{
+  const { lastCallDay } = require('../scripts/social');
+  const TZ = 'America/Toronto';
+  const today = T.todayIn(TZ);
+  const D = (n) => T.addDays(today, n);
+  const day = (iso, closed = 0) => ({ service_date: iso, dish_name: closed ? '' : 'A dish', closed });
+
+  let r = lastCallDay([day(D(-1)), day(D(1)), day(D(3))], today);
+  check('the poster is about tomorrow, not the first day of the week', r.subject.service_date, D(1));
+  ok('and tonight really is the cutoff', r.tonight);
+
+  r = lastCallDay([day(D(-2)), day(D(-1))], today);
+  ok('a week whose days have all passed has nothing ahead of it', !r.upcoming);
+  ok('and does not claim tonight is the cutoff', !r.tonight);
+
+  r = lastCallDay([day(D(1), 1), day(D(3))], today);
+  check('a closed day tomorrow is skipped for the next one being cooked',
+    r.subject.service_date, D(3));
+  ok('and that is not tonight', !r.tonight);
+
+  r = lastCallDay([day(D(3)), day(D(4))], today);
+  check('with nothing until later in the week it names the next day cooked',
+    r.subject.service_date, D(3));
+  ok('and still does not say tonight', !r.tonight);
+
+  r = lastCallDay([day(D(1))], today);
+  check('a single day, tomorrow, is the subject', r.subject.service_date, D(1));
+  ok('and is tonight', r.tonight);
+
+  r = lastCallDay([day(D(0)), day(D(2))], today);
+  check('today is over as far as ordering goes, so it looks past it',
+    r.subject.service_date, D(2));
+  ok('which is not tonight either', !r.tonight);
+}
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {
