@@ -961,6 +961,11 @@ and pickup window in their own columns) and a contact list.
 
 ## Deployment
 
+> **Setting up the real server for the first time?** [docs/DEPLOY.md](docs/DEPLOY.md)
+> is the whole thing start to finish — renting the box, DNS, certificate,
+> systemd, backups — with the commands in order. What follows here is the
+> reference for *why* the pieces are shaped the way they are.
+
 The app sets its own security headers, so nginx does not need to add any and
 should not duplicate them. Everything the pages load they also serve — no CDN,
 no font host, no analytics — so the policy is `'self'` and nothing else, inline
