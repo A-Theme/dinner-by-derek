@@ -61,7 +61,8 @@ const SETS = {
     generate: sticker.generate,
     blurb: 'For a thermal label printer. Black and transparent only — no greys, no white '
       + 'ink — so it prints as burned dots on whatever colour the stock already is. '
-      + 'Give it the size of the labels in your printer and it draws that one.',
+      + 'Give it the size of the labels in your printer and it draws both orientations '
+      + 'at that size, replacing the two below.',
     /* Open-ended: whatever sizes have been asked for. Listed from disk rather
      * than from a fixed table, which is why this set carries `listFiles`. */
     files: [],

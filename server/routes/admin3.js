@@ -263,9 +263,10 @@ function graphicsPanel(set) {
           </div>
           <p class="also">203 dpi suits Zebra, Rollo and most direct-thermal units;
             300 dpi suits a Brother QL. Print the one that matches your printer and
-            never scale it to fit. Common sizes:
+            never scale it to fit. Both orientations are drawn each time, so the two
+            below are always a matched pair. Common sizes:
             ${set.sizes.presets.map((p) => p.label).join(', ')}.</p>
-          <button class="btn btn--primary" type="submit">Generate this sticker</button>
+          <button class="btn btn--primary" type="submit">Generate both orientations</button>
         </form>`
       : html`
         <form method="post" action="/admin/graphics/${set.key}">

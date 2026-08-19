@@ -41,13 +41,13 @@ const OUT = path.join(process.env.GRAPHICS_DIR || path.join(root, 'data', 'graph
  * landscape sets them side by side, which is the only arrangement that uses
  * the extra width instead of leaving a band of blank stock down each side.
  */
-const MARGIN_MM = 5;     // thermal feeds drift; keep ink well off the edge
+const MARGIN_MM = 4.5;   // thermal feeds drift; keep ink well off the edge
 /* And the mark never takes the whole of what is left. A logo running edge to
  * edge reads as an overflow even when it is inside the margin — it wants air
  * around it to look placed rather than crammed. */
-const MARK_SHARE = 0.86; // of the inner width, at most
-const QR_MM = 22;        // target, rounded down to a whole number of dots per module
-const GAP_MM = 3;        // between the mark and the code
+const MARK_SHARE = 0.9;  // of the inner width, at most
+const QR_MM = 21;        // target, rounded down to a whole number of dots per module
+const GAP_MM = 2.5;      // between the mark and the code
 
 const LAYOUTS = [
   { name: 'portrait', w: 54, h: 70, stack: 'vertical' },
@@ -311,9 +311,17 @@ async function generate(opts = {}) {
         + `${SIZE_LIMITS.min} and ${SIZE_LIMITS.max}.`);
     }
     const dpi = DPI_CHOICES.includes(Number(opts.dpi)) ? Number(opts.dpi) : DPI_CHOICES[0];
-    // Wider than tall sets the mark beside the code; taller than wide stacks
-    // them. Square counts as wide, which keeps the mark as large as it can be.
-    layouts = [{ name: `${w}x${h}mm`, w, h, stack: w >= h ? 'horizontal' : 'vertical' }];
+    /* Both orientations of the stock, every time. Asking for 54 x 70 and
+       getting only the portrait meant a second trip through the form with
+       the numbers swapped to see the other one — and the two tiles are
+       there to be compared. The short side leads on the portrait, the long
+       side on the landscape, whichever way round the numbers arrived. */
+    const short = Math.min(w, h);
+    const long = Math.max(w, h);
+    layouts = [
+      { name: 'portrait', w: short, h: long, stack: 'vertical' },
+      { name: 'landscape', w: long, h: short, stack: 'horizontal' },
+    ];
     dpis = [dpi];
   }
 
