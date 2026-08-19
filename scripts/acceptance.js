@@ -597,6 +597,54 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   settings.set('remind_missing_week', '1');
 }
 
+/* --- A CSV cell is data, never a formula -----------------------------------
+   Four of the exported columns are typed by the customer. A spreadsheet reads
+   a leading = + - @ as the start of a formula, so those have to reach Derek's
+   machine as the text he was sent, not as something his spreadsheet runs. */
+{
+  const X = require('../server/exports');
+  const cell = (v, numericCols = []) => X.csv([[v]], numericCols)
+    .replace(/^﻿/, '').replace(/\r\n$/, '');
+
+  for (const payload of ['=1+1', '+15195550100', '@A1', '-1+1', '\tSUM(A1)']) {
+    ok(`${JSON.stringify(payload)} is defused`, cell(payload).startsWith("'"));
+  }
+  check('a formula with a comma is defused AND still quoted',
+    cell('=HYPERLINK("x",A1)'), `"'=HYPERLINK(""x"",A1)"`);
+
+  // The other half of the job: ordinary values must come through untouched,
+  // or the export stops being readable to make it safe.
+  for (const plain of ['Derek Hines', '519-555-0100', 'a@b.ca', 'Nut allergy']) {
+    check(`${JSON.stringify(plain)} is left alone`, cell(plain), plain);
+  }
+  check('an equals sign mid-cell is not a formula', cell('table=4'), 'table=4');
+
+  // Numeric columns stay bare so Excel still sums them.
+  check('numbers are not quoted or prefixed', cell('22.00', [0]), '22.00');
+  check('and a negative number in a numeric column is left summable',
+    cell('-5.00', [0]), '-5.00');
+
+  // Through the real export, not just the helper.
+  db.prepare(`INSERT INTO orders (ref,service_date,status,name,phone,email,allergy_notes,
+    method,subtotal,delivery_fee,total,payment_method)
+    VALUES ('CSVTEST1','2026-08-21','confirmed',?,?,?,?,'pickup',2200,0,2200,'cash')`)
+    .run('=1+1', '+1519', '@A1', '-1');
+  const oid = db.prepare(`SELECT id FROM orders WHERE ref='CSVTEST1'`).get().id;
+  db.prepare(`INSERT INTO order_lines (order_id,source_level,ref_table,ref_id,item_name,
+    subcategory,variant,variant_label,unit_price,qty)
+    VALUES (?,'Featured','service_days',1,'Beef','Featured','full','Full size',2200,1)`).run(oid);
+
+  const row = X.ordersCsv({ date: '2026-08-21' }).split('\r\n')[1].split(',');
+  check('the exported customer name is defused', row[1], "'=1+1");
+  check('the phone too', row[2], "'+1519");
+  check('the email too', row[3], "'@A1");
+  check('the allergy notes too', row[18], "'-1");
+  check('and the line total is still a bare number', row[9], '22.00');
+
+  db.prepare(`DELETE FROM order_lines WHERE order_id=?`).run(oid);
+  db.prepare(`DELETE FROM orders WHERE id=?`).run(oid);
+}
+
 /* --- How the password is stored -------------------------------------------
    Stored hashed when ADMIN_PASSWORD_HASH is set, so the file that survives a
    backup, a screen share or a stray copy doesn't hand over the dashboard. */
