@@ -51,10 +51,77 @@
     history.replaceState({}, '', location.pathname + (params.toString() ? '?' + params : ''));
   }
 
-  /* --- Confirms name exactly what will happen --------------------------- */
+  /* --- Confirms name exactly what will happen ---------------------------
+   * These used to be window.confirm(), which browsers are entitled to stop
+   * showing: after a few dialogs in a row Chrome and Edge offer "prevent this
+   * page from creating additional dialogs", and once that is ticked confirm()
+   * returns false immediately, for the rest of the session, without asking
+   * anyone. preventDefault() then ran on every submit — so Save did nothing at
+   * all, silently, every time, and the only way to discover why was to know
+   * that box existed. A price edit that will not save and will not say why is
+   * indistinguishable from a broken app.
+   *
+   * A <dialog> cannot be suppressed, and the browser still handles the focus
+   * trap, the backdrop and Escape. window.confirm stays as the fallback for
+   * anything too old to have showModal.
+   */
+  var confirmDialog = null;
+  function askToConfirm(message, onYes) {
+    if (!window.HTMLDialogElement || !document.createElement('dialog').showModal) {
+      if (window.confirm(message)) onYes();
+      return;
+    }
+    if (!confirmDialog) {
+      confirmDialog = document.createElement('dialog');
+      confirmDialog.className = 'review';
+      confirmDialog.setAttribute('aria-labelledby', 'confirm-title');
+      var h = document.createElement('h2');
+      h.id = 'confirm-title';
+      h.textContent = 'Just checking';
+      var p = document.createElement('p');
+      p.id = 'confirm-message';
+      var actions = document.createElement('div');
+      actions.className = 'review__actions';
+      var no = document.createElement('button');
+      no.type = 'button';
+      no.className = 'btn btn--secondary';
+      no.textContent = 'Cancel';
+      var yes = document.createElement('button');
+      yes.type = 'button';
+      yes.className = 'btn btn--primary';
+      yes.textContent = 'Yes, go ahead';
+      actions.appendChild(no);
+      actions.appendChild(yes);
+      confirmDialog.appendChild(h);
+      confirmDialog.appendChild(p);
+      confirmDialog.appendChild(actions);
+      document.body.appendChild(confirmDialog);
+      no.addEventListener('click', function () { confirmDialog.close(); });
+      yes.addEventListener('click', function () {
+        var run = confirmDialog.__onYes;
+        confirmDialog.close();
+        if (run) run();
+      });
+    }
+    confirmDialog.querySelector('#confirm-message').textContent = message;
+    confirmDialog.__onYes = onYes;
+    confirmDialog.showModal();
+  }
+
   document.querySelectorAll('[data-confirm]').forEach(function (f) {
     f.addEventListener('submit', function (e) {
-      if (!window.confirm(f.dataset.confirm)) e.preventDefault();
+      // Set just before we re-submit on the owner's behalf, so this handler
+      // steps out of the way exactly once.
+      if (f.dataset.confirmed === '1') { delete f.dataset.confirmed; return; }
+      e.preventDefault();
+      // Which button was pressed matters: some of these forms carry more than
+      // one, and its name and value are part of the submission.
+      var submitter = e.submitter || null;
+      askToConfirm(f.dataset.confirm, function () {
+        f.dataset.confirmed = '1';
+        if (f.requestSubmit) f.requestSubmit(submitter);
+        else f.submit();
+      });
     });
   });
 

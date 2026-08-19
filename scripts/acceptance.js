@@ -1152,6 +1152,39 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     ok(`${r} does not keep its own copy`, !src.includes('function back(res, req'));
   }
 }
+
+/* --- Saving must not depend on a dialog the browser can switch off ----------
+   Every [data-confirm] form went through window.confirm(), and a browser is
+   entitled to stop showing those: after a few in a row Chrome and Edge offer
+   "prevent this page from creating additional dialogs", and once that is
+   ticked confirm() returns false for the rest of the session without asking.
+   preventDefault() then ran on every submit, so Save did nothing, silently,
+   every time — a price edit that will not save and will not say why.
+
+   Verified in a real browser both ways; this pins the mechanism so it cannot
+   quietly come back. */
+{
+  const adminJs = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.js'), 'utf8');
+  ok('submitting does not hang on window.confirm',
+    !/if\s*\(!window\.confirm\(/.test(adminJs) && !/window\.confirm\(f\.dataset/.test(adminJs));
+  ok('a dialog element is used instead', adminJs.includes("createElement('dialog')"));
+  ok('and it is opened modally, so it traps focus and takes Escape',
+    adminJs.includes('showModal()'));
+  ok('window.confirm survives only as the fallback for browsers without showModal',
+    /HTMLDialogElement/.test(adminJs) && /window\.confirm\(message\)/.test(adminJs));
+  ok('the form is re-submitted through requestSubmit so validation still runs',
+    adminJs.includes('requestSubmit'));
+  ok('and the button that was pressed is carried through',
+    adminJs.includes('e.submitter'));
+
+  /* The confirmation has to say a save happened. It used to carry only the
+     allergen sentence, which reads as a refusal. */
+  const admin2 = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'admin2.js'), 'utf8');
+  ok('the Other Options toast leads with Saved on a reviewed item',
+    admin2.includes('`Saved. ${f.name} updated on the live menu'));
+  ok('and on one still waiting for its allergen review',
+    admin2.includes('`Saved. ${A.reviewMessage(f.name, st)}`'));
+}
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {

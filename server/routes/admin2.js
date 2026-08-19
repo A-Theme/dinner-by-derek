@@ -172,10 +172,16 @@ router.post('/other-options/:id', (req, res) => {
      the screen for three seconds to carry the whole story — including, for an
      unreviewed item, the fact that none of it is visible to customers yet.
      The editor reopens with what was actually stored, so the new prices are on
-     screen rather than taken on trust. */
+     screen rather than taken on trust.
+
+     The toast leads with "Saved" either way. For an unreviewed item it used to
+     carry the allergen sentence alone — "still needs its allergen review, open
+     it and tick..." — which is a true thing to say and reads exactly like a
+     refusal. The write had happened; the only message on screen said nothing
+     about it. */
   res.redirect(303, `/admin/other-options?edit=${item.id}&saved=1&ok=${encodeURIComponent(
-    st.ok ? `${f.name} updated on the live menu. Existing orders are unchanged.`
-      : A.reviewMessage(f.name, st))}`);
+    st.ok ? `Saved. ${f.name} updated on the live menu. Existing orders are unchanged.`
+      : `Saved. ${A.reviewMessage(f.name, st)}`)}`);
 });
 
 router.post('/other-options/:id/toggle', (req, res) => {

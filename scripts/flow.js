@@ -1106,6 +1106,18 @@ const PAST_DATE = T.addDays(today, -2);
       si_description: item.description || "", si_full_on: "1", si_full_price: "23.50",
       si_availability: item.availability,
     });
+    /* The toast has to say a save happened. It used to carry the allergen
+     * sentence on its own — "still needs its allergen review, open it and
+     * tick..." — which is true, reads exactly like a refusal, and was the only
+     * message on screen. The owner reported the price would not save; it had
+     * saved every time. */
+    const toast = new URLSearchParams(String(r.location || '').split('?')[1] || '').get('ok') || '';
+    ok('the confirmation leads with Saved', /^Saved\./.test(toast), toast);
+    ok('and still says what is outstanding',
+      toast.includes('allergen review') || toast.includes('updated on the live menu'), toast);
+    check('and the price it stored is the one that was typed',
+      db.prepare('SELECT full_price FROM standing_items WHERE id = ?').get(item.id).full_price, 2350);
+
     ok("saving sends you back to the item, not away from it",
       String(r.location || "").includes(`edit=${item.id}`), r.location);
     ok("and marks the arrival as a save", String(r.location || "").includes("saved=1"));
