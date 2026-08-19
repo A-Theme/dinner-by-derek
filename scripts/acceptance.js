@@ -597,6 +597,60 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   settings.set('remind_missing_week', '1');
 }
 
+/* --- A price box that doesn't hold a price ---------------------------------
+   Blank leaves the size off the menu. Anything unreadable has to do the same:
+   the stripping that lets "$22.00" through also reduced "free" to nothing,
+   and nothing parsed as 0, which is a price a customer can pay. */
+{
+  const IF = require('../server/itemform');
+  check('a plain price', IF.cents('22.00'), 2200);
+  check('a price with a currency symbol', IF.cents('$22.00'), 2200);
+  check('a price with stray spaces', IF.cents(' 22.00 '), 2200);
+  check('an empty box is not a price', IF.cents(''), null);
+  check('and neither is "free"', IF.cents('free'), null);
+  check('nor a lone currency symbol', IF.cents('$'), null);
+  check('nor "ask"', IF.cents('ask'), null);
+  check('nor a mistyped number', IF.cents('1.2.3'), null);
+  check('zero is still a real price, if it is typed', IF.cents('0'), 0);
+
+  // The reason it matters: a null price leaves the variant off the menu
+  // entirely, where a 0 would have put it there orderable at $0.00.
+  const M = require('../server/menu');
+  const priced = M.toRenderItem(
+    { id: 1, full_on: 1, full_price: IF.cents('free'), single_on: 0, allergens: '[]' },
+    { level: 'Featured', refTable: 'service_days', subcategory: 'Featured', name: 'Beef' });
+  check('an unreadable price puts no orderable size on the menu', priced.variants.length, 0);
+}
+
+/* --- A settings row that isn't a number ------------------------------------
+   getInt used to return NaN, which reaches the clock and throws from inside
+   Intl — a 500 on every customer page from one bad row. */
+{
+  const { settings } = require('../server/db');
+  const M = require('../server/menu');
+  const saved = settings.get('cutoff_hour');
+
+  settings.set('cutoff_hour', 'x');
+  check('an unreadable setting falls back', settings.getInt('cutoff_hour', 22), 22);
+  settings.set('cutoff_hour', '');
+  check('an emptied setting falls back too', settings.getInt('cutoff_hour', 22), 22);
+  settings.set('cutoff_hour', '0');
+  check('but a real zero is kept', settings.getInt('cutoff_hour', 22), 0);
+  check('a missing key falls back', settings.getInt('no_such_setting_at_all', 7), 7);
+  settings.set('cutoff_hour', '21');
+  check('and an ordinary value is read', settings.getInt('cutoff_hour', 22), 21);
+
+  // The failure this prevents, end to end: the clock must still answer.
+  settings.set('cutoff_hour', 'nonsense');
+  let state = null, threw = null;
+  try { state = T.dayState('2026-08-21', M.clock(new Date('2026-08-20T12:00:00Z'))); }
+  catch (e) { threw = e; }
+  ok('the day still has a state rather than throwing', !threw, threw && threw.message);
+  ok('and the cutoff is a real instant', state && !Number.isNaN(state.cutoff.getTime()));
+
+  settings.set('cutoff_hour', saved);
+}
+
 /* --- A CSV cell is data, never a formula -----------------------------------
    Four of the exported columns are typed by the customer. A spreadsheet reads
    a leading = + - @ as the start of a formula, so those have to reach Derek's

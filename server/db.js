@@ -432,9 +432,25 @@ function get(key, fallback = null) {
   const r = getRow.get(key);
   return r ? r.value : fallback;
 }
+/**
+ * The fallback covers an unusable value, not only a missing key.
+ *
+ * It used to return Number(v) whatever v was, so a settings row holding a
+ * non-number handed NaN to the caller. NaN reaches cutoffFor, builds an
+ * Invalid Date, and Intl throws RangeError deep inside dayState — which means
+ * every customer page and the dashboard 500 on one bad row, with a stack that
+ * points at time.js rather than at the setting that caused it. Callers that
+ * already knew to distrust this (publish.js) guarded themselves; the clock
+ * settings did not.
+ *
+ * An empty string counts as unset rather than as zero, since that is what an
+ * emptied form field means.
+ */
 function getInt(key, fallback = 0) {
   const v = get(key);
-  return v === null ? fallback : Number(v);
+  if (v === null || String(v).trim() === '') return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
 }
 function set(key, value) { setRow.run(key, String(value)); }
 function all() {

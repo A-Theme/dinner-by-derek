@@ -703,14 +703,26 @@ router.post('/settings', (req, res) => {
     settings.set('notify_email', String(req.body.notify_email)
       .split(',').map((a) => a.trim()).filter(Boolean).join(', '));
   }
-  settings.set('cutoff_hour', Number(t[0]) || 22);
-  settings.set('cutoff_minute', Number(t[1]) || 0);
   // Number(x) || fallback would turn a legitimate 0 into the fallback, which
   // for an hour is the difference between midnight and six in the morning.
-  const hour = Number(l[0]);
-  const minute = Number(l[1]);
-  settings.set('late_cutoff_hour', Number.isFinite(hour) && hour >= 0 && hour <= 23 ? hour : 6);
-  settings.set('late_cutoff_minute', Number.isFinite(minute) && minute >= 0 && minute <= 59 ? minute : 0);
+  // The main cutoff used to do exactly that while this note sat underneath it
+  // describing the hazard, so a cutoff of 00:30 was stored as 22:30 — and an
+  // hour of 99 was stored as 99, which pushes the cutoff days past the day it
+  // guards and stops it firing at all. Both go through the same clamp now.
+  const hhmm = (parts, hourDefault, minuteDefault) => {
+    const h = Number(parts[0]);
+    const m = Number(parts[1]);
+    return [
+      Number.isFinite(h) && h >= 0 && h <= 23 ? h : hourDefault,
+      Number.isFinite(m) && m >= 0 && m <= 59 ? m : minuteDefault,
+    ];
+  };
+  const [cutoffHour, cutoffMinute] = hhmm(t, 22, 0);
+  const [lateHour, lateMinute] = hhmm(l, 6, 0);
+  settings.set('cutoff_hour', cutoffHour);
+  settings.set('cutoff_minute', cutoffMinute);
+  settings.set('late_cutoff_hour', lateHour);
+  settings.set('late_cutoff_minute', lateMinute);
   back(res, req, 'Settings saved.');
 });
 

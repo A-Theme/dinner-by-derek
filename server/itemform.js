@@ -7,10 +7,21 @@
 
 const { reviewedText } = require('./allergens');
 
+/**
+ * A price in cents, or null when the box doesn't hold one.
+ *
+ * The stripping is what makes "$22.00" and "22.00 " both work. It also used to
+ * make "free" work, in the worst sense: everything was stripped, Number('')
+ * is 0, and 0 is a price — so the size went on the menu at $0.00 and customers
+ * could order it. Null is the honest answer, and it reads the same as an empty
+ * box, which leaves the size off the menu until a real price is typed.
+ */
 function cents(v) {
   if (v === undefined || v === null || String(v).trim() === '') return null;
-  const n = Number(String(v).replace(/[^0-9.]/g, ''));
-  if (!Number.isFinite(n)) return null;
+  const digits = String(v).replace(/[^0-9.]/g, '');
+  if (!/\d/.test(digits)) return null;          // 'free', '$', 'ask' — not a price
+  const n = Number(digits);
+  if (!Number.isFinite(n)) return null;         // '1.2.3'
   return Math.round(n * 100);
 }
 

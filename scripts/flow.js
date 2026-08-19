@@ -997,6 +997,40 @@ const PAST_DATE = T.addDays(today, -2);
     }
   }
 
+  /* --- The cutoff time is stored as it was typed ---------------------------
+     Both cutoffs are clamped the same way now. The main one used to run
+     through `Number(x) || 22`, which treats a typed midnight as falsy and
+     stored 22:00 instead — and accepted an hour of 99, which pushes the
+     cutoff past the day it guards. */
+  {
+    const { settings } = require('../server/db');
+    const before = ['cutoff_hour', 'cutoff_minute', 'late_cutoff_hour', 'late_cutoff_minute']
+      .map((k) => [k, settings.get(k)]);
+    const save = (cutoff, late) => POST('/admin/settings', {
+      cutoff_time: cutoff, late_cutoff_time: late,
+      business_name: 'Dinner By Derek', timezone: 'America/Toronto',
+    });
+    const read = () => [settings.getInt('cutoff_hour', 22), settings.getInt('cutoff_minute', 0)];
+
+    await save('00:30', '06:00');
+    check('a cutoff of midnight is stored as midnight', read(), [0, 30]);
+
+    await save('22:00', '06:00');
+    check('an ordinary cutoff still saves', read(), [22, 0]);
+
+    await save('99:99', '06:00');
+    check('an impossible hour falls back rather than storing 99', read(), [22, 0]);
+
+    await save('abc', '06:00');
+    check('and so does something that is not a time at all', read(), [22, 0]);
+
+    await save('22:00', '00:00');
+    check('the late cutoff still takes midnight too',
+      [settings.getInt('late_cutoff_hour', 6), settings.getInt('late_cutoff_minute', 0)], [0, 0]);
+
+    for (const [k, v] of before) settings.set(k, v);
+  }
+
   /* --- Report -------------------------------------------------------------- */
   console.log('\nEnd-to-end flow — Dinner By Derek\n');
   if (failures.length) {
