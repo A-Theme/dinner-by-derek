@@ -169,9 +169,16 @@ router.post('/order', rateLimit('order', 12, 60_000), async (req, res) => {
   }
 
   const { order, lines } = result;
-  // Email failures must never lose an order that is already stored.
-  mailer.ownerOrderEmail(order, lines).catch(() => {});
-  mailer.customerOrderEmail(order, lines).catch(() => {});
+  /* Email failures must never lose an order that is already stored, so these
+     stay detached and unawaited. They no longer stay quiet, though: mailer's
+     own send() logs an SMTP refusal, but anything thrown before that — a
+     template reading a field that isn't there — used to be swallowed whole.
+     The reference goes in the line, because "an email failed" is not
+     actionable and "the confirmation for A1B2C3D4 failed" is. */
+  const mailFailed = (what) => (e) =>
+    console.error(`[mail] ${what} failed for order ${order.ref}:`, (e && e.message) || e);
+  mailer.ownerOrderEmail(order, lines).catch(mailFailed('owner order email'));
+  mailer.customerOrderEmail(order, lines).catch(mailFailed('customer confirmation'));
 
   res.type('html').send(String(V.confirmationView({
     order,

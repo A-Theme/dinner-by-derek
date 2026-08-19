@@ -298,7 +298,13 @@ router.post('/orders/:id/decide', (req, res) => {
   if (!o) return back(res, req, null, 'That order no longer exists.');
   db.prepare('UPDATE orders SET status=? WHERE id=?').run(decision, id);
   const updated = db.prepare('SELECT * FROM orders WHERE id=?').get(id);
-  mailer.lateDecisionEmail(updated, O.linesOf(id), decision).catch(() => {});
+  /* Same rule as the order emails: the decision is already recorded, so a
+     failure here must not undo it — but the page is about to tell Derek the
+     customer has been emailed, and if that turns out to be untrue the log is
+     the only place it can say so. */
+  mailer.lateDecisionEmail(updated, O.linesOf(id), decision).catch((e) =>
+    console.error(`[mail] late-request ${decision} email failed for order ${updated.ref}:`,
+      (e && e.message) || e));
   back(res, req, decision === 'confirmed'
     ? `Confirmed. ${o.name} has been emailed.`
     : `Declined. ${o.name} has been emailed.`);
