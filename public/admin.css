@@ -134,6 +134,17 @@ details.daycard-edit > summary { cursor: pointer; font-family: var(--dbd-display
    from a 1640×624 banner to a 1080×1350 portrait, and left to size themselves
    they stagger the captions into an unreadable sawtooth. */
 .graphic img { height: 150px; object-fit: contain; }
+
+/* Except the stickers, where the shape IS the thing being chosen. Letterboxing
+   a 54 × 70 mm label into a short wide tile shows it as a sliver and makes a
+   portrait sticker look landscape — which is the one question this thumbnail
+   has to answer. These keep their own proportions and are capped in height
+   instead, so a tall label stays tall and the grid still behaves. */
+.graphic--shape img {
+  width: auto; height: auto;
+  max-width: 100%; max-height: 240px;
+  margin: 0 auto;
+}
 .graphic__empty {
   display: grid; place-items: center; height: 150px;
   color: var(--dbd-ink-muted); font-size: var(--dbd-step--1); font-style: italic;

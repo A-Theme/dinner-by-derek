@@ -261,7 +261,7 @@ function graphicsPanel(set) {
 
       <div class="graphics-grid">
         ${files.map((f) => html`
-          <figure class="graphic">
+          <figure class="graphic${set.sizes ? ' graphic--shape' : ''}">
             ${f.url
               ? html`<a href="${f.url}" download="${f.name}"><img src="${f.url}" alt="${f.label}" loading="lazy"></a>`
               : html`<div class="graphic__empty">Not generated yet</div>`}
