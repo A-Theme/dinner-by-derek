@@ -48,6 +48,15 @@ const LAYOUTS = [
   { name: 'landscape', w: 70, h: 54, stack: 'horizontal' },
 ];
 
+/* Below this the code stops being worth printing. A phone camera in a doorway
+ * needs modules it can resolve, and a QR that has been squeezed onto a label
+ * too small for it is worse than no sticker: it looks finished and does
+ * nothing. A label that cannot hold one is refused by name rather than
+ * quietly printed. */
+const MIN_QR_MM = 15;
+const SIZE_LIMITS = { min: 20, max: 200 };   // mm, per side
+const DPI_CHOICES = [203, 300];
+
 /**
  * Ink as alpha: white in this mask means burn a dot.
  *
@@ -113,6 +122,13 @@ async function sheet(layout, dpi, url) {
   // The code is sized first and never squeezed: it is the part that has to
   // survive being scanned in a doorway. What is left over belongs to the mark.
   const q = qrMask(url, Math.min(dots(QR_MM), innerW, innerH));
+  const qrMm = (q.side / dpi) * 25.4;
+  if (q.side > innerW || q.side > innerH || qrMm < MIN_QR_MM) {
+    throw new Error(
+      `A ${layout.w}×${layout.h} mm label leaves only ${qrMm.toFixed(1)} mm for the QR code `
+      + `once the ${MARGIN_MM} mm margins are taken off, and below ${MIN_QR_MM} mm it stops `
+      + 'scanning reliably. Use a bigger label.');
+  }
   const qrPng = await inkOn(await q.mask.png().toBuffer(), q.side, q.side);
 
   const horizontal = layout.stack === 'horizontal';
@@ -155,22 +171,80 @@ async function sheet(layout, dpi, url) {
   };
 }
 
-async function generate() {
+/**
+ * A whole number of millimetres, inside the range a label printer can take.
+ * Returns null for anything else, so the caller reports it rather than
+ * drawing something nobody asked for.
+ */
+function mm(v) {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) && n >= SIZE_LIMITS.min && n <= SIZE_LIMITS.max ? n : null;
+}
+
+/**
+ * The stock sizes already drawn, read off disk.
+ *
+ * The set is open-ended now — whatever sizes the owner has asked for — so the
+ * Graphics tab cannot hold a fixed list of filenames the way the card and the
+ * social set do. It reads what is there instead.
+ */
+function made() {
+  let names;
+  try { names = fs.readdirSync(OUT); } catch (e) { return []; }
+  return names
+    .filter((f) => /^sticker-.+-\d+dpi\.png$/.test(f))
+    .sort()
+    .map((f) => {
+      const [, shape, dpi] = f.match(/^sticker-(.+)-(\d+)dpi\.png$/);
+      const label = /^\d+x\d+mm$/.test(shape)
+        ? shape.replace('x', ' × ').replace('mm', ' mm')
+        : shape.charAt(0).toUpperCase() + shape.slice(1);
+      return [f, label, `${dpi} dpi`];
+    });
+}
+
+/**
+ * Draw the sticker.
+ *
+ * With no options this is what `npm run sticker` has always done: both
+ * orientations at both resolutions. Given a size it draws that one label, at
+ * the one resolution, which is what the Graphics tab asks for — the owner
+ * knows what stock is in the printer and does not need the other three.
+ */
+async function generate(opts = {}) {
   if (!fs.existsSync(LINEART)) throw new Error(`Missing brand artwork: ${LINEART}`);
   fs.mkdirSync(OUT, { recursive: true });
 
   const base = (process.env.BASE_URL || '').trim().replace(/\/+$/, '');
   const url = base || 'https://dinner-by-derek.example';
 
+  let layouts = LAYOUTS;
+  let dpis = DPI_CHOICES;
+
+  if (opts.widthMm !== undefined || opts.heightMm !== undefined) {
+    const w = mm(opts.widthMm);
+    const h = mm(opts.heightMm);
+    if (w === null || h === null) {
+      throw new Error(`Give both sides in whole millimetres, between `
+        + `${SIZE_LIMITS.min} and ${SIZE_LIMITS.max}.`);
+    }
+    const dpi = DPI_CHOICES.includes(Number(opts.dpi)) ? Number(opts.dpi) : DPI_CHOICES[0];
+    // Wider than tall sets the mark beside the code; taller than wide stacks
+    // them. Square counts as wide, which keeps the mark as large as it can be.
+    layouts = [{ name: `${w}x${h}mm`, w, h, stack: w >= h ? 'horizontal' : 'vertical' }];
+    dpis = [dpi];
+  }
+
   const sheets = [];
-  for (const layout of LAYOUTS) {
-    for (const dpi of [203, 300]) sheets.push(await sheet(layout, dpi, url));
+  for (const layout of layouts) {
+    for (const dpi of dpis) sheets.push(await sheet(layout, dpi, url));
   }
 
   return {
     dir: OUT,
     url,
     sheets,
+    notes: sheets.map((s) => `${s.mm} mm at ${s.dpi} dpi — QR ${s.qrMm} mm.`),
     warnings: base ? [] : [
       'BASE_URL is not set, so the QR points at a placeholder. Set it and run '
       + 'this again before printing a roll of these.',
@@ -178,7 +252,7 @@ async function generate() {
   };
 }
 
-module.exports = { generate, OUT };
+module.exports = { generate, made, OUT, SIZE_LIMITS, DPI_CHOICES, LAYOUTS };
 
 if (require.main === module) {
   generate()

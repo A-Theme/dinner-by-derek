@@ -227,9 +227,37 @@ function graphicsPanel(set) {
           with your own.
         </div>` : ''}
 
-      <form method="post" action="/admin/graphics/${set.key}">
-        <button class="btn btn--primary" type="submit">Generate ${set.title.toLowerCase()}</button>
-      </form>
+      ${set.sizes ? html`
+        <!-- The one set where the size is the owner's to choose: label stock
+             comes in whatever the roll happens to be, and resampling a 1-bit
+             image to fit is exactly what ruins it. So it is drawn at the size
+             asked for rather than scaled afterwards. -->
+        <form method="post" action="/admin/graphics/${set.key}" class="sticker-size">
+          <div class="dl-row">
+            <label>Width
+              <input type="number" name="width_mm" inputmode="numeric" required
+                min="${set.sizes.limits.min}" max="${set.sizes.limits.max}"
+                value="${set.sizes.presets[0].w}"> mm</label>
+            <label>Height
+              <input type="number" name="height_mm" inputmode="numeric" required
+                min="${set.sizes.limits.min}" max="${set.sizes.limits.max}"
+                value="${set.sizes.presets[0].h}"> mm</label>
+            <label>Printer
+              <select name="dpi">
+                ${set.sizes.dpiChoices.map((d) => html`
+                  <option value="${d}">${d} dpi</option>`)}
+              </select></label>
+          </div>
+          <p class="also">203 dpi suits Zebra, Rollo and most direct-thermal units;
+            300 dpi suits a Brother QL. Print the one that matches your printer and
+            never scale it to fit. Common sizes:
+            ${set.sizes.presets.map((p) => p.label).join(', ')}.</p>
+          <button class="btn btn--primary" type="submit">Generate this sticker</button>
+        </form>`
+      : html`
+        <form method="post" action="/admin/graphics/${set.key}">
+          <button class="btn btn--primary" type="submit">Generate ${set.title.toLowerCase()}</button>
+        </form>`}
 
       <div class="graphics-grid">
         ${files.map((f) => html`
@@ -265,8 +293,14 @@ router.post('/graphics/:set', async (req, res) => {
   const set = G.SETS[req.params.set];
   if (!set) return back(res, req, null, 'That isn\'t something this app draws.');
 
+  const opts = set.sizes ? {
+    widthMm: req.body.width_mm,
+    heightMm: req.body.height_mm,
+    dpi: req.body.dpi,
+  } : undefined;
+
   try {
-    const out = await G.run(set.key);
+    const out = await G.run(set.key, opts);
     const notes = [...(out.notes || []), ...(out.warnings || [])];
     back(res, req, `${set.title} generated.${notes.length ? ` ${notes.join(' ')}` : ''}`);
   } catch (e) {

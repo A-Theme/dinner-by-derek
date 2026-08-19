@@ -110,6 +110,13 @@ details.daycard-edit > summary { cursor: pointer; font-family: var(--dbd-display
 .dl-row { display: flex; flex-wrap: wrap; gap: var(--dbd-sp-2); }
 .dl-row .btn { flex: 1 1 auto; }
 
+/* The label-size fields. Numbers stay narrow — these are two- and three-digit
+   millimetre values, and a full-width box invites a paragraph. */
+.sticker-size .dl-row { align-items: flex-end; }
+.sticker-size label { display: inline-flex; align-items: baseline; gap: var(--dbd-sp-2); margin: 0; }
+.sticker-size input[type=number] { width: 5.5rem; }
+.sticker-size select { width: auto; }
+
 /* Generated graphics. The thumbnails sit on a chequer rather than on the card,
    because half of them are light artwork on a dark ground and half are dark on
    parchment, and a plain cream tile makes the second kind look like it lost its

@@ -21,6 +21,7 @@ const path = require('path');
 
 const social = require('../scripts/social');
 const card = require('../scripts/card');
+const sticker = require('../scripts/sticker');
 
 const SETS = {
   social: {
@@ -52,6 +53,25 @@ const SETS = {
       ['card-back.png', 'Back', '3.5×2in + bleed'],
     ],
   },
+  sticker: {
+    key: 'sticker',
+    title: 'Sticker',
+    urlBase: '/print',
+    dir: sticker.OUT,
+    generate: sticker.generate,
+    blurb: 'For a thermal label printer. Black and transparent only — no greys, no white '
+      + 'ink — so it prints as burned dots on whatever colour the stock already is. '
+      + 'Give it the size of the labels in your printer and it draws that one.',
+    /* Open-ended: whatever sizes have been asked for. Listed from disk rather
+     * than from a fixed table, which is why this set carries `listFiles`. */
+    files: [],
+    listFiles: sticker.made,
+    sizes: {
+      limits: sticker.SIZE_LIMITS,
+      dpiChoices: sticker.DPI_CHOICES,
+      presets: sticker.LAYOUTS.map((l) => ({ label: `${l.w} × ${l.h} mm`, w: l.w, h: l.h })),
+    },
+  },
 };
 
 /** Where the repo's committed copies live, used when nothing is generated yet. */
@@ -74,7 +94,7 @@ function busy() {
   return running ? running.key : null;
 }
 
-async function run(key) {
+async function run(key, opts) {
   const set = SETS[key];
   if (!set) throw new Error(`Unknown graphics set: ${key}`);
   if (running) {
@@ -83,7 +103,7 @@ async function run(key) {
     throw err;
   }
 
-  const job = set.generate();
+  const job = set.generate(opts);
   running = { key, job };
   try {
     return await job;
@@ -103,8 +123,11 @@ async function run(key) {
  */
 function list(key) {
   const set = SETS[key];
-  return set.files.map(([name, label, size]) => {
+  // A set whose filenames are not known ahead of time reads them off disk.
+  const entries = set.listFiles ? set.listFiles() : set.files;
+  return entries.map(([name, label, size]) => {
     for (const [source, dir] of [['generated', set.dir], ['shipped', SHIPPED[key]]]) {
+      if (!dir) continue;        // not every set ships a fallback copy
       let stat;
       try {
         stat = fs.statSync(path.join(dir, name));
