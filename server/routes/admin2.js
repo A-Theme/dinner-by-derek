@@ -617,10 +617,14 @@ router.get('/settings', (req, res) => {
       </form>
       ${[...grouped.entries()].map(([allergen, list]) => html`
         <h3 class="subhead">${allergen} <span class="variant__label">(${list.length} words)</span></h3>
-        <p>${list.map((t) => html`<span class="chip">${t}
-          <a href="#" onclick="event.preventDefault();this.closest('form')||document.getElementById('rm-${encodeURIComponent(allergen)}-${encodeURIComponent(t)}').submit()">✕</a></span>
-          <form method="post" action="/admin/allergen-terms/remove" id="rm-${encodeURIComponent(allergen)}-${encodeURIComponent(t)}" style="display:none">
-            <input type="hidden" name="term" value="${t}"><input type="hidden" name="allergen" value="${allergen}"></form>`)}</p>`)}
+        <!-- The ✕ is the form. It used to be a link that reached across the
+             page for a hidden form and submitted it from an onclick, which
+             needed script to remove a word and broke without it. -->
+        <p>${list.map((t) => html`<form method="post" action="/admin/allergen-terms/remove" class="chip chip--rm">
+            <input type="hidden" name="term" value="${t}">
+            <input type="hidden" name="allergen" value="${allergen}">
+            ${t} <button type="submit" title="Remove ${t}" aria-label="Remove ${t}">✕</button>
+          </form>`)}</p>`)}
     </div>
 
     <div class="card">

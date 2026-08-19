@@ -2,7 +2,9 @@
    prices, eligibility and fees are all re-decided server-side on submit. */
 (function () {
   'use strict';
-  var cfg = window.DBD || {};
+  var cfgEl = document.getElementById('dbd-config');
+  var cfg = {};
+  try { cfg = cfgEl ? JSON.parse(cfgEl.textContent) : {}; } catch (e) { cfg = {}; }
   var form = document.getElementById('orderform');
   if (!form) return;
 

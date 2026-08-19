@@ -657,6 +657,53 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     !auth.verify(`${old}.${crypto.createHmac('sha256', key).update(old).digest('base64url')}`));
 }
 
+/* --- Refused sign-ins are written down, and eventually said out loud -------
+   The rate limiter forgets on restart and tells nobody. This is the part that
+   survives, so a run of guesses is something the owner can see happened. */
+{
+  const S = require('../server/signin');
+  const { settings } = require('../server/db');
+  const now = Date.UTC(2026, 7, 18, 12, 0);
+
+  db.prepare('DELETE FROM login_failures').run();
+  check('nothing to report when nothing has happened', S.notice(now), null);
+  check('and no delay is charged', S.delayFor(now), 0);
+
+  const at = (minsAgo) => now - minsAgo * 60_000;
+  for (let i = 0; i < 4; i++) S.record('203.0.113.5', at(30 + i));
+  check('four in an hour is still under the notice threshold', S.notice(now), null);
+  ok('but the fifth attempt has started costing time', S.delayFor(now) > 0);
+
+  S.record('203.0.113.6', at(20));
+  const n = S.notice(now);
+  ok('five in a day is worth saying', !!n);
+  check('counted in full', n.count, 5);
+  check('and the addresses are counted apart', n.addresses, 2);
+
+  // Old failures fall out of the window rather than accumulating forever.
+  db.prepare('DELETE FROM login_failures').run();
+  for (let i = 0; i < 10; i++) S.record('203.0.113.7', now - 2 * S.DAY_MS);
+  check('yesterday-but-one is not today\'s news', S.notice(now), null);
+
+  // The delay is bounded: a flood must not hold every connection open.
+  db.prepare('DELETE FROM login_failures').run();
+  for (let i = 0; i < 500; i++) S.record('203.0.113.8', at(5));
+  ok('the delay is capped however many arrive', S.delayFor(now) <= 2000);
+
+  // One alert an hour, no matter how bad the hour gets.
+  settings.set('signin_alert_hour', '');
+  ok('a bad hour is worth an email', S.shouldAlert(now));
+  ok('but only the one', !S.shouldAlert(now));
+  // An hour later, still under attack: a fresh hour earns a fresh email.
+  const later = now + S.HOUR_MS;
+  for (let i = 0; i < 30; i++) S.record('203.0.113.8', later - 60_000);
+  ok('and the next hour gets its own', S.shouldAlert(later));
+
+  db.prepare('DELETE FROM login_failures').run();
+  settings.set('signin_alert_hour', '');
+  ok('a quiet hour is not worth an email', !S.shouldAlert(now));
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {

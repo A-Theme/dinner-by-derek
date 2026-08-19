@@ -88,11 +88,14 @@ strict.post('/restore', auth.requiredStrict, (req, res) => {
 function sheetShell(title, body) {
   return V.shell({
     title,
-    body: html`<div class="sheet">${body}
+    /* The marker, not a script tag: admin.js opens the print dialog for any
+       sheet carrying data-autoprint, and the button asks for it again. Both
+       used to be written inline, which is what a page has to give up to be
+       able to refuse inline script altogether. */
+    body: html`<div class="sheet" data-autoprint>${body}
       <p class="no-print" style="margin-top:var(--dbd-sp-5)">
-        <button class="btn btn--primary" onclick="window.print()">Print or save as PDF</button>
+        <button class="btn btn--primary" type="button" data-print>Print or save as PDF</button>
         <a class="btn btn--secondary" href="/admin/orders">Back to orders</a></p></div>`,
-    scripts: html`<script>window.addEventListener('load',function(){setTimeout(function(){window.print()},400)})</script>`,
   });
 }
 

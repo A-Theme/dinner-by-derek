@@ -12,6 +12,37 @@
   }
   window.dbdToast = toast;
 
+  /* --- Print sheets ------------------------------------------------------
+     A kitchen or pickup sheet is opened to be printed, so it offers the
+     dialog itself, once, shortly after load — late enough that the page has
+     drawn. The button asks again for anyone who cancelled. */
+  if (document.querySelector('.sheet[data-autoprint]')) {
+    window.addEventListener('load', function () {
+      setTimeout(function () { window.print(); }, 400);
+    });
+  }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest && e.target.closest('[data-print]')) window.print();
+  });
+
+  /* --- Copy buttons ------------------------------------------------------
+     One listener for every [data-copy] on the page. These used to be inline
+     onclick attributes, which is the one thing a page cannot allow if it also
+     wants to tell the browser to refuse inline script. */
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-copy]');
+    if (!btn) return;
+    var text = btn.getAttribute('data-copy');
+    var said = btn.getAttribute('data-copied') || 'Copied.';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(function () { toast(said); })
+        .catch(function () { toast('Could not copy. Long-press the link instead.', 'bad'); });
+    } else {
+      toast('Could not copy. Long-press the link instead.', 'bad');
+    }
+  });
+
   var params = new URLSearchParams(location.search);
   if (params.get('ok')) toast(decodeURIComponent(params.get('ok')), 'ok');
   if (params.get('err')) toast(decodeURIComponent(params.get('err')), 'bad');

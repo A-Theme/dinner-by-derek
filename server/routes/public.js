@@ -47,7 +47,7 @@ router.get('/offline', (req, res) => {
       we can't show it without a connection.</p>
       <p>Reconnect and pull down to refresh.</p>
       <p style="margin-top:var(--dbd-sp-5)">
-        <button class="btn btn--primary" onclick="location.reload()">Try again</button></p>
+        <button class="btn btn--primary" type="button" data-reload>Try again</button></p>
     </div>`,
   })));
 });
@@ -161,7 +161,7 @@ router.post('/order', rateLimit('order', 12, 60_000), async (req, res) => {
         body: html`<div class="card">
           <h1>We couldn't place that order</h1>
           <p>${e.message}</p>
-          <p><a class="btn btn--primary" href="javascript:history.back()">Go back</a></p>
+          <p><button class="btn btn--primary" type="button" data-back>Go back</button></p>
         </div>`,
       })));
     }

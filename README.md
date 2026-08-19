@@ -96,6 +96,17 @@ itself is never written anywhere. Restarting signs out every device: the login
 cookie is signed against the password, so changing it retires the sessions the
 old one authorised — including the one on a phone you no longer have.
 
+**When someone tries to guess it.** Every refused sign-in is written down.
+Eight tries from one address in ten minutes still gets a flat refusal, and past
+three in an hour each wrong guess also waits a little longer than the one before
+— up to two seconds, so a script pays for its guesses and you don't. Five in a
+day puts a note on the dashboard; twenty in an hour sends one email, at most one
+an hour however long it goes on. Records older than a month are dropped.
+
+Nothing locks. A threshold that switched the dashboard off would hand anyone who
+can reach the login page a way to keep you out of it on a Friday afternoon,
+which is the worse of the two Fridays.
+
 **`TRUST_PROXY`.** The login limiter allows eight attempts per address per ten
 minutes, and the address comes from `X-Forwarded-For` when this is set. That
 header is written by nginx and can equally be written by whoever is knocking:
@@ -949,6 +960,16 @@ and pickup window in their own columns) and a contact list.
 ---
 
 ## Deployment
+
+The app sets its own security headers, so nginx does not need to add any and
+should not duplicate them. Everything the pages load they also serve — no CDN,
+no font host, no analytics — so the policy is `'self'` and nothing else, inline
+script included: there is none left in the HTML, which is what makes refusing it
+truthful rather than decorative. Inline *style* is still allowed; the views
+carry about seventy style attributes and an injected style cannot do what an
+injected script can. `frame-ancestors 'none'` means nothing may frame the
+dashboard. HSTS is sent only when `BASE_URL` is https, because promising https
+from an http address is either ignored or a promise you can't keep.
 
 Behind nginx, with the app on port 3000:
 

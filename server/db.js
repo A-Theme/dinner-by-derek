@@ -231,6 +231,17 @@ CREATE TABLE IF NOT EXISTS oauth_states (
   state      TEXT PRIMARY KEY,
   created_at INTEGER NOT NULL
 );
+
+/* Every refused sign-in. The rate limiter already slows a run of guesses down,
+   but it forgets: it lives in memory, it empties on restart, and it never told
+   anyone. This is the record that survives, so the dashboard can say a thing
+   happened and roughly how hard someone tried. Pruned at a month. */
+CREATE TABLE IF NOT EXISTS login_failures (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at INTEGER NOT NULL,           -- epoch ms
+  ip TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_login_failures_at ON login_failures(at);
 `);
 
 /* --- Settings ----------------------------------------------------------- */

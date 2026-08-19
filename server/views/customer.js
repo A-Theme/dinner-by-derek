@@ -8,6 +8,11 @@ const O = require('../orders');
 
 const tz = () => settings.get('timezone', 'America/Toronto');
 
+/* JSON safe to sit inside a <script> element: the only sequences that can end
+   one early are escaped, so no value in the menu can close the tag. */
+const jsonBlock = (v) => JSON.stringify(v)
+  .replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+
 /* "Ordering closed" rather than plain "closed", because a day the kitchen is
    shut sits in the same list and means something else entirely: one is a
    cutoff that has passed, the other is nobody cooking. */
@@ -351,7 +356,12 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
       : (week.image ? `/uploads/${week.image}` : null),
     url: `/w/${week.slug}/${day.service_date}`,
     body,
-    scripts: html`<script>window.DBD=${raw(JSON.stringify(cfg))}</script><script src="/order.js" defer></script>`,
+    /* Data, not code. A JSON block the script reads, rather than a script tag
+       that builds a global: it lets the page ban inline script outright, and
+       it takes away the older hazard of a dish name containing the characters
+       that end a script tag early. */
+    scripts: html`<script type="application/json" id="dbd-config">${raw(jsonBlock(cfg))}</script>
+<script src="/order.js" defer></script>`,
   });
 }
 

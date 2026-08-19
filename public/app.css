@@ -80,6 +80,9 @@ a { color: var(--dbd-olive-deep); }
   margin-bottom: var(--dbd-sp-4);
 }
 .card--sunk { background: var(--dbd-surface-sunk); border-color: var(--dbd-rule-olive); }
+/* Something happened that you should know about, but nothing is on fire and
+   nothing needs doing this minute. Same card, one edge marked. */
+.card--warn { border-left: 4px solid var(--dbd-warn); }
 
 /* --- Buttons ------------------------------------------------------------ */
 .btn {
@@ -127,6 +130,13 @@ a { color: var(--dbd-olive-deep); }
   margin: 0 var(--dbd-sp-1) var(--dbd-sp-1) 0;
 }
 .chip--allergen { border-color: var(--dbd-rule-tan); color: var(--dbd-tan-deep); font-weight: 600; }
+/* A chip that is itself a one-button form. */
+.chip--rm { display: inline-block; }
+.chip--rm button {
+  background: none; border: 0; padding: 0 0 0 var(--dbd-sp-1);
+  color: var(--dbd-ink-muted); font: inherit; cursor: pointer;
+}
+.chip--rm button:hover { color: var(--dbd-danger); }
 .chip--soldout { background: var(--dbd-umber); color: var(--dbd-parchment); border-color: var(--dbd-umber); }
 
 /* --- Day selector ------------------------------------------------------- */

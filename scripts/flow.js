@@ -931,8 +931,42 @@ const PAST_DATE = T.addDays(today, -2);
       statuses[0] === 401);
     ok('a fresh forwarded address per attempt still reaches the limit',
       statuses[statuses.length - 1] === 429);
+    const written = db.prepare('SELECT COUNT(*) n FROM login_failures').get().n;
+    ok('and every refusal was written down, not just rate-limited', written >= 8);
+
     RL.reset();
     await POST('/admin/login', { password: 'flow-test-password', next: '/admin' });
+
+    const dash = await GET('/admin');
+    ok('the dashboard says so once there have been enough of them',
+      dash.text.includes('refused sign-ins'));
+    db.prepare('DELETE FROM login_failures').run();
+    const quiet = await GET('/admin');
+    ok('and says nothing when there is nothing to say',
+      !quiet.text.includes('refused sign-ins'));
+  }
+
+  /* --- What the browser is told it may load -------------------------------- */
+  {
+    const res = await fetch(`${BASE}/`);
+    const csp = res.headers.get('content-security-policy') || '';
+    ok('a policy is sent at all', csp.length > 0);
+    ok('inline script is refused outright, not waved through', csp.includes("script-src 'self'")
+      && !csp.includes("script-src 'self' 'unsafe-inline'"));
+    ok('nothing may frame the dashboard', csp.includes("frame-ancestors 'none'"));
+    ok('forms may only post back here', csp.includes("form-action 'self'"));
+    check('and the older header says it too', res.headers.get('x-frame-options'), 'DENY');
+    check('referrers are trimmed leaving the site',
+      res.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+    check('no https promise is made from an http address',
+      res.headers.get('strict-transport-security'), null);
+
+    /* The policy above is only honest if the pages carry no inline script.
+       These two were the last of it. */
+    const menu = await GET('/');
+    ok('the customer page has no inline event handlers', !/\son[a-z]+="/i.test(menu.text));
+    const week = await GET(`/admin/week`);
+    ok('nor does the week page', !/\son[a-z]+="/i.test(week.text));
   }
 
   /* --- Report -------------------------------------------------------------- */

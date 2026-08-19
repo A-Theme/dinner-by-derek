@@ -303,8 +303,39 @@ async function weekMissingEmail({ weekStart, publishAt }) {
   });
 }
 
+async function signinFailuresEmail({ count, addresses }) {
+  const many = addresses > 1;
+  const html = shell('Someone is guessing the password', `
+    <p style="background:${palette.parchment};border-left:4px solid ${palette.umber};padding:10px">
+      <strong>${esc(String(count))} refused sign-ins in the last hour</strong>,
+      from ${esc(String(addresses))} ${many ? 'different addresses' : 'address'}.</p>
+    <p>Nothing is locked and nothing is broken — the dashboard is still yours to open,
+      and each wrong guess now waits a little longer than the one before it.</p>
+    <p>Worth doing if this keeps up:</p>
+    <ul>
+      <li><strong>Change the password</strong> to something longer. That also signs out
+        every device, including anything already signed in that shouldn't be.</li>
+      <li><strong>Check it isn't you</strong> — a saved password on an old phone retrying
+        by itself looks exactly like this.</li>
+    </ul>
+    <p>You will not get another of these for an hour, however many more arrive.</p>
+    <p><a href="${config.baseUrl}/admin"
+      style="background:${palette.tan};color:${palette.espresso};padding:10px 16px;
+      border-radius:6px;text-decoration:none;display:inline-block">Open the dashboard</a></p>`);
+  return send({
+    to: owners(),
+    subject: `${count} refused sign-ins in the last hour`,
+    html,
+    text: `${count} refused sign-ins in the last hour, from ${addresses} `
+      + `${many ? 'different addresses' : 'address'}.\n\n`
+      + `Nothing is locked. If it keeps up, change the password — that signs out every `
+      + `device too. ${config.baseUrl}/admin\n\n`
+      + `No further alert for an hour.`,
+  });
+}
+
 module.exports = {
   send, ownerOrderEmail, customerOrderEmail, lateDecisionEmail, tokenExpiryEmail,
-  weekPublishedEmail, weekPublishRefusedEmail, weekMissingEmail,
+  weekPublishedEmail, weekPublishRefusedEmail, weekMissingEmail, signinFailuresEmail,
   configured: () => !!config.smtp.host,
 };

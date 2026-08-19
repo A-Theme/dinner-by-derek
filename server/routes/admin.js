@@ -9,6 +9,8 @@ const M = require('../menu');
 const A = require('../allergens');
 const O = require('../orders');
 const P = require('../publish');
+const S = require('../signin');
+const mail = require('../mailer');
 const images = require('../images');
 const IF = require('../itemform');
 const V = require('../views/admin');
@@ -36,8 +38,18 @@ router.get('/login', (req, res) => {
   res.type('html').send(String(V.login(null, req.query.next)));
 });
 
-router.post('/login', rateLimit('login', 8, 10 * 60_000), (req, res) => {
+router.post('/login', rateLimit('login', 8, 10 * 60_000), async (req, res) => {
   if (!auth.passwordMatches(req.body.password)) {
+    /* Written down before the wait, so a caller who hangs up early is still
+       counted — otherwise abandoning each request is how you avoid the record
+       and the delay at the same time. */
+    S.record(req.ip);
+    const wait = S.delayFor();
+    if (S.shouldAlert()) mail.signinFailuresEmail({
+      count: S.countSince(Date.now() - S.HOUR_MS),
+      addresses: S.addressesSince(Date.now() - S.HOUR_MS),
+    }).catch((e) => console.error('[mail] sign-in alert failed:', e.message));
+    if (wait) await new Promise((r) => setTimeout(r, wait));
     return res.status(401).type('html')
       .send(String(V.login('That password isn\'t right. Try again.', req.body.next)));
   }
@@ -83,9 +95,29 @@ router.get('/', (req, res) => {
   else if (next) primary = { href: `/admin/orders?date=${next.service_date}`, label: `See orders for ${T.fmtDayShort(next.service_date, tz())}` };
   else primary = { href: '/admin/week', label: 'Plan next week' };
 
+  // Refused sign-ins, when there have been enough of them to mean something.
+  // Below the threshold this says nothing at all: a notice that appears every
+  // time Derek fumbles his own password is a notice he stops reading.
+  const signin = S.notice();
+
   const body = html`
     <h1>Today</h1>
     <p><a class="btn btn--primary btn--block" href="${primary.href}">${primary.label}</a></p>
+
+    ${signin ? html`
+      <div class="card card--warn">
+        <h2>${signin.count} refused sign-ins</h2>
+        <!-- The time is never sentence-final: "9:09 p.m." brings its own
+             full stop and a second one lands right behind it. -->
+        <p>In the last 24 hours, from ${signin.addresses}
+           ${signin.addresses === 1 ? 'address' : 'different addresses'} — the last at
+           ${T.fmtLocal(new Date(signin.lastAt), tz(),
+             { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+           ${signin.active ? 'Still going on now.' : ''}</p>
+        <p>Nothing is locked — the dashboard is still yours, and each wrong guess
+           now waits longer than the last. If it wasn't you, a longer password is
+           the fix, and setting one signs out every device at the same time.</p>
+      </div>` : ''}
 
     <!-- Each tile opens the list behind its own number. A count you cannot
          open is a dead end: the next question after "3 orders tomorrow" is

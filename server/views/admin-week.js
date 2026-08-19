@@ -228,12 +228,13 @@ function weekPage({ week, days, items, hasPrevious }) {
         <p><strong>Share link</strong><br>
           <code>${config.baseUrl}/w/${week.slug}</code>
           <button class="btn btn--secondary" type="button"
-            onclick="navigator.clipboard.writeText('${config.baseUrl}/w/${week.slug}');window.dbdToast('Link copied.')">Copy</button></p>
+            data-copy="${config.baseUrl}/w/${week.slug}" data-copied="Link copied.">Copy</button></p>
         <h3 class="subhead">Cutoffs</h3>
         <ul>${days.map((d) => html`<li>${T.fmtDayShort(d.service_date, tz())} — closes
           ${T.fmtLocal(T.cutoffFor(d.service_date, cutoffHour, cutoffMin, tz()), tz(), { weekday: 'long' })}
           <button class="btn btn--secondary" type="button"
-            onclick="navigator.clipboard.writeText('${config.baseUrl}/w/${week.slug}/${d.service_date}');window.dbdToast('Day link copied.')">Copy link</button></li>`)}</ul>
+            data-copy="${config.baseUrl}/w/${week.slug}/${d.service_date}"
+            data-copied="Day link copied.">Copy link</button></li>`)}</ul>
         ${V.confirmForm({
           action: `/admin/week/${week.id}/unpublish`,
           buttonLabel: 'Move back to draft',

@@ -5,6 +5,16 @@
   var standalone = window.matchMedia('(display-mode: standalone)').matches
     || window.navigator.standalone === true;
 
+  /* --- Two buttons that only the browser can answer ----------------------
+     Reload on the offline page, back on the one that says an order didn't go
+     through. Both were inline handlers, which a page cannot keep if it wants
+     to tell the browser that inline script is never legitimate here. */
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest) return;
+    if (e.target.closest('[data-reload]')) location.reload();
+    else if (e.target.closest('[data-back]')) history.back();
+  });
+
   /* --- Service worker --------------------------------------------------- */
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
