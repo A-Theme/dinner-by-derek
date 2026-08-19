@@ -1120,6 +1120,73 @@ const PAST_DATE = T.addDays(today, -2);
     check("and the price in the table above matches",
       /data-label="Prices">([^<]*)/.exec(page.text.split(item.name)[1] || "") ? true : true, true);
   }
+  /* --- Multipart is the owner's shape, and nobody else's ------------------
+   * The upload middleware used to run on every request, before routing and
+   * before auth: 25 MB from a stranger, at a path that need not exist, read
+   * and buffered and then thrown away by a 404. These check the refusal from
+   * the outside — the status a caller actually gets — because that is what
+   * distinguishes a body that was read from one that never was. A 27 MB post
+   * is the sharpest probe: if multer still runs, it answers about the size
+   * before anything asks who is calling.
+   */
+  {
+    const boundary = '----flowboundary';
+    const CRLF = '\r\n';
+    const filePart = (bytes) => Buffer.concat([
+      Buffer.from(`--${boundary}${CRLF}Content-Disposition: form-data; name="photo"; filename="x.bin"${CRLF}`
+        + `Content-Type: application/octet-stream${CRLF}${CRLF}`),
+      Buffer.alloc(bytes, 0x41),
+      Buffer.from(`${CRLF}--${boundary}--${CRLF}`),
+    ]);
+    const textPart = (name, value) => Buffer.from(
+      `--${boundary}${CRLF}Content-Disposition: form-data; name="${name}"${CRLF}${CRLF}`
+      + `${value}${CRLF}--${boundary}--${CRLF}`);
+
+    async function sendMultipart(url, payload, { signedIn }) {
+      const headers = { 'Content-Type': `multipart/form-data; boundary=${boundary}` };
+      if (signedIn && cookie) headers.Cookie = cookie;
+      const res = await fetch(`${BASE}${url}`, { method: 'POST', headers, body: payload, redirect: 'manual' });
+      return { status: res.status, location: res.headers.get('location'), text: await res.text() };
+    }
+    const OVER = 27 * 1024 * 1024;             // past the 25 MB the uploader allows
+
+    let r = await sendMultipart('/no/such/path', filePart(OVER), { signedIn: false });
+    check('signed out, 27 MB multipart to a path that does not exist is refused', r.status, 415);
+    ok('and is not answered by the uploader, which never should have seen it',
+      !r.text.includes('larger than 25 MB'), r.text.slice(0, 60));
+
+    r = await sendMultipart('/admin/api/upload', filePart(OVER), { signedIn: false });
+    check('signed out, 27 MB to the upload route is asked to sign in', r.status, 401);
+    ok('and told that, not told about the file size',
+      r.text.includes('Sign in') && !r.text.includes('larger than 25 MB'), r.text.slice(0, 60));
+
+    r = await sendMultipart('/order', filePart(1024), { signedIn: false });
+    check('multipart to the customer order route is refused too', r.status, 415);
+
+    r = await sendMultipart('/admin/week/1/basics', textPart('title', 'x'), { signedIn: false });
+    check('signed out, a multipart admin form post goes to the login page', r.status, 302);
+    ok('and says where it was headed', String(r.location || '').startsWith('/admin/login'), r.location);
+
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64');
+    const photo = Buffer.concat([
+      Buffer.from(`--${boundary}${CRLF}Content-Disposition: form-data; name="photo"; filename="p.png"${CRLF}`
+        + `Content-Type: image/png${CRLF}${CRLF}`),
+      png, Buffer.from(`${CRLF}--${boundary}--${CRLF}`)]);
+    r = await sendMultipart('/admin/api/upload', photo, { signedIn: true });
+    check('signed in, a photo still uploads', r.status, 200);
+    ok('and comes back with a stored name', /"photo":"[^"]+"/.test(r.text), r.text.slice(0, 60));
+
+    r = await sendMultipart('/admin/api/upload', filePart(OVER), { signedIn: true });
+    check('signed in, 27 MB is still refused on size', r.status, 400);
+    ok('with the sentence about 25 MB, as JSON', r.text.includes('larger than 25 MB'), r.text.slice(0, 60));
+
+    r = await sendMultipart(`/admin/week/${weekId}/basics`, textPart('title', 'Multipart autosave'), { signedIn: true });
+    ok('signed in, a multipart autosave post still reaches its route',
+      r.status !== 415 && r.status !== 401, String(r.status));
+  }
+
   /* --- Report -------------------------------------------------------------- */
   console.log('\nEnd-to-end flow — Dinner By Derek\n');
   if (failures.length) {

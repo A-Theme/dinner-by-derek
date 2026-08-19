@@ -16,6 +16,7 @@ const cookieParser = require('cookie-parser');
 const multer = require('multer');
 
 const config = require('./config');
+const auth = require('./auth');
 const { db } = require('./db');
 
 const app = express();
@@ -42,24 +43,57 @@ const upload = multer({
 });
 
 /**
- * Accept any multipart body, put its text fields on req.body the way the
- * routes expect, and hand the first file to req.uploadBuffer. Size and type
- * are judged later by images.js, which sniffs the actual bytes.
+ * Accept a multipart body, put its text fields on req.body the way the routes
+ * expect, and hand the first file to req.uploadBuffer. Size and type are
+ * judged later by images.js, which sniffs the actual bytes.
+ *
+ * Mounted under /admin and behind the session check, because every multipart
+ * body this app has a use for is one the owner sent: the photo upload, the
+ * backup restore, and the autosave posts. Parsing before that check meant a
+ * caller with no session could hand the process 25 MB to hold, at any path,
+ * including ones that do not exist — read, buffered, and only then thrown
+ * away by a 404. Eight concurrent 20 MB posts to /admin/api/upload moved the
+ * server 232 MB; refused here they move it 81 MB.
+ *
+ * That 81 MB is the honest limit of what this file can do. Refusing early
+ * stops the bytes being *held* — no multer buffer, no 25 MB per connection —
+ * but they are still sent, and Node still reads and discards them. Capping
+ * the body before it reaches Node is the proxy's job: set client_max_body_size
+ * to something a little over 25 MB when this goes behind nginx.
+ *
+ * Mounting on /admin rather than testing the path inside also means req.path
+ * is already admin-relative, so auth.required decides the unauthenticated
+ * answer exactly as it does for every other admin route — a 401 for the API,
+ * the login redirect for a form.
  */
-app.use((req, res, next) => {
+app.use('/admin', (req, res, next) => {
   const type = String(req.headers['content-type'] || '');
   if (!type.startsWith('multipart/form-data')) return next();
+  /* Never reaches next(): verify has already said no. */
+  if (!auth.verify(req.cookies && req.cookies[auth.COOKIE])) return auth.required(req, res, next);
   upload.any()(req, res, (err) => {
     if (err) {
       const message = err.code === 'LIMIT_FILE_SIZE'
         ? 'That file is larger than 25 MB. Try a smaller photo.'
         : "That upload didn't come through. Try again.";
-      if (req.path.startsWith('/admin/api/')) return res.status(400).json({ error: message });
+      if (req.path.startsWith('/api/')) return res.status(400).json({ error: message });
       return res.status(400).type('text/plain').send(message);
     }
     if (req.files && req.files.length) req.uploadBuffer = req.files[0].buffer;
+    req.multipartParsed = true;
     next();
   });
+});
+
+/* Anywhere the middleware above did not claim, multipart is not a shape this
+ * app accepts. Saying so beats parsing it into a req.body nobody reads, and
+ * beats the silence of leaving req.body empty and letting a route blame the
+ * caller for a field they did send. */
+app.use((req, res, next) => {
+  const type = String(req.headers['content-type'] || '');
+  if (!type.startsWith('multipart/form-data')) return next();
+  if (req.multipartParsed) return next();          // already handled, under /admin
+  return res.status(415).type('text/plain').send('Unsupported content type.');
 });
 
 /* --- Static files --------------------------------------------------------
