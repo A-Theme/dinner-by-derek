@@ -232,8 +232,38 @@ function quote(payload) {
   return { order: o, lines, status, menu };
 }
 
+/**
+ * The key the browser stamped on this submission, or null.
+ *
+ * Capped and required to look like the UUID the form generates, so a caller
+ * cannot hand over something enormous or reuse a value they guessed. Absence
+ * is allowed: an order posted without one — an older cached page, or a
+ * customer with scripting off — still goes through, just without the
+ * protection.
+ */
+function submissionKey(v) {
+  const s = String(v == null ? '' : v).trim();
+  return /^[0-9a-f-]{16,64}$/i.test(s) ? s : null;
+}
+
+/**
+ * Place the order, or hand back the one this submission already placed.
+ *
+ * A repeat is not an error and is not told it is one. The customer who tapped
+ * twice, refreshed the posted form, or retried after their signal dropped
+ * sees the confirmation for the order they already have — which is the true
+ * answer to what they asked. `repeat` is returned so the caller knows not to
+ * send a second pair of emails for it.
+ */
 function create(payload) {
+  const key = submissionKey(payload.submission_key);
+  if (key) {
+    const existing = db.prepare('SELECT * FROM orders WHERE submission_key = ?').get(key);
+    if (existing) return { order: existing, lines: linesOf(existing.id), repeat: true };
+  }
+
   const { order: o, lines } = quote(payload);
+  o.submission_key = key;
 
   /* --- Persist --------------------------------------------------------- */
   const tx = db.transaction(() => {
@@ -254,7 +284,7 @@ function create(payload) {
   });
 
   const id = tx();
-  return { order: db.prepare('SELECT * FROM orders WHERE id = ?').get(id), lines };
+  return { order: db.prepare('SELECT * FROM orders WHERE id = ?').get(id), lines, repeat: false };
 }
 
 function linesOf(orderId) {

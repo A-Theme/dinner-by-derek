@@ -389,6 +389,15 @@ addColumn('service_days', 'closed', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('service_days', 'closed_note', "TEXT NOT NULL DEFAULT ''");
 addColumn('weeks', 'closed', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('weeks', 'closed_note', "TEXT NOT NULL DEFAULT ''");
+/* One submission, one order. The browser puts a random key on the form when
+ * the page is drawn, and the same key arriving twice is the same order being
+ * sent twice — a double tap, a refresh of the posted form, or a phone that
+ * lost signal after the request had already landed. The index is what makes
+ * that true in storage rather than only in the code that checks it. Orders
+ * placed before this existed carry NULL, which the partial index ignores. */
+addColumn('orders', 'submission_key', 'TEXT');
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_submission
+         ON orders(submission_key) WHERE submission_key IS NOT NULL`);
 
 function renameColumn(table, from, to) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();

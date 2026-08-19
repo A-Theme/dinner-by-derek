@@ -1013,6 +1013,54 @@ const PAST_DATE = T.addDays(today, -2);
     }
   }
 
+  /* --- Sending the same order twice places it once -------------------------
+     A double tap, a refresh of the posted form, or a phone that lost signal
+     after the request had already landed. All three post the same body a
+     second time, and the kitchen must not read two tickets for one dinner. */
+  {
+    const live = db.prepare(`SELECT w.slug, w.id, d.id AS day_id, d.service_date
+      FROM weeks w JOIN service_days d ON d.week_id = w.id
+      WHERE w.status = 'published' AND d.closed = 0 ORDER BY d.service_date LIMIT 1`).get();
+    const loc = db.prepare('SELECT id FROM locations WHERE active = 1 LIMIT 1').get();
+    const countFor = (name) => db.prepare(
+      'SELECT COUNT(*) n FROM orders WHERE name = ?').get(name).n;
+
+    const body = (key) => ({
+      week: live.slug, date: live.service_date,
+      lines: JSON.stringify([{ key: `service_days:${live.day_id}`, variant: 'full', qty: 1 }]),
+      name: 'Double Tap', phone: '519-555-0142', email: 'dt@example.com',
+      method: 'pickup', location_id: loc.id, payment_method: 'cash',
+      submission_key: '11111111-2222-3333-4444-555555555555',
+    });
+
+    require('../server/ratelimit').reset();
+    const first = await POST('/order', body());
+    check('the first submission is taken', first.status, 200);
+    check('and is the only order on file', countFor('Double Tap'), 1);
+    const ref = db.prepare(
+      `SELECT ref FROM orders WHERE name = 'Double Tap'`).get().ref;
+
+    const second = await POST('/order', body());
+    check('the repeat is answered, not refused', second.status, 200);
+    check('and still only one order exists', countFor('Double Tap'), 1);
+    ok('the repeat shows the confirmation for the order already placed',
+      second.text.includes(ref), `expected ${ref} in the second response`);
+
+    // A different key from the same customer is a genuine second order.
+    const another = await POST('/order', {
+      ...body(), submission_key: '99999999-8888-7777-6666-555555555555',
+    });
+    check('a fresh submission key is a new order', another.status, 200);
+    check('so the second one is stored', countFor('Double Tap'), 2);
+
+    // No key at all still works — an unscripted post, or an older page.
+    const bare = { ...body() };
+    delete bare.submission_key;
+    await POST('/order', bare);
+    check('an order without a key is still accepted', countFor('Double Tap'), 3);
+    require('../server/ratelimit').reset();
+  }
+
   /* --- The cutoff time is stored as it was typed ---------------------------
      Both cutoffs are clamped the same way now. The main one used to run
      through `Number(x) || 22`, which treats a typed midnight as falsy and

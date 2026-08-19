@@ -11,7 +11,7 @@
  * price never has customers pinned to the previous build.
  */
 
-var CACHE_VERSION = 'dbd-shell-v2';
+var CACHE_VERSION = 'dbd-shell-v3';
 var SHELL = [
   '/theme.css',
   '/app.css',

@@ -8,6 +8,20 @@
   var form = document.getElementById('orderform');
   if (!form) return;
 
+  /* --- One submission, one order ----------------------------------------
+     Stamped once per drawn page and never regenerated, so every way of
+     sending this form twice — a double tap, a refresh of the posted form,
+     a retry after the signal dropped mid-request — carries the same key and
+     lands as the one order the server already has. A genuine second order
+     means loading the menu again, which draws a new key. */
+  var keyEl = document.getElementById('submission-key');
+  if (keyEl && !keyEl.value) {
+    keyEl.value = (window.crypto && window.crypto.randomUUID)
+      ? window.crypto.randomUUID()
+      : String(Date.now()) + '-' + Math.random().toString(16).slice(2) +
+        Math.random().toString(16).slice(2);
+  }
+
   var lines = {};                       // key|variant -> line
   var elLines = document.getElementById('lines');
   var elEmpty = document.getElementById('empty-note');

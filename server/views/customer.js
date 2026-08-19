@@ -227,6 +227,10 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
       <input type="hidden" name="week" value="${week.slug}">
       <input type="hidden" name="date" value="${day.service_date}">
       <input type="hidden" name="lines" id="lines" value="[]">
+      <!-- Stamped once when this page is drawn, so the same page posting
+           twice is recognisably the same submission. Filled in by order.js;
+           an unscripted post simply leaves it empty and is treated as new. -->
+      <input type="hidden" name="submission_key" id="submission-key" value="">
 
       <div class="section-rule"><h2>How would you like it?</h2></div>
 

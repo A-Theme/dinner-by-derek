@@ -168,7 +168,7 @@ router.post('/order', rateLimit('order', 12, 60_000), async (req, res) => {
     throw e;
   }
 
-  const { order, lines } = result;
+  const { order, lines, repeat } = result;
   /* Email failures must never lose an order that is already stored, so these
      stay detached and unawaited. They no longer stay quiet, though: mailer's
      own send() logs an SMTP refusal, but anything thrown before that — a
@@ -177,8 +177,13 @@ router.post('/order', rateLimit('order', 12, 60_000), async (req, res) => {
      actionable and "the confirmation for A1B2C3D4 failed" is. */
   const mailFailed = (what) => (e) =>
     console.error(`[mail] ${what} failed for order ${order.ref}:`, (e && e.message) || e);
-  mailer.ownerOrderEmail(order, lines).catch(mailFailed('owner order email'));
-  mailer.customerOrderEmail(order, lines).catch(mailFailed('customer confirmation'));
+  /* Not on a repeat. The order is the one already placed, and the kitchen
+     reading a second copy of the same ticket is how one dinner gets cooked
+     twice. The customer still sees their confirmation below. */
+  if (!repeat) {
+    mailer.ownerOrderEmail(order, lines).catch(mailFailed('owner order email'));
+    mailer.customerOrderEmail(order, lines).catch(mailFailed('customer confirmation'));
+  }
 
   res.type('html').send(String(V.confirmationView({
     order,
