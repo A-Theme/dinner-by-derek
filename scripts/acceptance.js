@@ -1185,6 +1185,39 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('and on one still waiting for its allergen review',
     admin2.includes('`Saved. ${A.reviewMessage(f.name, st)}`'));
 }
+
+/* --- Clock settings a bad value prints rather than throws -------------------
+   fmtClock splits on the colon and trusts what it gets, so these never threw
+   and never got noticed: "four pm" printed as "NaN:undefined AM" and 25:00 as
+   "1:00 PM" — obviously broken is a bug report, plausibly wrong is a customer
+   turning up at the wrong hour. The pickup window is also frozen onto every
+   order at submit, so a bad one is written permanently onto records.
+
+   auto_publish_time was checked with a regex that accepts 99:99 and 24:00,
+   which momentOn hands to a Date, pushing the publish moment days out. */
+{
+  const { settings } = require('../server/db');
+  const g = (k, v) => settings.guard(k, v);
+  for (const key of ['pickup_start', 'pickup_end', 'auto_publish_time']) {
+    check(`${key} takes an ordinary time`, g(key, '16:00'), '16:00');
+    check(`${key} is normalised to two digits`, g(key, '9:5'), '09:05');
+    check(`${key} accepts midnight`, g(key, '0:00'), '00:00');
+    check(`${key} accepts the last minute of the day`, g(key, '23:59'), '23:59');
+    check(`${key} refuses words`, g(key, 'four pm'), null);
+    check(`${key} refuses an hour that does not exist`, g(key, '25:00'), null);
+    check(`${key} refuses 24:00, which a plain regex let through`, g(key, '24:00'), null);
+    check(`${key} refuses 99:99, which a plain regex also let through`, g(key, '99:99'), null);
+    check(`${key} refuses a minute that does not exist`, g(key, '12:60'), null);
+    check(`${key} refuses an empty box`, g(key, ''), null);
+    check(`${key} refuses a bare hour`, g(key, '16'), null);
+  }
+
+  /* And the whole point: what the customer reads. */
+  ok('a guarded window formats as a time',
+    /^\d{1,2}:\d{2} [AP]M–\d{1,2}:\d{2} [AP]M$/.test(T.fmtWindow(g('pickup_start', '16:00'), g('pickup_end', '19:00'))));
+  ok('and the unguarded value is what used to reach the page',
+    T.fmtWindow('four pm', '25:00').includes('NaN'));
+}
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {

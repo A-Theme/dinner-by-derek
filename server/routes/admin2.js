@@ -486,17 +486,32 @@ router.post('/fsa/remove', (req, res) => {
 });
 
 router.post('/settings/pickup', (req, res) => {
-  settings.set('pickup_start', String(req.body.pickup_start || '16:00'));
-  settings.set('pickup_end', String(req.body.pickup_end || '19:00'));
-  back(res, req, 'Pickup window saved. Future days use the new window; orders already placed keep the window they were given.');
+  /* Refused rather than defaulted. Falling back to 16:00 for a value the owner
+   * typed would move the pickup window without saying so, and this window is
+   * frozen onto every order placed afterwards — so a silent correction becomes
+   * wrong text on records nobody can easily fix. */
+  const start = settings.guard('pickup_start', req.body.pickup_start);
+  const end = settings.guard('pickup_end', req.body.pickup_end);
+  if (start === null || end === null) {
+    return back(res, req, null, 'A pickup time has to look like 16:00 — nothing was changed. '
+      + `The window is still ${T.fmtWindow(settings.get('pickup_start', '16:00'), settings.get('pickup_end', '19:00'))}.`);
+  }
+  settings.set('pickup_start', start);
+  settings.set('pickup_end', end);
+  back(res, req, `Pickup window saved — ${T.fmtWindow(start, end)}. Future days use the new window; `
+    + 'orders already placed keep the window they were given.');
 });
 
 router.post('/settings/publishing', (req, res) => {
   settings.set('auto_publish', req.body.auto_publish ? 1 : 0);
   const wd = String(req.body.auto_publish_weekday || 'sat');
   if (T.WEEKDAYS.includes(wd)) settings.set('auto_publish_weekday', wd);
-  const t = String(req.body.auto_publish_time || '12:00');
-  if (/^\d{1,2}:\d{2}$/.test(t)) settings.set('auto_publish_time', t);
+  /* Was /^\d{1,2}:\d{2}$/, which says yes to 99:99 and 24:00 — and momentOn
+   * hands those to a Date, where hour 99 pushes the publish moment four days
+   * past the day it was meant to be, so the week goes out late or not at all.
+   * The same clock guard the pickup window uses. */
+  const t = settings.guard('auto_publish_time', req.body.auto_publish_time);
+  if (t !== null) settings.set('auto_publish_time', t);
 
   settings.set('remind_missing_week', req.body.remind_missing_week ? 1 : 0);
   const lead = Math.max(0, Math.min(6, Math.floor(Number(req.body.remind_missing_week_days)) || 0));

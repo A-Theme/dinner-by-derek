@@ -526,12 +526,45 @@ function clampInt(v, lo, hi) {
   return Number.isFinite(n) && n >= lo && n <= hi ? String(n) : null;
 }
 
+/**
+ * A wall-clock time as 'HH:MM', or null.
+ *
+ * These are not parsed anywhere — fmtClock splits on the colon and trusts what
+ * it gets — so a bad one does not throw, which is why it went unnoticed. It
+ * prints. "four pm" became "NaN:undefined AM" on the customer menu, and 25:00
+ * quietly became "1:00 PM", which is worse: obviously broken is a bug report,
+ * plausibly wrong is a customer arriving at the wrong hour.
+ *
+ * The pickup window is also frozen onto every order at submit, so a bad value
+ * is not just a wrong page — it is written permanently onto records the owner
+ * cannot easily correct.
+ *
+ * Normalised on the way in, so '9:5' is stored as '09:05' and the stored form
+ * is always the one fmtClock expects.
+ */
+function clockTime(v) {
+  const m = /^(\d{1,2}):(\d{1,2})$/.exec(String(v == null ? '' : v).trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (!(h >= 0 && h <= 23) || !(min >= 0 && min <= 59)) return null;
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
 const GUARDS = {
   timezone: (v) => (usableTimezone(v) ? String(v) : null),
   cutoff_hour: (v) => clampInt(v, 0, 23),
   cutoff_minute: (v) => clampInt(v, 0, 59),
   late_cutoff_hour: (v) => clampInt(v, 0, 23),
   late_cutoff_minute: (v) => clampInt(v, 0, 59),
+  /* The two ends of the pickup window, and the moment a finished week goes out
+   * on its own. auto_publish_time was checked with /^\d{1,2}:\d{2}$/, which
+   * accepts 99:99 and 24:00 — and momentOn feeds those straight into a Date,
+   * where hour 99 rolls the publish moment four days past the day it was meant
+   * to be. Same guard for all three now. */
+  pickup_start: clockTime,
+  pickup_end: clockTime,
+  auto_publish_time: clockTime,
 };
 
 /**

@@ -1132,6 +1132,57 @@ const PAST_DATE = T.addDays(today, -2);
     check("and the price in the table above matches",
       /data-label="Prices">([^<]*)/.exec(page.text.split(item.name)[1] || "") ? true : true, true);
   }
+  const { settings } = require('../server/db');
+  const live2 = db.prepare("SELECT w.slug, d.service_date FROM weeks w JOIN service_days d ON d.week_id = w.id WHERE w.status = 'published' AND d.closed = 0 ORDER BY d.service_date LIMIT 1").get();
+  /* --- A pickup time that isn't one -------------------------------------
+   * fmtClock never threw on these, it printed them: "four pm" reached the
+   * customer menu as "NaN:undefined AM" and was frozen onto every order placed
+   * afterwards. Checked over HTTP, and then on the order record, because the
+   * record is the part that cannot be corrected later.
+   */
+  {
+    const wasStart = settings.get('pickup_start');
+    const wasEnd = settings.get('pickup_end');
+
+    let r = await POST('/admin/settings/pickup', { pickup_start: 'four pm', pickup_end: '25:00' });
+    const said = new URLSearchParams(String(r.location || '').split('?')[1] || '');
+    ok('a pickup time that is not a time is refused', !!said.get('err'), r.location);
+    ok('and says what one looks like', (said.get('err') || '').includes('16:00'), said.get('err'));
+    check('the stored start is untouched', settings.get('pickup_start'), wasStart);
+    check('and so is the end', settings.get('pickup_end'), wasEnd);
+
+    r = await POST('/admin/settings/pickup', { pickup_start: '9:5', pickup_end: '18:30' });
+    ok('a real time is accepted', !String(r.location || '').includes('err='), r.location);
+    check('and normalised on the way in', settings.get('pickup_start'), '09:05');
+    check('with the other end stored as typed', settings.get('pickup_end'), '18:30');
+
+    const day = await GET(`/w/${live2.slug}/${live2.service_date}`);
+    check('the customer page still renders', day.status, 200);
+    ok('and carries no NaN where a time should be', !day.text.includes('NaN'),
+      (/[^<>]*NaN[^<>]*/.exec(day.text) || [])[0]);
+
+    // Put the window back so later checks see what they expect.
+    await POST('/admin/settings/pickup', { pickup_start: wasStart, pickup_end: wasEnd });
+
+    /* The publish moment went through /^\d{1,2}:\d{2}$/, which says yes to
+     * 99:99 — and hour 99 pushes the moment four days past the day meant. */
+    const wasTime = settings.get('auto_publish_time');
+    await POST('/admin/settings/publishing', {
+      auto_publish: '1', auto_publish_weekday: 'sat', auto_publish_time: '99:99',
+      remind_missing_week: '1', remind_missing_week_days: '2',
+    });
+    check('99:99 is not a publish time', settings.get('auto_publish_time'), wasTime);
+    await POST('/admin/settings/publishing', {
+      auto_publish: '1', auto_publish_weekday: 'sat', auto_publish_time: '9:30',
+      remind_missing_week: '1', remind_missing_week_days: '2',
+    });
+    check('a real one is taken and normalised', settings.get('auto_publish_time'), '09:30');
+    await POST('/admin/settings/publishing', {
+      auto_publish: '1', auto_publish_weekday: 'sat', auto_publish_time: wasTime,
+      remind_missing_week: '1', remind_missing_week_days: '2',
+    });
+  }
+
   /* --- A graphics set named by the URL ------------------------------------
    * The route looked the name up with SETS[req.params.set]. Every object
    * inherits __proto__, constructor and toString, so those three answered as
