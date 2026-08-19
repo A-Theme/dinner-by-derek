@@ -315,7 +315,7 @@ const DEFAULTS = {
   remind_missing_week: '1',
   remind_missing_week_days: '2',
   payment_instructions:
-    'No online payment. Pay at pickup, on delivery, or by e-transfer to derek@example.com.',
+    'No online payment. Pay at pickup, on delivery, or by e-transfer to derekhines@hotmail.com.',
   owner_contact: 'Message Dinner By Derek on Facebook, or call (226) 748-8378.',
   notify_email: '',
   full_label: 'Full size',
