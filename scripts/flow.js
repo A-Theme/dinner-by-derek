@@ -962,11 +962,39 @@ const PAST_DATE = T.addDays(today, -2);
       res.headers.get('strict-transport-security'), null);
 
     /* The policy above is only honest if the pages carry no inline script.
-       These two were the last of it. */
-    const menu = await GET('/');
-    ok('the customer page has no inline event handlers', !/\son[a-z]+="/i.test(menu.text));
-    const week = await GET(`/admin/week`);
-    ok('nor does the week page', !/\son[a-z]+="/i.test(week.text));
+       Checked across every page that renders one, not a sample: this test
+       used to look at two of them, and the Facebook preview — the page whose
+       copy button is the fallback when publishing fails — kept an inline
+       handler that the policy silently switched off. */
+    // Read the live week rather than reusing weekSlug: by this point the
+    // suite has unpublished, duplicated and republished, so the slug captured
+    // at the top no longer points at what customers can see.
+    const live = db.prepare(`SELECT w.slug, d.service_date FROM weeks w
+      JOIN service_days d ON d.week_id = w.id
+      WHERE w.status = 'published' ORDER BY d.service_date LIMIT 1`).get();
+    ok('a published week exists to check the customer page against', !!live);
+
+    const pages = [
+      ['the day menu', `/w/${live.slug}/${live.service_date}`],
+      ['the week page', '/admin/week'],
+      ['the Facebook preview', `/admin/facebook/preview/${weekId}`],
+      ['the settings page', '/admin/settings'],
+      ['the orders page', '/admin/orders'],
+      ['the kitchen sheet', `/admin/sheet/kitchen/${SERVICE_DATE}`],
+    ];
+    /* A <script> with a src, or carrying a non-JavaScript type, is a data
+       block rather than code — the ordering page's JSON config is one, and
+       the CSP does not execute it. Anything else inline is what this is for. */
+    const inlineScript = /<script(?![^>]*\ssrc=)(?![^>]*type="(?:application\/json|application\/ld\+json)")/i;
+    for (const [label, url] of pages) {
+      const r = await GET(url);
+      // Guard against the check passing because the page wasn't there at all:
+      // a redirect or a 404 body trivially contains no inline script.
+      check(`${label} renders`, r.status, 200);
+      ok(`${label} is a real page, not an empty body`, r.text.length > 400, `${url} -> ${r.text.length} bytes`);
+      ok(`${label} has no inline event handler`, !/\son[a-z]+="/i.test(r.text), url);
+      ok(`${label} has no inline script`, !inlineScript.test(r.text), url);
+    }
   }
 
   /* --- Report -------------------------------------------------------------- */

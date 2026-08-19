@@ -9,7 +9,7 @@ const FB = require('../facebook');
 const X = require('../exports');
 const G = require('../graphics');
 const V = require('../views/admin');
-const { html, raw, money } = require('../html');
+const { html, money } = require('../html');
 
 /**
  * Two routers, deliberately.
@@ -385,7 +385,13 @@ router.get('/facebook/preview/:id', (req, res) => {
       <p class="also">Works whether or not Facebook is connected. This is the only way to post
         into a group — Facebook blocked apps from doing that in April 2024.</p>
       <div class="dl-row">
-        <button class="btn btn--primary" type="button" id="copybtn">Copy post text</button>
+        <!-- The post text rides on the button, read by the one [data-copy]
+             listener in admin.js that the week page's copy buttons already
+             use. It was an inline script until the CSP started refusing
+             those, which left this button doing nothing — on the page whose
+             whole purpose is being the fallback when publishing fails. -->
+        <button class="btn btn--primary" type="button" id="copybtn"
+          data-copy="${text}" data-copied="Post text copied. Paste it into Facebook.">Copy post text</button>
         ${image ? html`<a class="btn btn--secondary" href="/uploads/${image}" download>Download the image</a>` : ''}
       </div>
     </div>
@@ -404,13 +410,7 @@ router.get('/facebook/preview/:id', (req, res) => {
         })}`
       : html`<p>No Facebook Page is connected, so use "Copy post text" above.
           <a href="/admin/settings">Connect a Page in Settings</a> if you want one-tap publishing.</p>`}
-    </div>
-
-    <script>document.getElementById('copybtn').addEventListener('click',function(){
-      navigator.clipboard.writeText(${raw(JSON.stringify(text))}).then(function(){
-        window.dbdToast('Post text copied. Paste it into Facebook.');
-      });
-    });</script>`;
+    </div>`;
 
   res.type('html').send(String(V.shell({ title: 'Post to Facebook', body, current: 'week' })));
 });
