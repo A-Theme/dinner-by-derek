@@ -132,21 +132,30 @@ function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWee
 
     ${showPhoto ? html`
     <label>Photo</label>
+    <!-- Buttons first, dropzone second, and it matters which way round.
+         The dropzone came first and said "Tap to choose a photo" in bold. On a
+         phone it measured 271x158 against the button's 271x51 — three times
+         the area, above it, and instructing a tap. So the owner tapped it, got
+         the photo library, and reported that Take photo did not open the
+         camera. It never ran. The camera was working the whole time.
+         A phone cannot drag and does not paste, so the box below is desktop
+         affordance; the two things a phone can actually do now come first, and
+         taking a photo is the one Derek does standing over the food. -->
+    <div class="dl-row" style="margin-bottom:var(--dbd-sp-3)">
+      <button type="button" class="btn btn--primary" data-take>Take photo</button>
+      <button type="button" class="btn btn--secondary" data-choose>Choose from library</button>
+      ${item.photo ? html`<button type="button" class="btn btn--secondary" data-clearphoto>Remove photo</button>` : ''}
+    </div>
     <div class="dropzone" data-drop tabindex="0" role="button">
       ${item.photo ? html`<img src="/uploads/${item.photo}" alt="">` : ''}
-      <p><strong>Tap to choose a photo</strong><br>
-        <span class="variant__label">or drag one in, or paste from the clipboard. iPhone HEIC is fine.</span></p>
+      <p><strong>Or drag a photo here</strong><br>
+        <span class="variant__label">or paste one from the clipboard. iPhone HEIC is fine.</span></p>
       <input type="file" accept="image/*,.heic,.heif" hidden data-file>
       <input type="file" accept="image/*" capture="environment" hidden data-camera>
       <div class="progress" hidden><div></div></div>
       <p class="dz-msg variant__label"></p>
     </div>
-    <input type="hidden" name="${prefix}_photo" value="${item.photo || ''}" data-photo>
-    <div class="dl-row" style="margin-bottom:var(--dbd-sp-4)">
-      <button type="button" class="btn btn--secondary" data-take>Take photo</button>
-      <button type="button" class="btn btn--secondary" data-choose>Choose from library</button>
-      ${item.photo ? html`<button type="button" class="btn btn--secondary" data-clearphoto>Remove photo</button>` : ''}
-    </div>` : ''}
+    <input type="hidden" name="${prefix}_photo" value="${item.photo || ''}" data-photo>` : ''}
 
     ${showHalal ? html`
     <label style="display:flex;gap:var(--dbd-sp-3);align-items:center">
