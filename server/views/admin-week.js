@@ -84,6 +84,11 @@ function weekPage({ week, days, items, hasPrevious }) {
           };
           const item = existing || stub;
           return html`
+          <!-- Open only while the day is still empty, so a week in progress
+               shows the boxes still wanting something and keeps the finished
+               ones out of the way. The Save and Load controls sit inside, so
+               they are a tap behind the summary rather than on the page — the
+               trade the owner asked for, a clean page over a visible button. -->
           <details class="daycard-edit"${existing && (existing.dish_name || existing.closed) ? '' : ' open'}>
             <summary>${T.WEEKDAY_LABELS[wd]}, ${T.fmtMonthDay(date, tz())}
               — ${item.closed ? 'closed' : (item.dish_name || 'nothing yet')}
@@ -105,15 +110,28 @@ function weekPage({ week, days, items, hasPrevious }) {
             <!-- Saved dishes. These controls belong to the day they sit under
                  but post to their own routes, so they are associated by their form attribute
                  with the little forms at the foot of the page — the weekday
-                 boxes are one big form and HTML has no nested ones. -->
-            ${saved.length ? html`
-              <div class="dl-row" style="align-items:flex-end;margin-bottom:var(--dbd-sp-3)">
-                <label style="flex:1 1 200px">Put a saved dish here
-                  <select name="dish_id" form="usedish-${wd}">
-                    ${saved.map((s) => html`<option value="${s.id}">${s.name}</option>`)}
-                  </select></label>
-                <button class="btn btn--secondary" type="submit" form="usedish-${wd}">Use it</button>
-              </div>` : ''}
+                 boxes are one big form and HTML has no nested ones.
+
+                 The row renders whether anything is saved or not. It used to
+                 hide itself until the list had something in it, which meant the
+                 one moment the feature most needed explaining — an empty
+                 library, on a dashboard where nobody had met it yet — was the
+                 one moment it said nothing at all. Disabled and labelled beats
+                 absent: the owner can see the door before they have the key. -->
+            <div class="dl-row" style="align-items:flex-end;margin-bottom:var(--dbd-sp-3)">
+              <label style="flex:1 1 200px">Put a saved dish here
+                <select name="dish_id" form="usedish-${wd}"${saved.length ? '' : ' disabled'}>
+                  ${saved.length
+                    ? html`<option value="">Choose a saved dish…</option>
+                        ${saved.map((s) => html`<option value="${s.id}">${s.name}</option>`)}`
+                    : html`<option>No saved dishes yet</option>`}
+                </select></label>
+              <button class="btn btn--secondary" type="submit" form="usedish-${wd}"${saved.length ? '' : ' disabled'}>Use it</button>
+            </div>
+            ${saved.length ? '' : html`
+              <p class="also" style="margin-bottom:var(--dbd-sp-3)">Nothing saved yet.
+                Use <strong>Save "…" to my dishes</strong> below once this day has a name on it,
+                or publish a week — every featured dish on it is filed here automatically.</p>`}
             ${V.itemEditor({ prefix: wd, item, nameLabel: 'Featured dish' })}
             ${item.dish_name && item.dish_name.trim() ? html`
               <p><button class="btn btn--secondary" type="submit" form="savedish-${wd}">
