@@ -140,6 +140,26 @@ const PAST_DATE = T.addDays(today, -2);
     check('the dashboard opens', dash.status, 200);
   }
 
+  /* --- The photo inputs must not sit inside the dropzone ----------------- *
+   * input.click() dispatches a real click on the input, and it bubbles. With
+   * these inside the dropzone, "Take photo" called cam.click(), the event rose
+   * into the dropzone's click handler, that handler saw an INPUT rather than a
+   * BUTTON, and it opened the photo library over the camera. The camera fired
+   * every time and was covered every time, which is why it read as dead.
+   * The fix is positional, so the guard is positional. */
+  {
+    const h = (await GET('/admin/week')).text;
+    const dropAt = h.indexOf('data-drop');
+    const dzEndAt = h.indexOf('dz-msg', dropAt);       // last thing in the dropzone
+    const camAt = h.indexOf('data-camera', dropAt);
+    const fileAt = h.indexOf('data-file', dropAt);
+    ok('the dropzone renders', dropAt !== -1);
+    ok('the camera input is OUTSIDE the dropzone', camAt > dzEndAt,
+      `dropzone ends near ${dzEndAt}, camera input at ${camAt}`);
+    ok('the file input is OUTSIDE the dropzone', fileAt > dzEndAt,
+      `dropzone ends near ${dzEndAt}, file input at ${fileAt}`);
+  }
+
   /* --- Build a week ----------------------------------------------------- */
   let weekId;
   let weekSlug;

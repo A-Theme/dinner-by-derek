@@ -150,11 +150,18 @@ function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWee
       ${item.photo ? html`<img src="/uploads/${item.photo}" alt="">` : ''}
       <p><strong>Or drag a photo here</strong><br>
         <span class="variant__label">or paste one from the clipboard. iPhone HEIC is fine.</span></p>
-      <input type="file" accept="image/*,.heic,.heif" hidden data-file>
-      <input type="file" accept="image/*" capture="environment" hidden data-camera>
       <div class="progress" hidden><div></div></div>
       <p class="dz-msg variant__label"></p>
     </div>
+    <!-- Outside the dropzone, deliberately. input.click() fires a real click on
+         the input and it bubbles: while these sat inside, Take photo called
+         cam.click(), the event rose into the dropzone's own click handler,
+         which saw an INPUT rather than a BUTTON and opened the photo library
+         over the camera. Nothing renders here — they are hidden, and admin.js
+         finds them from the editor rather than from the dropzone — so the only
+         thing their position controls is what their clicks bubble through. -->
+    <input type="file" accept="image/*,.heic,.heif" hidden data-file>
+    <input type="file" accept="image/*" capture="environment" hidden data-camera>
     <input type="hidden" name="${prefix}_photo" value="${item.photo || ''}" data-photo>` : ''}
 
     ${showHalal ? html`

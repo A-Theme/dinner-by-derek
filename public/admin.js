@@ -385,6 +385,15 @@
         }
 
         drop.addEventListener('click', function (e) {
+          /* Our own doing, not the owner's. input.click() dispatches a real
+             click on the input, and it bubbles. While the inputs sat inside
+             this dropzone, "Take photo" called cam.click(), the event came
+             straight back up here, the target was an INPUT rather than a
+             BUTTON, and this handler opened the library over the camera that
+             had just been asked for. The inputs now live outside the dropzone
+             so the event cannot reach here at all; this guard is what stops it
+             mattering if they ever move back in. */
+          if (e.target === file || e.target === cam) return;
           if (e.target.tagName !== 'BUTTON') file.click();
         });
         drop.addEventListener('keydown', function (e) {
