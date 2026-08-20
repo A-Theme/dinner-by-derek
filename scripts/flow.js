@@ -124,6 +124,14 @@ const PAST_DATE = T.addDays(today, -2);
     check('a wrong password is refused', wrong.status, 401);
     ok('and no session is handed out', !cookie.includes('dbd_admin'));
 
+    /* A POST with no Content-Type parses to nothing, and every route reads
+       req.body.something straight off. That used to be a TypeError and a 500 —
+       the server owning a fault that belonged to the request. It must be
+       refused the same way any other bad password is. */
+    const bodyless = await fetch(`${BASE}/admin/login`, { method: 'POST', redirect: 'manual' });
+    check('a body-less post is refused, not a server error', bodyless.status, 401);
+    ok('and still no session', !cookie.includes('dbd_admin'));
+
     const good = await POST('/admin/login', { password: 'flow-test-password', next: '/admin' });
     check('the right password signs in', good.status, 303);
     ok('and sets a session cookie', cookie.includes('dbd_admin'));

@@ -35,6 +35,17 @@ app.set('etag', 'strong');
  */
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 app.use(express.json({ limit: '1mb' }));
+
+/* Neither parser sets req.body when it does not recognise the body, and a POST
+ * with no Content-Type at all is the easy way to arrive here with nothing.
+ * Every route downstream reads req.body.something straight off, so that
+ * undefined was a TypeError and a 500 — the server reporting a fault of its
+ * own for what was only a malformed request. An empty object hands the
+ * question back to the route, which already knows what to say: the login page
+ * answers "that password isn't right" rather than crashing, and the rate
+ * limiter still counts the attempt. */
+app.use((req, res, next) => { if (!req.body) req.body = {}; next(); });
+
 app.use(cookieParser());
 
 const upload = multer({
