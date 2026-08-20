@@ -965,6 +965,10 @@ and pickup window in their own columns) and a contact list.
 > is the whole thing start to finish — renting the box, DNS, certificate,
 > systemd, backups — with the commands in order. What follows here is the
 > reference for *why* the pieces are shaped the way they are.
+>
+> **Going live, rather than just deploying?** [docs/GOING-LIVE.md](docs/GOING-LIVE.md)
+> is what has to be true before a customer sees the site — the allergen
+> reviews, the password, the QR codes — and what to watch in the first weeks.
 
 The app sets its own security headers, so nginx does not need to add any and
 should not duplicate them. Everything the pages load they also serve — no CDN,
