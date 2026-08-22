@@ -8,6 +8,10 @@ const M = require('../menu');
 const A = require('../allergens');
 const D = require('../delivery');
 const O = require('../orders');
+const P = require('../payments');
+// The orders filter builds its own LIKE, and needs the same escaping the CSV
+// export uses. Without this require the Name-or-phone box threw a 500.
+const X = require('../exports');
 const FB = require('../facebook');
 const mailer = require('../mailer');
 const IF = require('../itemform');
@@ -226,6 +230,16 @@ router.get('/orders', (req, res) => {
     ORDER BY CASE status WHEN 'late_request' THEN 0 ELSE 1 END, service_date DESC, id DESC LIMIT 400`;
   const orders = db.prepare(sql).all(...args);
 
+  // One query for the whole page rather than one per card: which of these
+  // orders has a bank notification behind its paid flag, and which was ticked
+  // by hand. Both are "Paid"; only one of them can be pointed at.
+  const paidBy = new Map();
+  if (orders.length) {
+    const rows = db.prepare(`SELECT * FROM payments WHERE order_id IN (${orders.map(() => '?').join(',')})`)
+      .all(...orders.map((o) => o.id));
+    for (const r of rows) paidBy.set(r.order_id, r);
+  }
+
   const dates = db.prepare('SELECT DISTINCT service_date FROM orders ORDER BY service_date DESC LIMIT 40').all();
   const qs = new URLSearchParams(req.query).toString();
 
@@ -280,6 +294,16 @@ router.get('/orders', (req, res) => {
         <p class="variant__label">Food ${money(o.subtotal)}${o.method === 'delivery' ? ` · Delivery ${money(o.delivery_fee)}` : ''}
           ${o.payment_method ? html` · Paying by <strong>${O.PAYMENT_LABEL(o.payment_method)}</strong>` : ''}
           ${o.paid ? html` · <span class="flag flag--ok">Paid</span>` : ''}</p>
+        ${(() => {
+          const pay = paidBy.get(o.id);
+          if (!pay) return '';
+          return html`<p class="variant__label">${money(pay.amount)} from
+            ${pay.sender_name || 'an unnamed sender'}, ${pay.matched_by === 'auto' ? 'matched automatically' : 'linked by you'}${
+              pay.amount !== o.total
+                ? html` — <span class="flag flag--warn">${pay.amount < o.total
+                    ? `${money(o.total - pay.amount)} short` : `${money(pay.amount - o.total)} over`}</span>` : ''}
+            · <a href="/admin/payments">Payments</a></p>`;
+        })()}
         <p>${o.method === 'pickup'
           ? html`<strong>Pickup</strong> ${o.location_name}, anytime ${o.pickup_window}`
           : html`<strong>Delivery</strong> ${o.addr_line}${o.addr_unit ? `, ${o.addr_unit}` : ''}, ${o.postal_norm}
@@ -335,6 +359,151 @@ router.post('/orders/:id/decide', (req, res) => {
   back(res, req, decision === 'confirmed'
     ? `Confirmed. ${o.name} has been emailed.`
     : `Declined. ${o.name} has been emailed.`);
+});
+
+/* ============================= PAYMENTS ================================
+ * Reconciling e-transfers against orders.
+ *
+ * The app never sees a bank. What it sees is the notification email the bank
+ * sends when money lands, which for now arrives here by being pasted in. When
+ * the app is hosted somewhere that can poll a mailbox, the poller calls the
+ * same P.record() and this screen does not change.
+ *
+ * Everything on the page is arranged around the one question worth asking —
+ * which money has no order, and which order has no money.
+ */
+const REASONS = {
+  exact: 'Reference and amount both match',
+  ref_mismatch: 'Reference matches, amount does not',
+  amount_only: 'The only unpaid order owed exactly this',
+  name: 'The sender name matches the customer',
+};
+
+router.get('/payments', (req, res) => {
+  const unmatched = P.unmatched();
+  const awaiting = P.awaiting();
+  const matched = P.matched(25);
+
+  const stamp = (s) => String(s || '').replace('T', ' ').slice(0, 16);
+
+  const body = html`
+    <h1>Payments</h1>
+    <p class="also">Money that has arrived, and the orders still waiting for it.
+      Nothing here talks to a bank — it reads the notification emails your bank sends.</p>
+
+    <form method="post" action="/admin/payments/record" class="card no-print">
+      <label for="notification"><strong>Paste an e-transfer notification</strong></label>
+      <p class="also">The whole email, or just its text. If the customer put their order
+        reference in the transfer message and the amount matches, the order is marked
+        paid on the spot. Anything less certain waits for you below.</p>
+      <textarea id="notification" name="notification" rows="6" required
+        placeholder="Paste the email from your bank here."></textarea>
+      <button class="btn btn--primary" type="submit">Read it</button>
+    </form>
+
+    <h2 class="subhead">Money with no order yet${unmatched.length ? html` (${unmatched.length})` : ''}</h2>
+    ${unmatched.length ? unmatched.map((p) => {
+      const suggestions = P.candidatesFor(p);
+      return html`<div class="card">
+        <div class="dl-row" style="justify-content:space-between;align-items:baseline">
+          <div><strong>${p.sender_name || 'Sender not recognised'}</strong>
+            <br><span class="variant__label">${stamp(p.received_at)} UTC${p.source === 'mailbox' ? ' · from the mailbox' : ''}</span></div>
+          <div class="tile__n" style="font-size:var(--dbd-step-2)">${money(p.amount)}</div>
+        </div>
+        ${p.memo ? html`<p>Message: <strong>${p.memo}</strong></p>`
+          : html`<p class="also">No message came with this transfer.</p>`}
+
+        ${suggestions.length ? suggestions.map((c) => html`
+          <form method="post" action="/admin/payments/${p.id}/link" class="dl-row"
+            style="align-items:baseline;gap:var(--dbd-sp-3)">
+            <input type="hidden" name="order_id" value="${c.order.id}">
+            <button class="btn ${c.reason === 'exact' ? 'btn--primary' : 'btn--secondary'}" type="submit">
+              This is ${c.order.name} · ${c.order.ref} · ${money(c.order.total)}</button>
+            <span class="variant__label">${REASONS[c.reason]}${
+              c.order.total !== p.amount
+                ? ` · ${c.order.total > p.amount ? `${money(c.order.total - p.amount)} short` : `${money(p.amount - c.order.total)} over`}`
+                : ''}${c.taken ? ' · that order is already settled by another payment' : ''}</span>
+          </form>`)
+          : html`<p class="also">Nothing matches this one.</p>`}
+
+        <form method="post" action="/admin/payments/${p.id}/link" class="dl-row" style="align-items:baseline">
+          <select name="order_id" style="flex:1 1 220px">
+            <option value="">Pick the order by hand…</option>
+            ${awaiting.map((o) => html`<option value="${o.id}">${o.name} · ${o.ref} · ${money(o.total)} · ${T.fmtDayShort(o.service_date, tz())}</option>`)}
+          </select>
+          <button class="btn btn--secondary" type="submit">Link</button>
+        </form>
+      </div>`;
+    }) : html`<div class="card"><p>No unclaimed payments. Everything that came in has an order.</p></div>`}
+
+    <h2 class="subhead">Still waiting on an e-transfer${awaiting.length ? html` (${awaiting.length})` : ''}</h2>
+    ${awaiting.length ? html`<table class="dtable">
+      <thead><tr><th>Customer</th><th>Service day</th><th>Reference</th><th>Owed</th></tr></thead>
+      <tbody>${awaiting.map((o) => html`<tr>
+        <td data-label="Customer"><strong>${o.name}</strong><br><span class="variant__label">${o.phone}</span></td>
+        <td data-label="Service day">${T.fmtDayShort(o.service_date, tz())}</td>
+        <td data-label="Reference">${o.ref}</td>
+        <td data-label="Owed">${money(o.total)}</td></tr>`)}</tbody></table>`
+      : html`<div class="card"><p>Nobody owes an e-transfer.</p></div>`}
+
+    ${matched.length ? html`
+      <h2 class="subhead">Matched</h2>
+      <table class="dtable">
+        <thead><tr><th>From</th><th>Amount</th><th>Order</th><th>How</th><th></th></tr></thead>
+        <tbody>${matched.map((p) => html`<tr>
+          <td data-label="From">${p.sender_name || '—'}<br><span class="variant__label">${stamp(p.received_at)}</span></td>
+          <td data-label="Amount">${money(p.amount)}${p.amount !== p.order_total
+            ? html`<br><span class="flag flag--warn">order was ${money(p.order_total)}</span>` : ''}</td>
+          <td data-label="Order">${p.order_name} · ${p.order_ref}</td>
+          <td data-label="How">${p.matched_by === 'auto' ? 'Automatically' : 'By you'}</td>
+          <td data-label="">
+            <form method="post" action="/admin/payments/${p.id}/unlink"
+              data-confirm="Unlink this payment from ${p.order_name}'s order?">
+              <button class="btn btn--secondary" type="submit">Unlink</button></form></td>
+        </tr>`)}</tbody></table>` : ''}`;
+
+  res.type('html').send(String(V.shell({ title: 'Payments', body, current: 'payments' })));
+});
+
+router.post('/payments/record', (req, res) => {
+  const result = P.record(String(req.body.notification || ''));
+  if (!result.ok) {
+    return back(res, req, null,
+      'That didn\'t read like a payment notification — no amount in it. Paste the whole email.');
+  }
+  if (result.duplicate) {
+    return back(res, req, null, 'That notification is already recorded.');
+  }
+  if (result.auto) {
+    return back(res, req, `Matched automatically: ${money(result.payment.amount)} from `
+      + `${result.payment.sender_name || 'an unnamed sender'} settles ${result.matched.name}'s `
+      + `order ${result.matched.ref}. Marked as paid.`);
+  }
+  const n = (result.suggestions || []).length;
+  return back(res, req, n
+    ? `Recorded ${money(result.payment.amount)}. ${n === 1 ? 'One order looks like a match' : `${n} orders look like matches`} — pick one below.`
+    : `Recorded ${money(result.payment.amount)}, but nothing matches it. It's in the list below.`);
+});
+
+router.post('/payments/:id/link', (req, res) => {
+  const orderId = Number(req.body.order_id);
+  if (!orderId) return back(res, req, null, 'Choose an order first.');
+  const p = P.link(Number(req.params.id), orderId, 'owner');
+  if (!p) return back(res, req, null, 'That payment or order no longer exists.');
+  const o = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+  return back(res, req, p.set_paid
+    ? `Linked. ${o.name}'s order ${o.ref} is marked as paid.`
+    : `Linked. ${o.name}'s order ${o.ref} was already marked paid, so nothing else changed.`);
+});
+
+router.post('/payments/:id/unlink', (req, res) => {
+  const p = db.prepare('SELECT * FROM payments WHERE id=?').get(Number(req.params.id));
+  if (!p || !p.order_id) return back(res, req, null, 'That payment is not linked to anything.');
+  const o = db.prepare('SELECT * FROM orders WHERE id=?').get(p.order_id);
+  P.unlink(p.id);
+  return back(res, req, p.set_paid
+    ? `Unlinked, and ${o.name}'s order is unpaid again.`
+    : `Unlinked. ${o.name}'s order stays marked paid — you had marked it yourself.`);
 });
 
 /* ======================= LOCATIONS & DELIVERY =========================== */

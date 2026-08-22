@@ -1273,6 +1273,153 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('and nothing is left outside them',
     !/^  document\.querySelectorAll/m.test(adminJs), 'a top-level querySelectorAll is unguarded');
 }
+/* --- Reading an e-transfer notification ------------------------------------
+   The bank is the only witness that money arrived, and it testifies by email.
+   These checks are about not believing it too eagerly: the app may settle an
+   order by itself on exactly one rung of the ladder — the reference is in the
+   transfer message AND the amount is the order total — and must hand every
+   weaker signal to a person instead.
+
+   Being wrong here is expensive in a way the customer feels: an order marked
+   paid that wasn't means Derek never chases it, and an order left unpaid that
+   was means he chases someone who already paid. */
+{
+  const P = require('../server/payments');
+
+  const email = ({ from = 'JANE SMITH', amount = '52.00', message = null, id = null,
+    bankRef = 'CA9d8f7e6a' }) => [
+    'From: notify@payments.interac.ca',
+    `Subject: INTERAC e-Transfer: A money transfer from ${from} has been automatically deposited.`,
+    'Date: Fri, 21 Aug 2026 18:04:11 -0400',
+    ...(id ? [`Message-ID: <${id}@payments.interac.ca>`] : []),
+    '',
+    `A money transfer from ${from} has been automatically deposited into your account.`,
+    '',
+    `Amount: $${amount}`,
+    ...(message === null ? [] : [`Message: ${message}`]),
+    '',
+    `Reference Number: ${bankRef}`,
+  ].join('\n');
+
+  /* --- Parsing ---------------------------------------------------------- */
+  const auto = P.parseNotification(email({ message: 'DEADBEEF thanks!' }));
+  check('the sender name is read off the notification', auto.sender_name, 'JANE SMITH');
+  check('so is the amount, in cents', auto.amount, 5200);
+  check('and the message the customer typed', auto.memo, 'DEADBEEF thanks!');
+  check('the message is marked as a field that was found, not guessed', auto.memo_parsed, 1);
+
+  const classic = P.parseNotification([
+    'Subject: INTERAC e-Transfer: Bob Jones sent you $18.50 (CAD)',
+    '',
+    'Bob Jones sent you $18.50 (CAD).',
+    'Message from Bob Jones: for tuesday',
+  ].join('\n'));
+  check('a differently worded notification still gives up its sender', classic.sender_name, 'Bob Jones');
+  check('and its amount', classic.amount, 1850);
+  check('and its message', classic.memo, 'for tuesday');
+
+  check('thousands separators survive', P.parseNotification('Subject: you got $1,234.56').amount, 123456);
+  check('a whole-dollar amount survives', P.parseNotification('Subject: you got $25').amount, 2500);
+  check('text with no money in it is not a payment', P.parseNotification('Your statement is ready.'), null);
+  check('and neither is nothing at all', P.parseNotification(''), null);
+
+  const noMemo = P.parseNotification(email({ message: null }));
+  check('a transfer with no message parses anyway', noMemo.amount, 5200);
+  check('and says the message was not a field', noMemo.memo_parsed, 0);
+
+  ok('a Message-ID is what identifies the email when there is one',
+    P.parseNotification(email({ id: 'abc' })).external_id === 'msgid:abc@payments.interac.ca');
+  check('identical pasted text identifies as the same payment twice',
+    P.parseNotification(email({ message: 'x' })).external_id,
+    P.parseNotification(email({ message: 'x' })).external_id);
+  ok('a different amount is a different payment',
+    P.parseNotification(email({ amount: '10.00' })).external_id
+      !== P.parseNotification(email({ amount: '11.00' })).external_id);
+
+  /* --- Names ------------------------------------------------------------ */
+  ok('a middle initial does not stop a name matching', P.nameOverlap('Jane A. Smith', 'Jane Smith') >= 0.5);
+  ok('case and accents do not either', P.nameOverlap('RENEE TREMBLAY', 'Renée Tremblay') >= 0.5);
+  ok('two different people do not match', P.nameOverlap('Jane Smith', 'Bob Jones') < 0.5);
+
+  /* --- The ladder ------------------------------------------------------- */
+  const mkOrder = (ref, name, total, extra = {}) => {
+    const id = db.prepare(`INSERT INTO orders
+      (ref, service_date, status, name, phone, method, subtotal, total, payment_method, paid)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .run(ref, '2026-08-25', extra.status || 'confirmed', name, '555-0100', 'pickup',
+        total, total, 'etransfer', extra.paid || 0).lastInsertRowid;
+    return db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+  };
+
+  // Rung one: reference and amount agree. This is the only automatic one.
+  const o1 = mkOrder('AAAA1111', 'Jane Smith', 5200);
+  const r1 = P.record(email({ from: 'JANE SMITH', amount: '52.00', message: 'AAAA1111', id: 'm1' }));
+  ok('a reference and a matching amount settle the order by themselves', r1.auto === true);
+  check('and the order is marked paid', db.prepare('SELECT paid FROM orders WHERE id=?').get(o1.id).paid, 1);
+  check('the match records that it was the app that did it', r1.payment.matched_by, 'auto');
+  check('and that the flag was the app\'s to undo', r1.payment.set_paid, 1);
+
+  // The same email again must not do it a second time.
+  const again = P.record(email({ from: 'JANE SMITH', amount: '52.00', message: 'AAAA1111', id: 'm1' }));
+  ok('the same notification read twice is recognised, not counted twice', again.duplicate === true);
+  check('and there is still only one payment against that order',
+    db.prepare('SELECT COUNT(*) n FROM payments WHERE order_id=?').get(o1.id).n, 1);
+
+  // Rung two: the reference is there, the money is not all there.
+  const o2 = mkOrder('BBBB2222', 'Bob Jones', 4000);
+  const r2 = P.record(email({ from: 'BOB JONES', amount: '35.00', message: 'BBBB2222', id: 'm2' }));
+  ok('a short payment is never applied on its own', !r2.auto);
+  check('the order is left unpaid', db.prepare('SELECT paid FROM orders WHERE id=?').get(o2.id).paid, 0);
+  check('and it is offered as the obvious candidate', r2.suggestions[0].order.id, o2.id);
+  check('named as the mismatch it is', r2.suggestions[0].reason, 'ref_mismatch');
+
+  // Rung three: no reference, but only one order is owed exactly that.
+  const o3 = mkOrder('CCCC3333', 'Priya Nair', 3175);
+  const r3 = P.record(email({ from: 'PRIYA NAIR', amount: '31.75', message: null, id: 'm3' }));
+  ok('an amount with no reference is never applied on its own', !r3.auto);
+  check('the order stays unpaid', db.prepare('SELECT paid FROM orders WHERE id=?').get(o3.id).paid, 0);
+  ok('but it is suggested', r3.suggestions.some((s) => s.order.id === o3.id));
+
+  /* A bank's own reference number is eight hex characters often enough to
+     matter. Only the message field is ever read for a reference, so one
+     sitting in the body — even standing alone, even matching a real order,
+     even when the amount agrees too — must not reach through and settle it. */
+  const o4 = mkOrder('9D8F7E6A', 'Coincidence', 7700);
+  check('the fixture really does put a lone order reference in the body',
+    P.refsIn(email({ bankRef: '9D8F7E6A' })).includes('9D8F7E6A'), true);
+  const r4 = P.record(email({ from: 'NOBODY', amount: '77.00', message: null,
+    id: 'm4', bankRef: '9D8F7E6A' }));
+  ok('a reference found outside the message field settles nothing', !r4.auto);
+  check('and that order is untouched',
+    db.prepare('SELECT paid FROM orders WHERE id=?').get(o4.id).paid, 0);
+
+  /* --- Undoing ---------------------------------------------------------- */
+  P.unlink(r1.payment.id);
+  check('unlinking an automatic match makes the order unpaid again',
+    db.prepare('SELECT paid FROM orders WHERE id=?').get(o1.id).paid, 0);
+
+  // An order Derek had already ticked himself must survive the same undo.
+  const o5 = mkOrder('EEEE5555', 'Already Paid', 2000, { paid: 1 });
+  const r5 = P.record(email({ from: 'ALREADY PAID', amount: '20.00', message: 'EEEE5555', id: 'm5' }));
+  check('linking to an already-paid order does not claim the flag', r5.payment.set_paid, 0);
+  P.unlink(r5.payment.id);
+  check('so unlinking leaves it paid, the way he left it',
+    db.prepare('SELECT paid FROM orders WHERE id=?').get(o5.id).paid, 1);
+
+  /* --- What the screen reads from --------------------------------------- */
+  ok('money nobody has claimed is listed', P.unmatched().length > 0);
+  ok('and so are the orders still owing', P.awaiting().some((o) => o.ref === 'BBBB2222'));
+
+  /* --- The customer is told what to type -------------------------------- */
+  const customerView = fs.readFileSync(path.join(__dirname, '..', 'server', 'views', 'customer.js'), 'utf8');
+  ok('the confirmation screen asks e-transfer customers for the reference',
+    /payment_method === 'etransfer'/.test(customerView)
+    && /in the e-transfer message/.test(customerView));
+  const mailerSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'mailer.js'), 'utf8');
+  ok('so does the confirmation email', /in the e-transfer message/.test(mailerSrc));
+  ok('but only the customer\'s copy of it', /forCustomer/.test(mailerSrc));
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {

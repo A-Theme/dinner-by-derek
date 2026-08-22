@@ -367,6 +367,34 @@ const PAST_DATE = T.addDays(today, -2);
       lines.every((l) => l.item_name && l.item_name.length > 0));
   }
 
+  /* --- The customer is told what to put in the transfer message -----------
+     Half of the e-transfer reconciliation, and the half that happens out
+     here in public. The order is placed now, while the day is still open;
+     the dashboard end of it runs further down, once this suite has signed
+     in. They are deliberately far apart, because the reference has to
+     survive the trip between two files that never call each other. */
+  {
+    const placed = await POST('/order', {
+      week: weekSlug,
+      date: SERVICE_DATE,
+      lines: JSON.stringify([{ key: schnitzel.key, variant: 'full', qty: 1 }]),
+      name: 'Reconcile Me',
+      phone: '519-555-0142',
+      email: 'reconcile@example.com',
+      method: 'pickup', payment_method: 'etransfer',
+      location_id: String(db.prepare('SELECT id FROM locations LIMIT 1').get().id),
+    });
+    check('the order goes through', placed.status, 200);
+
+    const order = db.prepare("SELECT * FROM orders WHERE name = 'Reconcile Me' ORDER BY id DESC LIMIT 1").get();
+    ok('and is stored', !!order);
+
+    ok('the confirmation screen tells the customer to put the reference in the message',
+      placed.text.includes(order.ref) && /in the e-transfer message/i.test(placed.text),
+      placed.text.slice(0, 200));
+
+  }
+
   /* --- Things a customer must not be able to do --------------------------- */
   {
     const cheaper = await POST('/order', {
@@ -1490,6 +1518,82 @@ const PAST_DATE = T.addDays(today, -2);
       cutoff_time: '22:00', late_cutoff_time: '06:00',
     });
   }
+
+  /* --- and the money finds the order ------------------------------------
+     The dashboard half. Signed in by now, and the service day has been sold
+     out by earlier checks — which does not matter here, because settling an
+     order that already exists has nothing to do with whether a new one could
+     be placed. The order comes back out of storage by name rather than being
+     carried down in a variable, so this reads the way the reconcile screen
+     does: from what is actually in the database. */
+  {
+    const order = db.prepare("SELECT * FROM orders WHERE name = 'Reconcile Me' ORDER BY id DESC LIMIT 1").get();
+    ok('the order placed earlier is still there to be paid for', !!order);
+    const dollars = (c) => (c / 100).toFixed(2);
+    const notification = (message, amount) => [
+      'From: notify@payments.interac.ca',
+      'Subject: INTERAC e-Transfer: A money transfer from RECONCILE ME has been automatically deposited.',
+      `Message-ID: <flow-${message}-${amount}@payments.interac.ca>`,
+      '',
+      'A money transfer from RECONCILE ME has been automatically deposited.',
+      `Amount: $${amount}`,
+      `Message: ${message}`,
+    ].join('\n');
+
+    const screen = await GET('/admin/payments');
+    check('the reconcile screen is there', screen.status, 200);
+    ok('and lists the order that is still owing', screen.text.includes(order.ref), 'reference missing');
+
+    const junk = await POST('/admin/payments/record', { notification: 'Your statement is ready.' });
+    check('pasting something that is not a notification redirects rather than crashing', junk.status, 303);
+    ok('and says what was wrong with it', /err=.*didn/i.test(String(junk.location)), String(junk.location));
+
+    const paid = await POST('/admin/payments/record', {
+      notification: notification(order.ref, dollars(order.total)),
+    });
+    check('pasting the real notification is accepted', paid.status, 303);
+    ok('and reports the automatic match', /ok=Matched\+automatically/i.test(String(paid.location)),
+      String(paid.location));
+
+    const after = db.prepare('SELECT * FROM orders WHERE id = ?').get(order.id);
+    check('the order is marked paid without anyone tapping anything', after.paid, 1);
+    const pay = db.prepare('SELECT * FROM payments WHERE order_id = ?').get(order.id);
+    check('the payment records that the app did it', pay.matched_by, 'auto');
+
+    const ordersPage = await GET('/admin/orders');
+    ok('and the order card says where the money came from',
+      ordersPage.text.includes('matched automatically'), 'the order card does not name the payment');
+
+    const twice = await POST('/admin/payments/record', {
+      notification: notification(order.ref, dollars(order.total)),
+    });
+    ok('the same notification pasted twice is refused',
+      /err=That\+notification\+is\+already\+recorded/i.test(String(twice.location)), String(twice.location));
+    check('and there is still one payment against the order',
+      db.prepare('SELECT COUNT(*) n FROM payments WHERE order_id = ?').get(order.id).n, 1);
+
+    const undo = await POST(`/admin/payments/${pay.id}/unlink`, {});
+    check('unlinking redirects back', undo.status, 303);
+    check('and the order is unpaid again',
+      db.prepare('SELECT paid FROM orders WHERE id = ?').get(order.id).paid, 0);
+
+    /* A transfer for the wrong amount must stop and wait for a person, even
+       though the reference is right there and correct. */
+    const short = await POST('/admin/payments/record', {
+      notification: notification(order.ref, dollars(order.total - 500)),
+    });
+    check('a short payment is recorded', short.status, 303);
+    ok('but not applied', !/ok=Matched\+automatically/i.test(String(short.location)), String(short.location));
+    check('and the order stays unpaid',
+      db.prepare('SELECT paid FROM orders WHERE id = ?').get(order.id).paid, 0);
+
+    const withShort = await GET('/admin/payments');
+    ok('the screen offers it as a candidate and names the shortfall',
+      withShort.text.includes('Reference matches, amount does not')
+      && /\$5\.00 short/.test(withShort.text), 'the mismatch is not explained on screen');
+  }
+
+
 
   /* --- Multipart is the owner's shape, and nobody else's ------------------
    * The upload middleware used to run on every request, before routing and

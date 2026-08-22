@@ -75,7 +75,11 @@ function fulfilBlock(order) {
     ${esc(order.postal_norm)}<br>${esc(settings.get('delivery_window'))}</p>`;
 }
 
-function plain(order, lines, heading) {
+/* `forCustomer` adds the one line only a customer can act on: put the
+   reference in the transfer message. The owner's copy leaves it out — he is
+   not the one sending the money, and an instruction aimed past him is noise
+   on the email he reads at the stove. */
+function plain(order, lines, heading, { forCustomer = false } = {}) {
   const tz = settings.get('timezone');
   const parts = [
     heading, '',
@@ -93,6 +97,10 @@ function plain(order, lines, heading) {
   if (order.payment_method) parts.push('', `Paying by: ${O.PAYMENT_LABEL(order.payment_method)}`);
   if (order.allergy_notes) parts.push('', `Allergy notes: ${order.allergy_notes}`);
   parts.push('', settings.get('payment_instructions'));
+  if (forCustomer && order.payment_method === 'etransfer') {
+    parts.push('', `Put ${order.ref} in the e-transfer message, and send ${money(order.total)}.`,
+      'That is what tells Derek which order the money is for.');
+  }
   return parts.join('\n');
 }
 
@@ -177,6 +185,14 @@ async function customerOrderEmail(order, lines) {
     <p><strong>Paying:</strong>${order.payment_method
       ? ` you chose ${esc(O.PAYMENT_LABEL(order.payment_method))}.` : ''}
       ${esc(settings.get('payment_instructions'))}</p>
+    ${order.payment_method === 'etransfer'
+      ? `<div style="border:2px solid ${palette.tan};border-radius:8px;padding:12px;margin:12px 0;
+           background:${palette.parchment}">
+           <p style="margin:0">Put <strong style="font-family:ui-monospace,Menlo,Consolas,monospace;
+             font-size:18px;letter-spacing:1px">${esc(order.ref)}</strong> in the e-transfer message,
+             and send <strong>${money(order.total)}</strong>.</p>
+           <p style="margin:6px 0 0;font-size:13px;color:${palette['umber-soft']}">That is what tells
+             Derek which order the money is for.</p></div>` : ''}
     ${tags ? `<p><strong>Allergen information as shown when you ordered</strong></p><ul>${tags}</ul>` : ''}
     <p style="font-size:13px;color:${palette['umber-soft']}">Allergen information is a guide only.
       Every necessary precaution is taken in the kitchen, but cross-contamination remains a
@@ -186,7 +202,8 @@ async function customerOrderEmail(order, lines) {
     to: order.email,
     subject: late ? `Late request received — ${day}` : `Order confirmed — ${day}`,
     html,
-    text: plain(order, lines, late ? 'Late request received (not yet confirmed)' : 'Order confirmed'),
+    text: plain(order, lines, late ? 'Late request received (not yet confirmed)' : 'Order confirmed',
+      { forCustomer: true }),
   });
 }
 

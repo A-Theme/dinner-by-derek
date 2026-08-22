@@ -205,6 +205,40 @@ CREATE TABLE IF NOT EXISTS order_lines (
 CREATE INDEX IF NOT EXISTS idx_orders_date ON orders(service_date);
 CREATE INDEX IF NOT EXISTS idx_lines_order ON order_lines(order_id);
 
+/* Money that arrived, as reported by the bank's notification email.
+ *
+ * Separate from orders on purpose. An order is what somebody asked for; a
+ * payment is what showed up, and the two do not always line up — a transfer
+ * can arrive for the wrong amount, for two orders at once, or from a name
+ * nobody recognises. Keeping it in its own table means unclaimed money is
+ * something the app can show rather than something that vanishes.
+ *
+ * external_id is the bank email's Message-ID where there is one, and a hash
+ * of the text where there isn't. UNIQUE, so the same notification read twice
+ * — a re-poll, a second paste — cannot settle an order twice.
+ *
+ * order_id is nullable and stays nullable: an unmatched payment is a normal
+ * state, not an error. set_paid records whether linking is what flipped the
+ * order's paid flag, so unlinking can put it back the way it was rather than
+ * quietly unpaying an order that had been settled by hand.
+ */
+CREATE TABLE IF NOT EXISTS payments (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  external_id  TEXT NOT NULL UNIQUE,
+  received_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  sender_name  TEXT NOT NULL DEFAULT '',
+  amount       INTEGER NOT NULL,                -- cents
+  memo         TEXT NOT NULL DEFAULT '',
+  memo_parsed  INTEGER NOT NULL DEFAULT 0,      -- the message was a field, not a guess
+  subject      TEXT NOT NULL DEFAULT '',
+  source       TEXT NOT NULL DEFAULT 'paste',   -- paste | mailbox
+  order_id     INTEGER REFERENCES orders(id) ON DELETE SET NULL,
+  matched_by   TEXT NOT NULL DEFAULT '',        -- '' | auto | owner
+  matched_at   TEXT,
+  set_paid     INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
+
 -- Allergen dictionary -------------------------------------------------------
 CREATE TABLE IF NOT EXISTS allergen_terms (
   id       INTEGER PRIMARY KEY AUTOINCREMENT,

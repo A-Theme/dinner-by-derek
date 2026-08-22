@@ -411,6 +411,15 @@ function confirmationView({ order, lines, late }) {
         ? html`<p><strong>You chose ${O.PAYMENT_LABEL(order.payment_method)}.</strong>
             Nothing has been charged — payment happens with Derek directly.</p>` : ''}
       <p>${settings.get('payment_instructions')}</p>
+      ${/* The reference is asked for in the transfer message because the
+            message is the one field that travels with the money and comes
+            back out the other end. With it, the payment finds this order by
+            itself; without it, somebody matches it up by hand later. */
+        order.payment_method === 'etransfer'
+        ? html`<div class="notice notice--strong">
+            <strong>Put <code>${order.ref}</code> in the e-transfer message.</strong>
+            That is what tells Derek which order the money is for. Send
+            ${money(order.total)}.</div>` : ''}
 
       <p style="margin-top:var(--dbd-sp-5)"><a class="btn btn--secondary" href="/">Back to the menu</a></p>
     </div>
