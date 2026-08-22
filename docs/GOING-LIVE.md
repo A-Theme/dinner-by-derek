@@ -30,7 +30,7 @@ Check it again before starting — this is a snapshot, not a guarantee.
 
 | | state | matters because |
 |---|---|---|
-| Hosting | **none** | Nothing can run a Node process yet. Everything else waits on this. The Hostinger account holds no VPS and no domains, checked against the API on 2026-08-19. |
+| Hosting | **none** | Nothing can run a Node process yet. Everything else waits on this. No server exists anywhere — the Hostinger account was checked against its API on 2026-08-19 and holds no VPS and no domains, and no OVH account exists yet. |
 | Domain | `dinnerbyderek.ca`, in Cloudflare | DNS is ready; nothing points anywhere yet. |
 | `BASE_URL` | `http://localhost:3000` | QR codes point at a placeholder, cookies are not secure, email links are dead. |
 | `NODE_ENV` | `development` | Static caching off, and the boot warnings are tuned for a laptop. |
@@ -59,14 +59,19 @@ optional; the optional things live in Part 2.
 
 ### 1. Get the server up
 
-Follow [docs/DEPLOY.md](DEPLOY.md) end to end. Hostinger **KVM 1**, **Boston**
-data centre, **Ubuntu 24.04 LTS with no control panel**, **12-month term**
-($83.88, about $6.99/mo; it renews at roughly double, so put that in the
-calendar now). Roughly an hour, most of it waiting on DNS.
+Follow [docs/DEPLOY.md](DEPLOY.md) end to end. **OVHcloud VPS-1** — 2 vCores,
+4 GB RAM, 40 GB NVMe, around **CAD $6.20/month** — in **Beauharnois, Quebec**,
+running **Ubuntu 24.04 LTS with no control panel**. Roughly an hour, most of it
+waiting on DNS.
 
-Boston is the pick because Phoenix, Boston and Boston 2 are the only North
-American data centres Hostinger has, and Boston is the closest to Kitchener by
-a long way.
+Quebec rather than the cheapest box anywhere, and not for speed: a US
+datacentre costs perhaps fifteen milliseconds, which nobody notices. It is that
+every order holds a customer's name, phone, email and sometimes their home
+address, and keeping those in Canada means that question never has to be
+answered. Billing in CAD also drops the currency spread.
+
+Check two lines on the order page before paying: whether that price assumes a
+longer commitment than month-to-month, and what it renews at.
 
 Stop at the end of step 11 and come back here. Do not publish anything yet.
 
@@ -211,7 +216,8 @@ becomes required.
 
 ### Backups on a schedule
 
-Turn on Hostinger's weekly VPS snapshots — they cover the whole machine after
+Turn on your provider's automatic snapshots — OVH sells them as an add-on,
+Hostinger includes them weekly on most plans. They cover the whole machine after
 you break something. That is a different job from the JSON export, which
 covers the menu after you delete the wrong week. Have both. Run the `rsync`
 before every deploy.

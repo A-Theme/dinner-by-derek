@@ -1,9 +1,9 @@
 # Deploying Dinner By Derek
 
 Taking the app from a laptop to `https://dinnerbyderek.ca`, on a rented
-Ubuntu server with Cloudflare in front. Written against Hostinger and Hetzner;
-only [step 1](#1-rent-the-server) differs between them, and any other VPS
-works the same way.
+Ubuntu server with Cloudflare in front. Written against OVHcloud, Hostinger
+and Hetzner; only [step 1](#1-rent-the-server) differs between them, and any
+other VPS works the same way.
 
 Read it once before starting. Most of it is copy-and-paste, but four steps
 have a trap in them and each one is called out where it happens.
@@ -180,11 +180,12 @@ Which also cleans up the DNS record.
 
 You need:
 
-- **An account with a VPS provider.** A Hostinger account already covers this
-  — a VPS is a separate purchase from web hosting, but the same login. On
-  Hetzner (<https://console.hetzner.cloud>) signup asks for a card and may
-  hold new accounts for a manual identity check for an hour or two, so start
-  that first if you are going that way and in a hurry.
+- **An account with a VPS provider.** OVHcloud (<https://www.ovhcloud.com/en-ca/>)
+  is the recommendation and needs a new account; signup on any of these asks
+  for a card, and some hold new accounts for a manual identity check for an
+  hour or two, so start it first if you are in a hurry. A Hostinger account,
+  if you already have one, covers that provider — a VPS is a separate purchase
+  from web hosting, but the same login.
 - **`dinnerbyderek.ca` in Cloudflare**, which you have.
 - **An SSH key.** If `cat ~/.ssh/id_ed25519.pub` prints something, you have
   one. If not:
@@ -215,7 +216,7 @@ Whatever you pick, it must have:
 | **2 GB RAM minimum** | 4 GB is comfortable | The app resizes phone photos with `sharp`, holding the whole image in memory. [server/index.js](../server/index.js) caps an upload at 26 MB, and the comment there measures concurrent uploads moving the process 232 MB. A 512 MB box is the cheapest plan on most hosts and the kernel will kill it the first time Derek uploads three photos in a row. |
 | **20 GB disk minimum** | 40 GB is plenty | Photos accumulate. Nothing else here is large. |
 | **Ubuntu 24.04** | no control panel | LTS, supported to 2029. Every command below assumes it. |
-| **A North American location** | east coast for Ontario/Quebec — Boston on Hostinger, Ashburn on Hetzner | European datacentres are cheaper and add roughly 100ms to every page load. |
+| **A Canadian location**, or failing that North American | Beauharnois or Toronto on OVH; Boston on Hostinger; Ashburn on Hetzner | Orders hold customers' names, phones and home addresses, and keeping those in Canada avoids the cross-border question entirely. European datacentres are cheaper and add roughly 100ms to every page load. |
 | **Root access over SSH** | | Any real VPS has this. Shared hosting does not, which is why shared hosting cannot run this app. |
 
 > **Do not pick an OS template that bundles a control panel** — hPanel,
@@ -223,23 +224,45 @@ Whatever you pick, it must have:
 > nginx and certbot for port 80 in [step 9](#9-nginx-and-the-certificate).
 > Untangling that is worse than never having had it. Plain Ubuntu.
 
-### On Hostinger
+### On OVHcloud — the recommendation
 
-**VPS → Buy new VPS → KVM 1** — 1 vCPU, 4 GB RAM, 50 GB disk, 4 TB transfer.
-Choose the **Boston** data centre: Phoenix, Boston and Boston 2 are the only
-North American ones, and Boston is far and away the closest to Kitchener.
+**VPS → VPS-1** — 2 vCores, 4 GB RAM, 40 GB NVMe. Around **CAD $6.20/month**,
+billed in Canadian dollars.
 
-For the operating system pick **Ubuntu 24.04 LTS**, the plain entry with no
-suffix. The list is mostly templates with something preinstalled — CloudPanel,
-CyberPanel, HestiaCP, aaPanel, half a dozen others — and every one of them
-brings a web server that will fight nginx for port 80 in
-[step 9](#9-nginx-and-the-certificate). There is an Ubuntu 26.04 as well; 24.04
-is what the commands below are written against and is supported to 2029.
+Choose **Beauharnois, Quebec** as the location. OVH has a Toronto datacentre
+too; if the region list offers it for VPS, take Toronto, it is closer again.
+
+For the operating system pick **Ubuntu 24.04 LTS**, plain, with no panel and
+no preinstalled stack. Anything bundling a control panel brings its own web
+server, and it will fight nginx for port 80 in
+[step 9](#9-nginx-and-the-certificate).
 
 Paste your **public** SSH key (`id_ed25519.pub` — never the private one) when
 it offers.
 
-Prices, read from the catalogue on 2026-08-19, in USD:
+**Why Quebec rather than the cheapest box anywhere.** Not speed — Boston is
+perhaps ten or fifteen milliseconds further from Kitchener, which nobody will
+ever notice on a menu that loads once. It is where the data sits. Every order
+holds a customer's name, phone number, email address and, for a delivery,
+their home address. Keeping that in Canada means no cross-border question ever
+has to be answered about it, and "where do you keep my address" is a thing a
+customer might genuinely ask. Being billed in CAD also removes the currency
+spread that quietly sits on top of a USD price.
+
+Two things to check on the order page before paying, because neither could be
+confirmed from outside: whether **CAD $6.20 assumes a longer commitment** than
+month-to-month, and what the **renewal** price is. Read both lines rather than
+the headline.
+
+### On Hostinger
+
+**VPS → Buy new VPS → KVM 1** — 1 vCPU, 4 GB RAM, 50 GB disk, 4 TB transfer,
+**Boston** data centre (Phoenix, Boston and Boston 2 are the only North
+American ones). Same rule on the image: **Ubuntu 24.04 LTS**, the plain entry,
+because the list is mostly templates with CloudPanel, CyberPanel, HestiaCP or
+aaPanel already on them.
+
+Prices from the catalogue on 2026-08-19, in USD:
 
 | term | first term | renews at |
 |---|---|---|
@@ -247,11 +270,15 @@ Prices, read from the catalogue on 2026-08-19, in USD:
 | **12 months** | **$83.88 — $6.99/mo** | $155.88/yr — $12.99/mo |
 | 24 months | $155.76 — $6.49/mo | $287.76/2yr — $11.99/mo |
 
-**Take the 12-month term.** Two years buys a saving of fifty cents a month
-over one year, which is not worth doubling the commitment for a supper club
-that has not taken its first online order. Note the renewal in both cases: the
-second term is roughly double the first, so put a reminder in the calendar
-before it lands rather than discovering it on a statement.
+If you go this way, take the 12-month term: two years saves fifty cents a
+month, which is not worth doubling the commitment for a supper club that has
+not taken its first online order. Either way the second term is roughly double
+the first, so put a reminder in the calendar rather than meeting it on a
+statement.
+
+Against OVH this is more money for half the CPU, in a US datacentre, in a
+currency you do not earn. Its one advantage is an account you already have,
+which is a real thing but a small one.
 
 ### On Hetzner
 
