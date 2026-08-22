@@ -2,7 +2,13 @@
 const { db } = require('./db');
 
 /**
- * The saved-dish list: a featured dish kept so it can be cooked again.
+ * The saved list: anything cooked once and worth cooking again.
+ *
+ * Four kinds live here, told apart by `kind`: the featured dish of a day
+ * ('main'), and the three week items — 'soup', 'salad' and 'dessert'. They
+ * share a table because they are the same idea wearing different hats, and
+ * they are kept apart by the unique index on (kind, name) so a soup and a main
+ * may answer to the same words without colliding.
  *
  * THE ACKNOWLEDGEMENT NEVER TRAVELS. Everything else does — description,
  * prices, photo, and the allergen answers already given — but the review box
@@ -17,14 +23,60 @@ const { db } = require('./db');
  * rather than a re-answering of every chip.
  */
 
+/** 'main' goes on a day; the rest go on the week. */
+const KINDS = ['main', 'soup', 'salad', 'dessert'];
+const WEEK_KINDS = new Set(['soup', 'salad', 'dessert']);
+const KIND_LABELS = { main: 'Mains', soup: 'Soups', salad: 'Salads', dessert: 'Desserts' };
+
 const FIELDS = [
-  'name', 'description', 'photo', 'halal', 'allergens', 'dismissed',
+  'kind', 'name', 'description', 'photo', 'halal', 'allergens', 'dismissed',
   'full_on', 'full_label', 'full_price', 'full_cap',
   'single_on', 'single_label', 'single_price', 'single_cap',
 ];
 
-function all() {
-  return db.prepare('SELECT * FROM saved_dishes ORDER BY name COLLATE NOCASE').all();
+/**
+ * The orders the list can be read in. A whitelist, not a string the caller
+ * hands over — this ends up inside the SQL, so nothing typed into a query
+ * string is ever allowed to reach it.
+ *
+ * Every one falls back to the name, so dishes that tie on a count or share a
+ * timestamp still come out in a stable, findable order rather than shuffling
+ * between page loads.
+ */
+const SORTS = {
+  name: 'name COLLATE NOCASE',
+  used: 'used_count DESC, name COLLATE NOCASE',
+  recent: 'saved_at DESC, name COLLATE NOCASE',
+  price: 'COALESCE(full_price, single_price) DESC, name COLLATE NOCASE',
+};
+
+const SORT_LABELS = {
+  name: 'A to Z',
+  used: 'Cooked most often',
+  recent: 'Most recently saved',
+  price: 'Dearest first',
+};
+
+/**
+ * Alphabetical unless asked otherwise; an unknown sort is not an error, and
+ * an unknown kind returns everything rather than nothing — a bad query string
+ * should show the list, not an empty page.
+ */
+function all({ sort, kind } = {}) {
+  const order = SORTS[sort] || SORTS.name;
+  if (KINDS.includes(kind)) {
+    return db.prepare(`SELECT * FROM saved_dishes WHERE kind = ? ORDER BY ${order}`).all(kind);
+  }
+  return db.prepare(`SELECT * FROM saved_dishes ORDER BY ${order}`).all();
+}
+
+/** How many of each kind are on the list, for the filter's counts. */
+function countsByKind() {
+  const out = Object.fromEntries(KINDS.map((k) => [k, 0]));
+  for (const r of db.prepare('SELECT kind, COUNT(*) n FROM saved_dishes GROUP BY kind').all()) {
+    out[r.kind] = r.n;
+  }
+  return out;
 }
 
 function byId(id) {
@@ -49,11 +101,13 @@ function count() {
 function save(item) {
   const name = String(item.name || item.dish_name || '').trim();
   if (!name) return null;
+  const kind = KINDS.includes(item.kind) ? item.kind : 'main';
 
   const existing = db.prepare(
-    'SELECT id FROM saved_dishes WHERE name = ? COLLATE NOCASE').get(name);
+    'SELECT id FROM saved_dishes WHERE kind = ? AND name = ? COLLATE NOCASE').get(kind, name);
 
   const row = {
+    kind,
     name,
     description: String(item.description || '').trim(),
     photo: item.photo || null,
@@ -127,16 +181,86 @@ function applyToDay(dishId, dayId) {
   return dish;
 }
 
-/** Every featured dish on a week, kept. Used when a week goes live. */
+/**
+ * The dish as the columns a week item wants.
+ *
+ * `ack` and `ack_of` are cleared for the same reason they are on a day: the
+ * tick says somebody checked this wording for this menu, and a soup arriving
+ * from the list has not been checked for the week it is landing on.
+ */
+function asWeekColumns(dish) {
+  return {
+    name: dish.name,
+    description: dish.description,
+    photo: dish.photo,
+    halal: dish.halal,
+    allergens: dish.allergens,
+    dismissed: dish.dismissed,
+    ack: 0,
+    ack_of: null,
+    full_on: dish.full_on,
+    full_label: dish.full_label,
+    full_price: dish.full_price,
+    full_cap: dish.full_cap,
+    single_on: dish.single_on,
+    single_label: dish.single_label,
+    single_price: dish.single_price,
+    single_cap: dish.single_cap,
+  };
+}
+
+/**
+ * Copy a saved soup, salad or dessert onto a week. The review is not copied.
+ *
+ * The days it runs on are NOT taken from the saved item. If the owner has
+ * already said this week's soup runs Tuesday and Wednesday, swapping which
+ * soup it is should not quietly put it back to Tuesday/Wednesday/Thursday —
+ * the choice of days belongs to the week, not to the recipe.
+ */
+function applyToWeek(dishId, weekId) {
+  const dish = byId(dishId);
+  if (!dish || !WEEK_KINDS.has(dish.kind)) return null;
+
+  const existing = db.prepare('SELECT weekdays FROM week_items WHERE week_id = ? AND kind = ?')
+    .get(Number(weekId), dish.kind);
+  const cols = asWeekColumns(dish);
+  const weekdays = existing ? existing.weekdays : '["tue","wed","thu"]';
+  const names = Object.keys(cols);
+
+  db.prepare(`INSERT INTO week_items (week_id, kind, weekdays, ${names.join(', ')})
+      VALUES (@week_id, @kind, @weekdays, ${names.map((n) => '@' + n).join(', ')})
+      ON CONFLICT(week_id, kind) DO UPDATE SET
+        ${names.map((n) => `${n}=excluded.${n}`).join(', ')}`)
+    .run({ ...cols, week_id: Number(weekId), kind: dish.kind, weekdays });
+
+  db.prepare('UPDATE saved_dishes SET used_count = used_count + 1 WHERE id = ?').run(dish.id);
+  return dish;
+}
+
+/**
+ * Everything a week put in front of customers, kept. Used when a week goes
+ * live: the featured dish of each open day, and the week's soup, salad and
+ * dessert. A menu that has been published is one worth being able to cook
+ * again, whichever level the item sat on.
+ */
 function saveFromWeek(weekId) {
   const days = db.prepare(
     `SELECT * FROM service_days WHERE week_id = ? AND closed = 0 AND TRIM(dish_name) != ''`)
     .all(Number(weekId));
   let n = 0;
   for (const d of days) {
-    if (save({ ...d, name: d.dish_name })) n++;
+    if (save({ ...d, kind: 'main', name: d.dish_name })) n++;
+  }
+  const items = db.prepare(
+    `SELECT * FROM week_items WHERE week_id = ? AND TRIM(name) != ''`).all(Number(weekId));
+  for (const it of items) {
+    if (save(it)) n++;
   }
   return n;
 }
 
-module.exports = { all, byId, count, save, remove, applyToDay, saveFromWeek, asDayColumns };
+module.exports = {
+  all, byId, count, countsByKind, save, remove,
+  applyToDay, applyToWeek, saveFromWeek, asDayColumns, asWeekColumns,
+  KINDS, WEEK_KINDS, KIND_LABELS, SORTS, SORT_LABELS,
+};

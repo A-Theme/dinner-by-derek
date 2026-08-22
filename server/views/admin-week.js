@@ -12,7 +12,13 @@ const V = require('./admin');
 const tz = () => settings.get('timezone', 'America/Toronto');
 
 function weekPage({ week, days, items, hasPrevious }) {
-  const saved = DISH.all();
+  // Ordered by how often each has run, so the dishes Derek actually cooks sit
+  // at the top of a list that is now hundreds long.
+  const saved = DISH.all({ sort: 'used' });
+  const savedOf = (kind) => saved.filter((d) => d.kind === kind);
+  // A day takes a main and nothing else. Handing it the whole list would offer
+  // "Cream of Broccoli" as Tuesday's featured dish at a family-dinner price.
+  const savedMains = savedOf('main');
   const published = week.status === 'published';
   const cutoffHour = settings.getInt('cutoff_hour', 22);
   const cutoffMin = settings.getInt('cutoff_minute', 0);
@@ -23,6 +29,7 @@ function weekPage({ week, days, items, hasPrevious }) {
 
   const soup = items.soup || { kind: 'soup', weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1 };
   const salad = items.salad || { kind: 'salad', weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1 };
+  const dessert = items.dessert || { kind: 'dessert', weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1 };
 
   const body = html`
     <h1>This Week</h1>
@@ -120,15 +127,15 @@ function weekPage({ week, days, items, hasPrevious }) {
                  absent: the owner can see the door before they have the key. -->
             <div class="dl-row" style="align-items:flex-end;margin-bottom:var(--dbd-sp-3)">
               <label style="flex:1 1 200px">Put a saved dish here
-                <select name="dish_id" form="usedish-${wd}"${saved.length ? '' : ' disabled'}>
-                  ${saved.length
+                <select name="dish_id" form="usedish-${wd}"${savedMains.length ? '' : ' disabled'}>
+                  ${savedMains.length
                     ? html`<option value="">Choose a saved dish…</option>
-                        ${saved.map((s) => html`<option value="${s.id}">${s.name}</option>`)}`
+                        ${savedMains.map((s) => html`<option value="${s.id}">${s.name}${s.used_count ? ` — ${s.used_count}×` : ''}</option>`)}`
                     : html`<option>No saved dishes yet</option>`}
                 </select></label>
-              <button class="btn btn--secondary" type="submit" form="usedish-${wd}"${saved.length ? '' : ' disabled'}>Use it</button>
+              <button class="btn btn--secondary" type="submit" form="usedish-${wd}"${savedMains.length ? '' : ' disabled'}>Use it</button>
             </div>
-            ${saved.length ? '' : html`
+            ${savedMains.length ? '' : html`
               <p class="also" style="margin-bottom:var(--dbd-sp-3)">Nothing saved yet.
                 Use <strong>Save "…" to my dishes</strong> below once this day has a name on it,
                 or publish a week — every featured dish on it is filed here automatically.</p>`}
@@ -167,25 +174,47 @@ function weekPage({ week, days, items, hasPrevious }) {
     <!-- 3. Soup & salad of the week -->
     <div class="card">
       <h2>Soup &amp; salad of the week</h2>
-      <p class="also">Entered once for the whole week. One soup, one salad — either can be left blank.
-        They default to Tuesday, Wednesday and Thursday.</p>
+      <p class="also">Entered once for the whole week. One soup, one salad, one dessert — any of them
+        can be left blank. They default to Tuesday, Wednesday and Thursday.</p>
       <div class="stack2">
+        ${[
+          ['soup', 'Soup', soup, 'The soup'],
+          ['salad', 'Salad', salad, 'The salad'],
+          ['dessert', 'Dessert', dessert, 'The dessert'],
+        ].map(([kind, label, item, subject]) => {
+          const list = savedOf(kind);
+          return html`
         <div>
-          <h3 class="subhead">Soup of the week ${V.reviewFlag(soup, 'The soup')}</h3>
-          <form method="post" action="/admin/week/${week.id}/soup" data-autosave>
-            ${V.itemEditor({ prefix: 'soup', item: soup, nameLabel: 'Soup name', showWeekdays: true })}
-            <button class="btn btn--secondary" type="submit">Save soup</button>
+          <h3 class="subhead">${label} of the week ${V.reviewFlag(item, subject)}</h3>
+
+          <!-- Pull one off the saved list. Ordered by how often it has run, so
+               the soups Derek actually makes are at the top of a long list. -->
+          <div class="dl-row" style="margin-bottom:var(--dbd-sp-3)">
+            <label style="flex:1 1 200px">Put a saved ${kind} here
+              <select name="dish_id" form="use-${kind}"${list.length ? '' : ' disabled'}>
+                ${list.length
+                  ? html`<option value="">Choose a saved ${kind}…</option>
+                      ${list.map((d) => html`<option value="${d.id}">${d.name}${d.used_count ? ` — ${d.used_count}×` : ''}</option>`)}`
+                  : html`<option>No saved ${kind}s yet</option>`}
+              </select>
+            </label>
+            <button class="btn btn--secondary" type="submit" form="use-${kind}"${list.length ? '' : ' disabled'}>Use it</button>
+          </div>
+
+          <form method="post" action="/admin/week/${week.id}/${kind}" data-autosave>
+            ${V.itemEditor({ prefix: kind, item, nameLabel: `${label} name`, showWeekdays: true })}
+            <button class="btn btn--secondary" type="submit">Save ${kind}</button>
             <span class="saveflag" data-saveflag></span>
           </form>
-        </div>
-        <div>
-          <h3 class="subhead">Salad of the week ${V.reviewFlag(salad, 'The salad')}</h3>
-          <form method="post" action="/admin/week/${week.id}/salad" data-autosave>
-            ${V.itemEditor({ prefix: 'salad', item: salad, nameLabel: 'Salad name', showWeekdays: true })}
-            <button class="btn btn--secondary" type="submit">Save salad</button>
-            <span class="saveflag" data-saveflag></span>
-          </form>
-        </div>
+
+          ${item && item.name && item.name.trim() ? html`
+            <p style="margin-top:var(--dbd-sp-3)"><button class="btn btn--secondary" type="submit" form="keep-${kind}">
+              Keep "${item.name}" on the saved list</button></p>` : ''}
+
+          <form method="post" action="/admin/week/${week.id}/${kind}/use" id="use-${kind}"></form>
+          <form method="post" action="/admin/week/${week.id}/${kind}/save" id="keep-${kind}"></form>
+        </div>`;
+        })}
       </div>
     </div>
 

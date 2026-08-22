@@ -48,8 +48,12 @@ function blockers(weekId) {
     const st = A.reviewState(d);
     if (!st.ok) out.push(A.reviewMessage(`${T.fmtDayShort(d.service_date, tz())} — ${d.dish_name}`, st));
   }
-  const { soup, salad } = M.weekItemsOf(weekId);
-  for (const [item, label] of [[soup, 'The soup of the week'], [salad, 'The salad of the week']]) {
+  const { soup, salad, dessert } = M.weekItemsOf(weekId);
+  for (const [item, label] of [
+    [soup, 'The soup of the week'],
+    [salad, 'The salad of the week'],
+    [dessert, 'The dessert of the week'],
+  ]) {
     if (!item || !item.name.trim()) continue;
     const st = A.reviewState(item);
     if (!st.ok) out.push(A.reviewMessage(`${label}, ${item.name},`, st));
@@ -75,8 +79,9 @@ function isEmpty(weekId) {
   if (week && week.closed) return false;
   const days = M.serviceDaysOf(weekId);
   if (days.some((d) => d.closed || d.dish_name.trim())) return false;
-  const { soup, salad } = M.weekItemsOf(weekId);
-  return !(soup && soup.name.trim()) && !(salad && salad.name.trim());
+  const { soup, salad, dessert } = M.weekItemsOf(weekId);
+  return !(soup && soup.name.trim()) && !(salad && salad.name.trim())
+    && !(dessert && dessert.name.trim());
 }
 
 /**

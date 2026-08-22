@@ -16,7 +16,8 @@ const { reviewState } = require('./allergens');
  * with the same fulfillment terms. The split is an authoring concern.
  */
 
-const SUBCATEGORY_ORDER = ['Soups', 'Salads', 'Mains'];
+// Desserts sit last, where a menu puts them.
+const SUBCATEGORY_ORDER = ['Soups', 'Salads', 'Mains', 'Desserts'];
 
 /** Shared shape for an item from any level. */
 function toRenderItem(row, { level, refTable, subcategory, name, serviceDate }) {
@@ -107,6 +108,7 @@ function weekItemsOf(weekId) {
   return {
     soup: rows.find((r) => r.kind === 'soup') || null,
     salad: rows.find((r) => r.kind === 'salad') || null,
+    dessert: rows.find((r) => r.kind === 'dessert') || null,
   };
 }
 
@@ -124,7 +126,7 @@ function standingRunsOn(item, weekday) {
   catch { return false; }
 }
 
-/** Does the week's soup/salad run on this weekday? */
+/** Does the week's soup, salad or dessert run on this weekday? */
 function weekItemRunsOn(item, weekday) {
   if (!item || !item.name.trim()) return false;
   try { return JSON.parse(item.weekdays || '[]').includes(weekday); }
@@ -195,7 +197,7 @@ function menuForDay(week, day) {
       ...T.dayState(day.service_date, clock()),
     };
   }
-  const { soup, salad } = weekItemsOf(week.id);
+  const { soup, salad, dessert } = weekItemsOf(week.id);
 
   const featured = reviewState(day).ok && day.dish_name.trim()
     ? toRenderItem(day, {
@@ -233,6 +235,12 @@ function menuForDay(week, day) {
     others.push(toRenderItem(salad, {
       level: 'Salad of the week', refTable: 'week_items',
       subcategory: 'Salads', name: salad.name, serviceDate: day.service_date,
+    }));
+  }
+  if (weekItemRunsOn(dessert, weekday) && reviewState(dessert).ok) {
+    others.push(toRenderItem(dessert, {
+      level: 'Dessert of the week', refTable: 'week_items',
+      subcategory: 'Desserts', name: dessert.name, serviceDate: day.service_date,
     }));
   }
   for (const s of standingItems()) {

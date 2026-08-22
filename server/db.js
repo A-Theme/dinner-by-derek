@@ -17,9 +17,9 @@ db.pragma('foreign_keys = ON');
    The domain model is deliberately NOT a single generic dish table:
      Level 1  service_days   — one row per date, featured dish inline.
                                A service day IS a date plus its featured dish.
-     Level 2  week_items     — soup and salad, owned by the week.
-                               UNIQUE(week_id, kind) makes a second soup or a
-                               second salad impossible at the storage layer.
+     Level 2  week_items     — soup, salad and dessert, owned by the week.
+                               UNIQUE(week_id, kind) makes a second soup, salad
+                               or dessert impossible at the storage layer.
      Level 3  standing_items — the persistent catalogue. Belongs to no week.
 
    They are merged only by menu.js at render time.
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS service_days (
 CREATE TABLE IF NOT EXISTS week_items (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   week_id       INTEGER NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
-  kind          TEXT NOT NULL CHECK (kind IN ('soup','salad')),
+  kind          TEXT NOT NULL CHECK (kind IN ('soup','salad','dessert')),
   name          TEXT NOT NULL DEFAULT '',
   description   TEXT NOT NULL DEFAULT '',
   photo         TEXT,
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS week_items (
   single_label  TEXT NOT NULL DEFAULT 'Meal for one',
   single_price  INTEGER,
   single_cap    INTEGER,
-  UNIQUE(week_id, kind)          -- one soup, one salad. Enforced in storage.
+  UNIQUE(week_id, kind)          -- one of each kind. Enforced in storage.
 );
 
 -- LEVEL 3 -------------------------------------------------------------------
@@ -283,6 +283,7 @@ CREATE TABLE IF NOT EXISTS oauth_states (
  * history. */
 CREATE TABLE IF NOT EXISTS saved_dishes (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind          TEXT NOT NULL DEFAULT 'main',   -- main | soup | salad | dessert
   name          TEXT NOT NULL,
   description   TEXT NOT NULL DEFAULT '',
   photo         TEXT,
@@ -300,8 +301,10 @@ CREATE TABLE IF NOT EXISTS saved_dishes (
   saved_at      TEXT NOT NULL DEFAULT (datetime('now')),
   used_count    INTEGER NOT NULL DEFAULT 0
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_dishes_name
-  ON saved_dishes(name COLLATE NOCASE);
+-- The unique index is NOT created here. It spans the kind column, which older
+-- databases only grow further down in the migrations, and this block runs
+-- first -- naming the column here would break every existing install on boot.
+-- See the saved_dishes migration.
 
 /* Every refused sign-in. The rate limiter already slows a run of guesses down,
    but it forgets: it lives in memory, it empties on restart, and it never told
@@ -467,6 +470,18 @@ addColumn('weeks', 'closed_note', "TEXT NOT NULL DEFAULT ''");
  * that true in storage rather than only in the code that checks it. Orders
  * placed before this existed carry NULL, which the partial index ignores. */
 addColumn('orders', 'submission_key', 'TEXT');
+/* The saved list grew past featured dishes. A soup, a salad and a dessert are
+ * worth keeping and cooking again for exactly the same reason a main is, so
+ * they share the table and are told apart by `kind`. Rows that predate this
+ * are all featured dishes, hence the default.
+ *
+ * The unique index has to move with it: one on the name alone would refuse a
+ * soup called "Chicken Tortilla" because a main already answered to that, and
+ * those are two different things that happen to share a name. */
+addColumn('saved_dishes', 'kind', "TEXT NOT NULL DEFAULT 'main'");
+db.exec('DROP INDEX IF EXISTS idx_saved_dishes_name');
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_dishes_kind_name
+         ON saved_dishes(kind, name COLLATE NOCASE)`);
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_submission
          ON orders(submission_key) WHERE submission_key IS NOT NULL`);
 
@@ -502,6 +517,54 @@ for (const [table, nameCol] of [
   db.prepare(`UPDATE ${table}
     SET ack_of = TRIM(${nameCol}) || char(10) || TRIM(description)
     WHERE ack = 1 AND ack_of IS NOT NULL AND ack_of = description`).run();
+}
+
+/* Desserts became a third week item alongside the soup and the salad.
+ *
+ * The kind is guarded by a CHECK constraint, and SQLite cannot alter one in
+ * place — CREATE TABLE IF NOT EXISTS leaves an existing database still holding
+ * the two-kind rule, so the first dessert saved would be refused by the file
+ * rather than by the code. The table is rebuilt instead, columns and rows
+ * carried over.
+ *
+ * Guarded on the stored DDL rather than on a version number, so it runs once
+ * and is a no-op on a database created after this shipped.
+ */
+{
+  const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='week_items'").get();
+  if (ddl && !ddl.sql.includes("'dessert'")) {
+    const cols = db.prepare('PRAGMA table_info(week_items)').all().map((c) => c.name).join(', ');
+    db.pragma('foreign_keys = OFF');
+    db.transaction(() => {
+      db.exec(`CREATE TABLE week_items_rebuild (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        week_id       INTEGER NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
+        kind          TEXT NOT NULL CHECK (kind IN ('soup','salad','dessert')),
+        name          TEXT NOT NULL DEFAULT '',
+        description   TEXT NOT NULL DEFAULT '',
+        photo         TEXT,
+        halal         INTEGER NOT NULL DEFAULT 0,
+        allergens     TEXT NOT NULL DEFAULT '[]',
+        dismissed     TEXT NOT NULL DEFAULT '[]',
+        ack           INTEGER NOT NULL DEFAULT 0,
+        ack_of        TEXT,
+        weekdays      TEXT NOT NULL DEFAULT '["tue","wed","thu"]',
+        full_on       INTEGER NOT NULL DEFAULT 1,
+        full_label    TEXT NOT NULL DEFAULT 'Full size',
+        full_price    INTEGER,
+        full_cap      INTEGER,
+        single_on     INTEGER NOT NULL DEFAULT 0,
+        single_label  TEXT NOT NULL DEFAULT 'Meal for one',
+        single_price  INTEGER,
+        single_cap    INTEGER,
+        UNIQUE(week_id, kind)
+      )`);
+      db.exec(`INSERT INTO week_items_rebuild (${cols}) SELECT ${cols} FROM week_items`);
+      db.exec('DROP TABLE week_items');
+      db.exec('ALTER TABLE week_items_rebuild RENAME TO week_items');
+    })();
+    db.pragma('foreign_keys = ON');
+  }
 }
 
 /* --- Settings accessors -------------------------------------------------- */

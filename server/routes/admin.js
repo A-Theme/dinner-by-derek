@@ -312,6 +312,13 @@ router.post('/week/:id/dish/:wd/use', (req, res) => {
   if (!week) return back(res, req, null, 'That week no longer exists.');
   const dish = DISH.byId(req.body.dish_id);
   if (!dish) return back(res, req, null, 'Pick one of your saved dishes first.');
+  // The picker only offers mains, but the id arrives in a form body and the
+  // check that matters is the one on this side of it. A soup on a day would be
+  // a $12 litre sold as that day's featured dinner.
+  if (dish.kind !== 'main') {
+    return back(res, req, null, `"${dish.name}" is a saved ${dish.kind}, not a main. `
+      + 'Soups, salads and desserts go on the week, further down this page.');
+  }
   const date = weekdayDate(week, req.params.wd);
   if (!date) return back(res, req, null, 'That isn\'t a day of the week.');
 
@@ -335,13 +342,39 @@ router.post('/week/:id/dish/:wd/use', (req, res) => {
 });
 
 router.get('/dishes', (req, res) => {
-  const dishes = DISH.all();
+  const sort = DISH.SORTS[req.query.sort] ? req.query.sort : 'name';
+  const kind = DISH.KINDS.includes(req.query.kind) ? req.query.kind : '';
+  const dishes = DISH.all({ sort, kind });
+  const counts = DISH.countsByKind();
+  const total = DISH.count();
+
+  const kindTab = (value, label, n) => html`<a
+    class="btn ${kind === value ? 'btn--primary' : 'btn--secondary'}"
+    href="/admin/dishes?kind=${value}&sort=${sort}">${label} (${n})</a>`;
+
   const body = html`
     <h1>Saved dishes</h1>
-    <p class="also">Dishes you can put on any day. A week adds its dishes here when it
-      publishes, and the Save button on a day adds one before that. Saving a dish that is
-      already here writes over it, so the list stays the length of what you cook rather
-      than the length of what you have cooked.</p>
+    <p class="also">Everything worth cooking again. Mains go on a day; soups, salads and
+      desserts go on the week. A week adds its items here when it publishes, and the Save
+      buttons in This Week add one before that. Saving something already here writes over
+      it, so the list stays the length of what you cook rather than the length of what you
+      have cooked.</p>
+
+    <form method="get" action="/admin/dishes" class="card no-print">
+      <div class="dl-row" style="margin-bottom:var(--dbd-sp-3)">
+        ${kindTab('', 'All', total)}
+        ${DISH.KINDS.map((k) => kindTab(k, DISH.KIND_LABELS[k], counts[k]))}
+      </div>
+      <div class="dl-row">
+        <input type="hidden" name="kind" value="${kind}">
+        <label style="flex:1 1 220px">Sort by
+          <select name="sort">
+            ${Object.keys(DISH.SORTS).map((k) => html`<option value="${k}"${sort === k ? ' selected' : ''}>${DISH.SORT_LABELS[k]}</option>`)}
+          </select>
+        </label>
+        <button class="btn btn--secondary" type="submit">Sort</button>
+      </div>
+    </form>
     <div class="notice">
       <strong>Allergen reviews are not saved with a dish.</strong> Putting one on a day
       brings back its description, prices, photo and tags, but the review box comes back
@@ -350,10 +383,11 @@ router.get('/dishes', (req, res) => {
     </div>
     ${dishes.length ? html`
       <table class="dtable">
-        <thead><tr><th>Dish</th><th>Sizes</th><th>Used</th><th></th></tr></thead>
+        <thead><tr><th>Dish</th>${kind ? '' : html`<th>Kind</th>`}<th>Sizes</th><th>Used</th><th></th></tr></thead>
         <tbody>${dishes.map((d) => html`<tr>
           <td data-label="Dish"><strong>${d.name}</strong>
             ${d.description ? html`<br><span class="variant__label">${d.description}</span>` : ''}</td>
+          ${kind ? '' : html`<td data-label="Kind">${DISH.KIND_LABELS[d.kind] || d.kind}</td>`}
           <td data-label="Sizes">
             ${d.full_on && d.full_price != null ? html`${d.full_label} ${money(d.full_price)}` : ''}
             ${d.single_on && d.single_price != null ? html`<br>${d.single_label} ${money(d.single_price)}` : ''}</td>
@@ -365,8 +399,10 @@ router.get('/dishes', (req, res) => {
           })}</td>
         </tr>`)}</tbody>
       </table>`
-      : html`<div class="card"><p>Nothing saved yet. Publish a week, or use the Save button
-        on a day in This Week, and dishes will collect here.</p></div>`}`;
+      : html`<div class="card"><p>${kind
+        ? `Nothing saved under ${DISH.KIND_LABELS[kind]} yet.`
+        : 'Nothing saved yet.'} Publish a week, or use the Save buttons in
+        This Week, and items will collect here.</p></div>`}`;
 
   res.type('html').send(String(V.shell({ title: 'Saved dishes', body, current: 'dishes' })));
 });
@@ -375,7 +411,7 @@ router.post('/dishes/:id/delete', (req, res) => {
   const dish = DISH.byId(req.params.id);
   if (!dish) return back(res, req, null, 'That dish is already gone.');
   DISH.remove(dish.id);
-  back(res, req, `"${dish.name}" removed. Days already using it are untouched.`);
+  back(res, req, `"${dish.name}" removed. Menus already using it are untouched.`);
 });
 
 router.post('/week/:id/dates', (req, res) => {
@@ -413,14 +449,49 @@ router.post('/week/:id/day/:dayId/delete', (req, res) => {
   back(res, req, 'Service day removed.');
 });
 
+const WEEK_ITEM_LABELS = { soup: 'Soup', salad: 'Salad', dessert: 'Dessert' };
+
+/* Keep this week's soup, salad or dessert on the saved list — the same button
+   the featured dish of a day has, at the level above it. */
+router.post('/week/:id/:kind/save', (req, res, next) => {
+  const kind = req.params.kind;
+  if (!WEEK_ITEM_LABELS[kind]) return next();
+  const item = db.prepare('SELECT * FROM week_items WHERE week_id = ? AND kind = ?')
+    .get(Number(req.params.id), kind);
+  if (!item || !item.name.trim()) {
+    return back(res, req, null, `There is no ${kind} on this week yet. `
+      + `Fill it in, save it, then save the ${kind}.`);
+  }
+  const what = DISH.save(item);
+  back(res, req, what === 'updated'
+    ? `"${item.name}" was already on your list — it now holds this week's wording and prices.`
+    : `"${item.name}" saved. You can put it on any week from now on.`);
+});
+
+/* Put a saved soup, salad or dessert on this week. */
+router.post('/week/:id/:kind/use', (req, res, next) => {
+  const kind = req.params.kind;
+  if (!WEEK_ITEM_LABELS[kind]) return next();
+  const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(Number(req.params.id));
+  if (!week) return back(res, req, null, 'That week no longer exists.');
+
+  const dish = DISH.byId(req.body.dish_id);
+  if (!dish || dish.kind !== kind) {
+    return back(res, req, null, `Pick one of your saved ${kind}s first.`);
+  }
+  DISH.applyToWeek(dish.id, week.id);
+  back(res, req, `"${dish.name}" is this week's ${kind}. `
+    + 'The review box is unticked — tick it before you publish.');
+});
+
 router.post('/week/:id/:kind', (req, res, next) => {
   const kind = req.params.kind;
-  if (kind !== 'soup' && kind !== 'salad') return next();
+  if (!WEEK_ITEM_LABELS[kind]) return next();
   const weekId = Number(req.params.id);
   const item = IF.parse(req.body, kind, { withWeekdays: true });
 
-  // UNIQUE(week_id, kind) means this upsert can only ever produce one soup and
-  // one salad per week, no matter what arrives in the body.
+  // UNIQUE(week_id, kind) means this upsert can only ever produce one soup,
+  // one salad and one dessert per week, no matter what arrives in the body.
   db.prepare(`INSERT INTO week_items
       (week_id, kind, name, description, photo, halal, allergens, dismissed, ack, ack_of,
        weekdays, full_on, full_label, full_price, full_cap, single_on, single_label,
@@ -439,7 +510,7 @@ router.post('/week/:id/:kind', (req, res, next) => {
       item.single_on, item.single_label, item.single_price, item.single_cap);
 
   if (req.get('X-Draft')) return res.json({ ok: true });
-  back(res, req, `${kind === 'soup' ? 'Soup' : 'Salad'} of the week saved.`);
+  back(res, req, `${WEEK_ITEM_LABELS[kind]} of the week saved.`);
 });
 
 /* Duplicate last week — the biggest time saver, so it is built first and

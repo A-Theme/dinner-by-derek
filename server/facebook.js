@@ -179,7 +179,7 @@ const money = (c) => `$${(Number(c || 0) / 100).toFixed(2)}`;
 function buildPostText(week) {
   const tz = settings.get('timezone', 'America/Toronto');
   const days = M.serviceDaysOf(week.id);
-  const { soup, salad } = M.weekItemsOf(week.id);
+  const { soup, salad, dessert } = M.weekItemsOf(week.id);
   const L = [];
 
   L.push(week.title || 'This week at ' + settings.get('business_name'));
@@ -220,7 +220,7 @@ function buildPostText(week) {
 
   // Week-level soup and salad
   const weekly = [];
-  for (const [item, label] of [[soup, 'Soup'], [salad, 'Salad']]) {
+  for (const [item, label] of [[soup, 'Soup'], [salad, 'Salad'], [dessert, 'Dessert']]) {
     if (!item || !item.name.trim()) continue;
     const wd = JSON.parse(item.weekdays || '[]').map((w) => T.WEEKDAY_LABELS[w]).join(', ');
     const prices = [];
@@ -232,7 +232,7 @@ function buildPostText(week) {
       + (tags.length ? ` — contains ${tags.join(', ')}` : ''));
   }
   if (weekly.length) {
-    L.push('', 'SOUP & SALAD THIS WEEK');
+    L.push('', 'SOUP, SALAD & DESSERT THIS WEEK');
     L.push(...weekly);
   }
 

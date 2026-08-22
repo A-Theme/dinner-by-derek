@@ -359,6 +359,23 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('but a soup and a salad coexist',
     db.prepare('SELECT COUNT(*) n FROM week_items WHERE week_id = ?').get(week).n, 2);
 
+  // Desserts are the third kind, and behave exactly like the other two: one
+  // per week, sitting alongside rather than replacing.
+  ins.run(week, 'dessert', 'Sticky toffee pudding');
+  check('a dessert joins them', 
+    db.prepare('SELECT COUNT(*) n FROM week_items WHERE week_id = ?').get(week).n, 3);
+  let secondDessertRejected = false;
+  try { ins.run(week, 'dessert', 'Key lime pie'); } catch (e) { secondDessertRejected = true; }
+  ok('a week cannot hold two desserts', secondDessertRejected);
+
+  let junkKindRejected = false;
+  try { ins.run(week, 'pudding', 'Not a kind'); } catch (e) { junkKindRejected = true; }
+  ok('and no fourth kind can be invented', junkKindRejected);
+
+  check('weekItemsOf hands back all three',
+    Object.keys(require('../server/menu').weekItemsOf(week)).sort(),
+    ['dessert', 'salad', 'soup']);
+
   db.prepare('DELETE FROM week_items WHERE week_id = ?').run(week);
   db.prepare('DELETE FROM weeks WHERE id = ?').run(week);
 }
@@ -662,6 +679,50 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('and skips the closed day', names, ['Braised Beef', 'Chicken Pie']);
 
   ok('a saved dish can be removed', DISH.remove(DISH.all()[0].id));
+  db.prepare('DELETE FROM saved_dishes').run();
+
+  /* Soups, salads and desserts keep the same way, and land on the week
+     rather than on a day. */
+  check('a soup keeps under its own kind',
+    DISH.save({ kind: 'soup', name: 'Potato Leek', description: 'with chives',
+      full_on: 1, full_price: 1200 }), 'saved');
+  check('and a main may answer to the same name without colliding',
+    DISH.save({ kind: 'main', name: 'Potato Leek', description: 'a main, somehow',
+      full_on: 1, full_price: 4000 }), 'saved');
+  check('so both are on the list', DISH.count(), 2);
+  check('filtered by kind, one each', DISH.all({ kind: 'soup' }).length, 1);
+  check('and the counts agree', DISH.countsByKind().soup, 1);
+
+  // A week that already says which days its soup runs keeps that choice when
+  // a different soup is swapped in.
+  db.prepare(`INSERT INTO week_items (week_id, kind, name, ack, ack_of, weekdays)
+    VALUES (?,'soup','Old Soup',1,'Old Soup
+','["tue","wed"]')`).run(wid);
+  const savedSoup = DISH.all({ kind: 'soup' })[0];
+  DISH.applyToWeek(savedSoup.id, wid);
+  const wi = db.prepare("SELECT * FROM week_items WHERE week_id = ? AND kind = 'soup'").get(wid);
+  check('the soup lands on the week', wi.name, 'Potato Leek');
+  check('with its price', wi.full_price, 1200);
+  check('the review it used to hold is cleared', wi.ack, 0);
+  check('the days it runs on belong to the week, not the recipe', wi.weekdays, '["tue","wed"]');
+  check('and the soup counts a use', DISH.byId(savedSoup.id).used_count, 1);
+
+  ok('a main cannot be applied to a week', DISH.applyToWeek(
+    DISH.all({ kind: 'main' })[0].id, wid) === null);
+
+  // The mirror of that: a soup must not be able to land on a day as its
+  // featured dish. applyToDay is reached from a form body, so the kind is
+  // checked in the route; this guards the shape the route relies on.
+  check('a saved soup knows it is a soup', savedSoup.kind, 'soup');
+
+  // Publishing files the week items too, not only the days.
+  db.prepare('DELETE FROM saved_dishes').run();
+  // Two open days plus the week's soup. The closed day is still skipped.
+  check('publishing keeps the week items as well as the days', DISH.saveFromWeek(wid), 3);
+  check('filed under both kinds',
+    [...new Set(DISH.all().map((d) => d.kind))].sort(), ['main', 'soup']);
+
+  db.prepare('DELETE FROM week_items WHERE week_id = ?').run(wid);
   db.prepare('DELETE FROM saved_dishes').run();
   db.prepare('DELETE FROM service_days WHERE week_id = ?').run(wid);
   db.prepare('DELETE FROM weeks WHERE id = ?').run(wid);

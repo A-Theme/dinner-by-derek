@@ -13,6 +13,7 @@
     "sticker": "node scripts/sticker.js",
     "readme-art": "node scripts/readme-art.js",
     "contrast": "node scripts/contrast.js",
+    "menu-history": "node scripts/import-facebook-menus.js",
     "test": "node scripts/acceptance.js && node scripts/flow.js",
     "acceptance": "node scripts/acceptance.js",
     "flow": "node scripts/flow.js"

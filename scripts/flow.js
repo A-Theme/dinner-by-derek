@@ -1662,6 +1662,59 @@ const PAST_DATE = T.addDays(today, -2);
       r.status !== 415 && r.status !== 401, String(r.status));
   }
 
+  /* --- The saved list: kinds, sorting, and what may go where --------------- */
+  {
+    const DISH = require('../server/dishes');
+    DISH.save({ kind: 'main', name: 'Zulu Beef', full_on: 1, full_price: 5000 });
+    DISH.save({ kind: 'soup', name: 'Aardvark Bisque', full_on: 1, full_price: 1200 });
+    DISH.save({ kind: 'dessert', name: 'Mango Fool', full_on: 1, full_price: 400 });
+    // A count worth sorting on, so 'used' cannot accidentally match 'name'.
+    require('../server/db').db.prepare(
+      "UPDATE saved_dishes SET used_count = 9 WHERE name = 'Zulu Beef'").run();
+
+    let r = await GET('/admin/dishes');
+    ok('the saved list opens', r.status === 200, String(r.status));
+    ok('and shows every kind by default',
+      r.text.includes('Zulu Beef') && r.text.includes('Aardvark Bisque') && r.text.includes('Mango Fool'));
+
+    r = await GET('/admin/dishes?kind=soup');
+    ok('filtered to soups, the soup is there', r.text.includes('Aardvark Bisque'));
+    ok('and the main is not', !r.text.includes('Zulu Beef'));
+
+    r = await GET('/admin/dishes?sort=used');
+    const zulu = r.text.indexOf('Zulu Beef');
+    const aardvark = r.text.indexOf('Aardvark Bisque');
+    ok('sorted by use, the most-cooked comes first', zulu > -1 && zulu < aardvark,
+      `zulu@${zulu} aardvark@${aardvark}`);
+
+    r = await GET('/admin/dishes?sort=name');
+    ok('sorted by name, alphabetical wins instead',
+      r.text.indexOf('Aardvark Bisque') < r.text.indexOf('Zulu Beef'));
+
+    r = await GET('/admin/dishes?sort=nonsense&kind=nonsense');
+    ok('a nonsense sort or kind still shows the list', r.status === 200 && r.text.includes('Zulu Beef'));
+
+    // The guard that matters: a soup must not become a day's featured dish.
+    const soup = DISH.all({ kind: 'soup' }).find((d) => d.name === 'Aardvark Bisque');
+    r = await POST(`/admin/week/${weekId}/dish/mon/use`, { dish_id: String(soup.id) });
+    const day = require('../server/db').db.prepare(
+      'SELECT dish_name FROM service_days WHERE week_id = ? AND dish_name = ?')
+      .get(weekId, 'Aardvark Bisque');
+    ok('a saved soup is refused as the featured dish of a day', !day);
+
+    // ...and goes on the week instead.
+    r = await POST(`/admin/week/${weekId}/soup/use`, { dish_id: String(soup.id) });
+    const wi = require('../server/db').db.prepare(
+      "SELECT name, ack FROM week_items WHERE week_id = ? AND kind = 'soup'").get(weekId);
+    check('the soup lands on the week', wi && wi.name, 'Aardvark Bisque');
+    check('unreviewed, as everything copied forward is', wi && wi.ack, 0);
+
+    r = await POST(`/admin/week/${weekId}/dessert/use`, { dish_id: String(soup.id) });
+    const wd = require('../server/db').db.prepare(
+      "SELECT name FROM week_items WHERE week_id = ? AND kind = 'dessert'").get(weekId);
+    ok('and a soup cannot be used as the dessert either', !wd);
+  }
+
   /* --- Report -------------------------------------------------------------- */
   console.log('\nEnd-to-end flow — Dinner By Derek\n');
   if (failures.length) {

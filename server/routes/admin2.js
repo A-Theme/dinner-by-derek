@@ -847,7 +847,7 @@ router.get('/settings', (req, res) => {
 
     <div class="card">
       <h2>Backup</h2>
-      <p class="also">The backup holds every week, dish, soup, salad, standing item, order,
+      <p class="also">The backup holds every week, dish, soup, salad, dessert, standing item, order,
         allergen word and setting. It never contains your Facebook token or any password.</p>
       <div class="dl-row">
         <a class="btn btn--secondary" href="/admin/export/backup.json">Download full backup</a>
