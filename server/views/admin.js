@@ -95,43 +95,53 @@ function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWee
   const weekdays = JSON.parse(item.weekdays || '[]');
   const ackValid = item.ack && (item.ack_of || '') === A.reviewedText(item);
 
+  /* Six groups, each a single element, because the phone reorders them.
+     Source order IS the desktop order — nothing in the stylesheet touches this
+     editor above the breakpoint. Below it .item-editor becomes a flex column
+     and the groups carry `order`, so a phone gets name, prices, photo,
+     allergens without a second template to keep in step with this one. */
   return html`
   <div class="item-editor" data-editor data-prefix="${prefix}">
-    ${showName ? html`
-      <label for="${prefix}_name">${nameLabel}</label>
-      <input type="text" id="${prefix}_name" name="${prefix}_name" data-item-name
-        value="${item.name || item.dish_name || ''}">` : ''}
+    <div class="ie-basics">
+      ${showName ? html`
+        <label for="${prefix}_name">${nameLabel}</label>
+        <input type="text" id="${prefix}_name" name="${prefix}_name" data-item-name
+          value="${item.name || item.dish_name || ''}">` : ''}
 
-    <label for="${prefix}_description">Description</label>
-    <textarea id="${prefix}_description" name="${prefix}_description" rows="4"
-      data-description data-ack-of="${item.ack_of || ''}">${item.description || ''}</textarea>
-
-    <div class="suggestions" data-suggestions hidden>
-      <div class="suggestions__label">Suggested from the name and description — nothing is applied until you accept it</div>
-      <div data-sugg-list></div>
+      <label for="${prefix}_description">Description</label>
+      <textarea id="${prefix}_description" name="${prefix}_description" rows="4"
+        data-description data-ack-of="${item.ack_of || ''}">${item.description || ''}</textarea>
     </div>
 
-    <label>Allergen tags on this dish</label>
-    <div data-tags>
-      ${accepted.map((a) => html`<span class="tag" data-tag="${a}">${a}
-        <button type="button" data-remove aria-label="Remove ${a}">✕</button></span>`)}
-    </div>
-    <input type="hidden" name="${prefix}_allergens" value="${JSON.stringify(accepted)}" data-allergens>
-    <input type="hidden" name="${prefix}_dismissed" value="${JSON.stringify(dismissed)}" data-dismissed>
-    <p><select data-add-allergen style="max-width:260px;display:inline-block">
-      <option value="">Add an allergen manually…</option>
-      ${A.HEALTH_CANADA_ORDER.map((a) => html`<option value="${a}">${a}</option>`)}
-    </select></p>
+    <div class="ie-allergens">
+      <div class="suggestions" data-suggestions hidden>
+        <div class="suggestions__label">Suggested from the name and description — nothing is applied until you accept it</div>
+        <div data-sugg-list></div>
+      </div>
 
-    <div class="ackbox">
-      <label>
-        <input type="checkbox" name="${prefix}_ack" value="1" data-ack${ackValid ? ' checked' : ''}>
-        <span>I have reviewed the allergen information for this dish.
-        ${!ackValid && item.ack ? html`<br><span class="flag flag--warn">The description changed since you last reviewed it — please check the tags again.</span>` : ''}</span>
-      </label>
+      <label>Allergen tags on this dish</label>
+      <div data-tags>
+        ${accepted.map((a) => html`<span class="tag" data-tag="${a}">${a}
+          <button type="button" data-remove aria-label="Remove ${a}">✕</button></span>`)}
+      </div>
+      <input type="hidden" name="${prefix}_allergens" value="${JSON.stringify(accepted)}" data-allergens>
+      <input type="hidden" name="${prefix}_dismissed" value="${JSON.stringify(dismissed)}" data-dismissed>
+      <p><select data-add-allergen style="max-width:260px;display:inline-block">
+        <option value="">Add an allergen manually…</option>
+        ${A.HEALTH_CANADA_ORDER.map((a) => html`<option value="${a}">${a}</option>`)}
+      </select></p>
+
+      <div class="ackbox">
+        <label>
+          <input type="checkbox" name="${prefix}_ack" value="1" data-ack${ackValid ? ' checked' : ''}>
+          <span>I have reviewed the allergen information for this dish.
+          ${!ackValid && item.ack ? html`<br><span class="flag flag--warn">The description changed since you last reviewed it — please check the tags again.</span>` : ''}</span>
+        </label>
+      </div>
     </div>
 
     ${showPhoto ? html`
+    <div class="ie-photo">
     <label>Photo</label>
     <!-- Buttons first, dropzone second, and it matters which way round.
          The dropzone came first and said "Tap to choose a photo" in bold. On a
@@ -163,16 +173,17 @@ function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWee
          thing their position controls is what their clicks bubble through. -->
     <input type="file" accept="image/*,.heic,.heif" hidden data-file>
     <input type="file" accept="image/*" capture="environment" hidden data-camera>
-    <input type="hidden" name="${prefix}_photo" value="${item.photo || ''}" data-photo>` : ''}
+    <input type="hidden" name="${prefix}_photo" value="${item.photo || ''}" data-photo>
+    </div>` : ''}
 
     ${showHalal ? html`
-    <label style="display:flex;gap:var(--dbd-sp-3);align-items:center">
+    <label class="ie-halal" style="display:flex;gap:var(--dbd-sp-3);align-items:center">
       <input type="checkbox" name="${prefix}_halal" value="1" style="width:24px;height:24px"${item.halal ? ' checked' : ''}>
       <span>Prepared halal — shown to customers as declared by the kitchen</span>
     </label>` : ''}
 
     ${showWeekdays ? html`
-      <fieldset>
+      <fieldset class="ie-weekdays">
         <legend>Available on</legend>
         ${T.WEEKDAYS.map((w) => html`
           <label style="display:inline-flex;gap:var(--dbd-sp-2);align-items:center;margin-right:var(--dbd-sp-4)">
@@ -181,7 +192,7 @@ function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWee
       </fieldset>` : ''}
 
     ${showPrices ? html`
-    <fieldset>
+    <fieldset class="ie-prices">
       <legend>Sizes and prices</legend>
       <div class="stack2">
         <div>

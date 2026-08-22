@@ -175,6 +175,30 @@
     });
   });
 
+  section("The day settings disclosure", function () {
+    /* --- The rare day settings, open on a desktop --------------------------
+       Closed-this-day and the daily cap are one <details> in the markup so a
+       phone can leave them shut and get to the dish first. A desktop has the
+       room and has always shown them open, and there is no CSS that can open a
+       <details> — so it is opened here rather than by a second template that
+       would then have to be kept in step with the first.
+
+       Only ever opened, never closed: narrowing a desktop window should not
+       swallow a box that is being filled in. And the summary is hidden by CSS
+       only while the box is open, so with no JavaScript at all a desktop still
+       has a line to click rather than two settings it cannot reach. */
+    // The complement of the phone query in admin.css, spelled the same way it
+    // is there, so a fractional width from browser zoom cannot fall between them.
+    var wide = window.matchMedia('not all and (max-width: 680px)');
+    function sync() {
+      if (!wide.matches) return;
+      document.querySelectorAll('.day-rare').forEach(function (d) { d.open = true; });
+    }
+    sync();
+    if (wide.addEventListener) wide.addEventListener('change', sync);
+    else if (wide.addListener) wide.addListener(sync);        // Safari < 14
+  });
+
   section("The allergen suggestions", function () {
     /* --- Allergen suggestions --------------------------------------------- */
     document.querySelectorAll('[data-editor]').forEach(function (ed) {

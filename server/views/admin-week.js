@@ -135,33 +135,47 @@ function weekPage({ week, days, items, hasPrevious }) {
               ${existing && !item.closed ? V.reviewFlag(item, item.dish_name || 'This dish') : ''}
               ${item.closed ? html`<span class="flag flag--warn">Closed</span>` : ''}</summary>
 
-            <fieldset>
-              <legend>Cooking this day?</legend>
-              <label style="display:flex;gap:var(--dbd-sp-3);align-items:center">
-                <input type="checkbox" name="${wd}_closed" value="1" style="width:22px;height:22px"${item.closed ? ' checked' : ''}>
-                <span><strong>Closed — not cooking this day.</strong> Customers see the day marked
-                  closed and can order nothing on it, not even the standing Other Options.</span>
-              </label>
-              <label for="cn_${wd}">Note for customers (optional)</label>
-              <input type="text" id="cn_${wd}" name="${wd}_closed_note" maxlength="200"
-                value="${item.closed_note || ''}" placeholder="e.g. Back on Thursday">
-            </fieldset>
+            <!-- One wrapper so the phone can reorder what's in it. It is a
+                 plain block on a desktop and this order is what shows there;
+                 below the breakpoint it becomes a flex column and the dish
+                 comes first, because that is the part filled in every week. -->
+            <div class="daybox">
 
-            <!-- The Save button belongs to the day it sits under but posts to
-                 its own route, so it is associated by its form attribute with
-                 the little form at the foot of the page — the weekday boxes are
-                 one big form and HTML has no nested ones.
+              <!-- The two settings a day rarely needs, together in one
+                   disclosure. A desktop opens it and hides its summary, so it
+                   reads as the two plain blocks it always was; a phone gets one
+                   line it can leave shut. -->
+              <details class="day-rare">
+                <summary>Closed this day, and how many to make</summary>
+                <fieldset>
+                  <legend>Cooking this day?</legend>
+                  <label style="display:flex;gap:var(--dbd-sp-3);align-items:center">
+                    <input type="checkbox" name="${wd}_closed" value="1" style="width:22px;height:22px"${item.closed ? ' checked' : ''}>
+                    <span><strong>Closed — not cooking this day.</strong> Customers see the day marked
+                      closed and can order nothing on it, not even the standing Other Options.</span>
+                  </label>
+                  <label for="cn_${wd}">Note for customers (optional)</label>
+                  <input type="text" id="cn_${wd}" name="${wd}_closed_note" maxlength="200"
+                    value="${item.closed_note || ''}" placeholder="e.g. Back on Thursday">
+                </fieldset>
+                <label for="cap_${wd}">How many this day (both sizes together)</label>
+                <input type="number" id="cap_${wd}" name="${wd}_daily_cap" min="0" step="1"
+                  value="${item.daily_cap == null ? '' : item.daily_cap}"
+                  placeholder="Blank = the usual ${globalCap === null ? 'no limit' : globalCap}">
+              </details>
 
-                 Loading a saved dish is NOT here: that control is one picker
-                 above all seven boxes. -->
-            ${V.itemEditor({ prefix: wd, item, nameLabel: 'Featured dish' })}
-            ${item.dish_name && item.dish_name.trim() ? html`
-              <p><button class="btn btn--secondary" type="submit" form="savedish-${wd}">
-                Save "${item.dish_name}" to my dishes</button></p>` : ''}
-            <label for="cap_${wd}">How many this day (both sizes together)</label>
-            <input type="number" id="cap_${wd}" name="${wd}_daily_cap" min="0" step="1"
-              value="${item.daily_cap == null ? '' : item.daily_cap}"
-              placeholder="Blank = the usual ${globalCap === null ? 'no limit' : globalCap}">
+              <!-- The Save button belongs to the day it sits under but posts to
+                   its own route, so it is associated by its form attribute with
+                   the little form at the foot of the page — the weekday boxes are
+                   one big form and HTML has no nested ones.
+
+                   Loading a saved dish is NOT here: that control is one picker
+                   above all seven boxes. -->
+              ${V.itemEditor({ prefix: wd, item, nameLabel: 'Featured dish' })}
+              ${item.dish_name && item.dish_name.trim() ? html`
+                <p class="day-save"><button class="btn btn--secondary" type="submit" form="savedish-${wd}">
+                  Save "${item.dish_name}" to my dishes</button></p>` : ''}
+            </div>
           </details>`;
         })}
         <button class="btn btn--primary" type="submit">Save this week's days</button>

@@ -105,6 +105,56 @@ details.daycard-edit { background: var(--dbd-surface-raised); border: 1px solid 
 details.daycard-edit > summary { cursor: pointer; font-family: var(--dbd-display); font-size: var(--dbd-step-1);
   color: var(--dbd-heading); min-height: var(--dbd-tap); display: flex; align-items: center; }
 
+/* The two settings a day rarely needs. Open and summary-less on a desktop —
+   see admin.js — and one collapsed line on a phone. The summary is hidden only
+   while the box is open, so a desktop with no JavaScript keeps a way in. */
+.day-rare { margin-bottom: var(--dbd-sp-4); }
+.day-rare > summary {
+  cursor: pointer; min-height: var(--dbd-tap); display: flex; align-items: center;
+  font-size: var(--dbd-step--1); font-weight: 700; color: var(--dbd-ink-muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+/* The exact complement of the phone query below, not `min-width: 681px`:
+   browser zoom hands out fractional viewport widths, and 680.5px satisfies
+   neither `max-width: 680px` nor `min-width: 681px` — a band where the phone
+   layout is off and this box is neither opened nor labelled. */
+@media not all and (max-width: 680px) { .day-rare[open] > summary { display: none; } }
+
+/* --- The editor on a phone -------------------------------------------------
+   One template, two layouts. Above this width not a rule here applies: the
+   editor renders in source order, which is the long scrolling form a week gets
+   built in on a laptop. Below it the same markup — same fields, same names,
+   same handlers — is reordered by how often each part is actually touched.
+
+   680px is the width .stack2 already collapses at, deliberately: a second
+   breakpoint a few pixels away would put the two-column price fields and this
+   reordering out of step in the band between them. */
+@media (max-width: 680px) {
+  .daybox { display: flex; flex-direction: column; }
+  .daybox .item-editor { order: 1; }   /* the dish, first */
+  .daybox .day-rare    { order: 2; }   /* closed, and how many */
+  .daybox .day-save    { order: 3; }   /* save to my dishes */
+
+  .item-editor { display: flex; flex-direction: column; }
+  .ie-basics    { order: 1; }
+  .ie-weekdays  { order: 2; }
+  .ie-prices    { order: 3; }
+  .ie-photo     { order: 4; }
+  .ie-halal     { order: 5; }
+  .ie-allergens { order: 6; }          /* last, but never hidden — it gates publishing */
+
+  /* The dropzone keeps the two things it shows that matter — the photo now on
+     the dish, and the upload bar — and loses the dashed box and the invitation
+     to drag, which a phone can do neither of. What's left of it takes no room
+     until there is a photo to show. Not display:none: that box is where the
+     thumbnail and the progress live, and hiding it would leave a phone with no
+     sign a photo had landed. */
+  .dropzone { border: none; background: none; padding: 0; text-align: left; cursor: default; margin-bottom: 0; }
+  .dropzone > p:not(.dz-msg) { display: none; }
+  .dropzone img { margin: 0 0 var(--dbd-sp-2); }
+  .dropzone .dz-msg:empty { margin: 0; }
+}
+
 .also { font-size: var(--dbd-step--1); color: var(--dbd-ink-muted); font-style: italic; }
 
 .dl-row { display: flex; flex-wrap: wrap; gap: var(--dbd-sp-2); }

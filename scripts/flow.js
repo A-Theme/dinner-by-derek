@@ -160,6 +160,45 @@ const PAST_DATE = T.addDays(today, -2);
       `dropzone ends near ${dzEndAt}, file input at ${fileAt}`);
   }
 
+  /* --- One editor, two layouts ------------------------------------------ *
+   * A desktop and a phone want the day editor in different orders, and the
+   * cheap way to get that is two templates — which then drift, and the one
+   * that drifts is the one used less. So there is one, and the phone layout is
+   * CSS over the same markup.
+   *
+   * What that costs is a rule the markup has to keep: every group must be a
+   * single element for `order` to move it, and no `order` may exist outside
+   * the phone media query, or the desktop stops rendering in source order and
+   * the stylesheet has quietly become the second template. Both are checked
+   * here, against the page as it is actually served. */
+  {
+    const h = (await GET('/admin/week')).text;
+    const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.css'), 'utf8');
+    const groups = ['ie-basics', 'ie-allergens', 'ie-photo', 'ie-halal', 'ie-prices'];
+    groups.forEach((g) => ok(`the editor renders ${g} as one element`, h.includes(`"${g}"`) || h.includes(`${g}"`)));
+
+    // Source order is the desktop order. If these ever cross, a desktop has
+    // silently been re-laid-out by an edit meant for the phone.
+    ok('and in source order: name, allergens, photo, prices — the desktop form',
+      h.indexOf('ie-basics') < h.indexOf('ie-allergens')
+      && h.indexOf('ie-allergens') < h.indexOf('ie-photo')
+      && h.indexOf('ie-photo') < h.indexOf('ie-prices'));
+
+    // The rare pair are one element, so one `order` moves both.
+    const rareAt = h.indexOf('class="day-rare"');
+    const rareEnd = h.indexOf('</details>', rareAt);
+    ok('the rare day settings are one disclosure', rareAt !== -1);
+    ok('holding the closed box and the daily cap together',
+      h.indexOf('_closed"', rareAt) < rareEnd && h.indexOf('_daily_cap', rareAt) < rareEnd);
+
+    const phone = css.slice(css.indexOf('@media (max-width: 680px)'));
+    ok('the phone layout is in the stylesheet, not a second template',
+      /\.item-editor \{ display: flex/.test(phone) && /\.ie-basics\s+\{ order/.test(phone));
+    const stray = css.slice(0, css.indexOf('@media (max-width: 680px)'));
+    ok('and nothing reorders the editor above the breakpoint',
+      !/\.(ie-|day-)[a-z]+\s*\{[^}]*order:/.test(stray));
+  }
+
   /* --- Build a week ----------------------------------------------------- */
   let weekId;
   let weekSlug;
