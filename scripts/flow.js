@@ -1049,9 +1049,39 @@ const PAST_DATE = T.addDays(today, -2);
      after the request had already landed. All three post the same body a
      second time, and the kitchen must not read two tickets for one dinner. */
   {
+    /* The day ordered against is made here rather than found.
+     *
+     * This used to take the earliest published, unclosed day in the database,
+     * and by this point that is a day dated *today* — inserted by the cutoff
+     * section above, and so already past its cutoff. Whether the order was
+     * accepted then depended on the clock rather than on the code, which is
+     * how a suite comes to pass on a Wednesday and fail on a Saturday with
+     * nothing changed in between. A test about posting the same order twice
+     * should not also be a test of what day of the week it is.
+     *
+     * SERVICE_DATE is three days out and comfortably open, and the row is
+     * written straight in with its review already done, because none of that
+     * is what this block is checking. */
+    const A = require('../server/allergens');
+    const pubWeek = db.prepare(
+      `SELECT id, slug FROM weeks WHERE status = 'published' ORDER BY id DESC LIMIT 1`).get();
+    ok('a published week exists to hang the duplicate test on', !!pubWeek);
+
+    const dtDesc = 'Braised beef, for the duplicate-submission check';
+    const dtReviewed = A.reviewedText({ name: 'Double Tap Dish', description: dtDesc });
+    db.prepare(`INSERT OR IGNORE INTO service_days
+      (week_id, service_date, dish_name, description, allergens, dismissed, ack, ack_of,
+       full_on, full_price)
+      VALUES (?,?,?,?,?,'[]',1,?,1,2200)`)
+      .run(pubWeek.id, SERVICE_DATE, 'Double Tap Dish', dtDesc,
+        JSON.stringify(A.detect(dtReviewed).map((h) => h.allergen)), dtReviewed);
+
     const live = db.prepare(`SELECT w.slug, w.id, d.id AS day_id, d.service_date
       FROM weeks w JOIN service_days d ON d.week_id = w.id
-      WHERE w.status = 'published' AND d.closed = 0 ORDER BY d.service_date LIMIT 1`).get();
+      WHERE w.id = ? AND d.service_date = ? AND d.closed = 0`)
+      .get(pubWeek.id, SERVICE_DATE);
+    ok('and the day it will order against is open', !!live,
+      `week ${pubWeek && pubWeek.id}, ${SERVICE_DATE}`);
     const loc = db.prepare('SELECT id FROM locations WHERE active = 1 LIMIT 1').get();
     const countFor = (name) => db.prepare(
       'SELECT COUNT(*) n FROM orders WHERE name = ?').get(name).n;
@@ -1319,9 +1349,15 @@ const PAST_DATE = T.addDays(today, -2);
   {
     const O2 = require('../server/orders');
     const crypto = require('crypto');
+    /* Strictly after today, for the same reason the duplicate-submission
+       block builds its own day: the earliest published day by this point is
+       dated today and closed to orders at 6 a.m., so "the first one found"
+       was a day nobody could order for. */
     const live = db.prepare(`SELECT w.slug, d.id AS day_id, d.service_date
       FROM weeks w JOIN service_days d ON d.week_id = w.id
-      WHERE w.status = 'published' AND d.closed = 0 ORDER BY d.service_date LIMIT 1`).get();
+      WHERE w.status = 'published' AND d.closed = 0 AND d.service_date > ?
+      ORDER BY d.service_date LIMIT 1`).get(today);
+    ok('there is a day still open to order against', !!live, `today is ${today}`);
     const loc = db.prepare('SELECT id FROM locations WHERE active = 1 LIMIT 1').get();
     const taken = db.prepare('SELECT ref FROM orders ORDER BY id LIMIT 1').get();
     ok('there is a published day and an existing order to collide with',
