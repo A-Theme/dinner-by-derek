@@ -25,8 +25,8 @@ question that is deliberately left open until there is evidence to settle it.
 
 ## Where things stand today
 
-Recorded 2026-08-19, from the live database and `.env`. Check it again before
-starting — this is a snapshot, not a guarantee.
+Recorded 2026-08-19 from the live database and `.env`, re-checked 2026-08-22.
+Check it again before starting — this is a snapshot, not a guarantee.
 
 | | state | matters because |
 |---|---|---|
@@ -43,6 +43,7 @@ starting — this is a snapshot, not a guarantee.
 | Orders | 0 | Nothing to preserve. The database can be rebuilt freely right now. |
 | Locations | 1 — Waterloo, home kitchen | |
 | Email | off | Orders are recorded and shown in the dashboard; nothing is sent. |
+| Payments | **table not created yet** | The reconciliation feature exists in the code; its table appears the first time the app boots against this database. Nothing to do — noted so an empty Payments screen is not alarming. |
 | Facebook | not connected | Manual copy-and-paste publishing works without it. |
 
 **The freedom in that table is worth using.** Zero orders means nothing is
@@ -170,6 +171,37 @@ read.
 Set `SMTP_*` and `BASE_URL` together or not at all. Email with a `localhost`
 `BASE_URL` sends you alerts whose links are dead from a phone, which is worse
 than no email.
+
+### Knowing which transfer paid for what
+
+**Dashboard → Payments.** Nothing to set up, and nothing to decide before the
+first order — but worth understanding before the first e-transfer lands rather
+than after.
+
+No money moves through the app and it never talks to a bank. Interac has no API
+a supper club can call, so the only signal is the notification email the bank
+sends when a transfer arrives. Paste one into the Payments screen and the app
+reads the sender, the amount and the message, and tries to name the order.
+
+The one thing worth knowing: **it settles an order by itself only when the
+reference in the transfer message and the amount both agree.** A reference on
+its own could be a typo; an amount on its own is shared by every order of that
+size that week. Anything weaker is shown as a suggestion and waits for you.
+Every automatic match is marked as automatic, and unlinking puts the order back
+exactly as it was — including leaving it paid if it was already paid by hand.
+
+This works because the confirmation screen and the customer's confirmation
+email now ask e-transfer customers to put their order reference in the transfer
+message. That happens on its own; there is nothing to switch on. But it is a
+reason to get [email](#email-when-you-want-it) working sooner rather than later
+— without it, the customer sees the request on screen once and never again, and
+a customer who does not include the reference is one you match by hand.
+
+An order marked paid is a statement about money, not about intent. Somebody
+choosing "E-transfer" on the form has not paid, and the app has never pretended
+otherwise. The Payments screen is what closes that gap.
+
+Full detail in the README, under *Matching e-transfers to orders*.
 
 ### Facebook, if ever
 
