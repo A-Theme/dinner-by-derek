@@ -567,6 +567,59 @@ the kitchen, which is the whole thing this field exists to prevent.
 To change the options, edit `PAYMENT_METHODS` in `server/orders.js`. The label
 lives there so the form, the emails and the dashboard cannot drift apart.
 
+### Matching e-transfers to orders
+
+**Dashboard → Payments.** Interac has no API a supper club can call, so the app
+never talks to a bank. What it reads is the notification email your bank sends
+when money lands.
+
+Every order already has an eight-character reference. The confirmation screen
+and the confirmation email now ask e-transfer customers to put it in the
+transfer message — that message is the one field that travels with the money
+and comes back out the other end.
+
+Paste a notification into the box on the Payments screen and one of four things
+happens:
+
+| What the notification shows | What happens |
+|---|---|
+| The reference **and** the exact order total | The order is marked paid. No tap. |
+| The reference, a different amount | Offered as a candidate, with the shortfall named |
+| No reference, but only one order is owed exactly that | Offered as a candidate |
+| A sender name matching a customer | Offered as a candidate |
+| None of the above | Kept as unclaimed money, for you to link by hand |
+
+Only the first row is automatic, and it is the only place in the app that sets
+`paid` without you. It takes two independent facts agreeing — a reference could
+be a typo, and an amount is shared by every order of that size — and it records
+that it was automatic, so **Unlink** puts it back. Unlinking an order you had
+marked paid yourself leaves it paid; the app only undoes its own flag.
+
+The reference is read from the **message field only**, never from the body of
+the email. Bank reference numbers are eight hex characters often enough to
+matter, and one of them must never settle somebody's order.
+
+The screen also shows the other half of the question: who said they would send
+a transfer and hasn't. Orders that said *cash* still appear in the link-by-hand
+list, because someone who picks cash and then sends a transfer anyway is a
+normal Tuesday.
+
+**Known limits.** One payment links to one order, so a single transfer covering
+two orders is linked to one and the other marked paid by hand. And a
+notification with no `Message-ID` is identified by a hash of its text, so two
+transfers identical in every visible character — same sender, same cent, same
+message, no timestamp — read as a duplicate and the second is refused. Both
+fail in the direction of not marking something paid that wasn't.
+
+### Reading the mailbox automatically
+
+Not built yet, and it needs somewhere to run. `P.record()` in
+`server/payments.js` is the whole entry point: a poller that reads an IMAP
+mailbox and hands each new message to it needs nothing else, and the Payments
+screen does not change. Point it at a mailbox that receives **only** the bank's
+notifications — a dedicated address, or a filter that forwards them — so the
+parser never reads anything else.
+
 ---
 
 ## Colours and the theme file

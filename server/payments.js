@@ -298,14 +298,33 @@ const matched = (limit = 50) => db.prepare(
 
 const forOrder = (orderId) => db.prepare('SELECT * FROM payments WHERE order_id = ?').get(orderId);
 
-/** Orders that said e-transfer and are still not marked paid. */
+/**
+ * Orders that said e-transfer and are still not marked paid.
+ *
+ * The chase list: these are the people to nudge. Narrowed to the ones who
+ * said they would send a transfer, because nudging someone who is paying
+ * cash at the door about a missing e-transfer is worse than not nudging.
+ */
 const awaiting = () => db.prepare(`
   SELECT * FROM orders
   WHERE paid = 0 AND status != 'declined' AND payment_method = 'etransfer'
   ORDER BY service_date DESC, id DESC LIMIT 200`).all();
 
+/**
+ * Every order still owing, whatever they said they would pay with.
+ *
+ * What the link-by-hand list is built from, and deliberately wider than
+ * awaiting(). Somebody who picked Cash on the form and then sent a transfer
+ * anyway has to be linkable — the declared method is intent, and this whole
+ * module exists because intent and money are different things.
+ */
+const unpaid = () => db.prepare(`
+  SELECT * FROM orders
+  WHERE paid = 0 AND status != 'declined'
+  ORDER BY service_date DESC, id DESC LIMIT 200`).all();
+
 module.exports = {
   parseNotification, refsIn, ordersNamedIn, nameOverlap,
   candidatesFor, record, link, unlink,
-  unmatched, matched, forOrder, awaiting,
+  unmatched, matched, forOrder, awaiting, unpaid,
 };

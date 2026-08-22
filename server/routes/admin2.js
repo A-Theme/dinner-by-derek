@@ -381,7 +381,8 @@ const REASONS = {
 
 router.get('/payments', (req, res) => {
   const unmatched = P.unmatched();
-  const awaiting = P.awaiting();
+  const awaiting = P.awaiting();   // the chase list: e-transfer, still owing
+  const unpaid = P.unpaid();       // the link-by-hand list: anything still owing
   const matched = P.matched(25);
 
   const stamp = (s) => String(s || '').replace('T', ' ').slice(0, 16);
@@ -429,7 +430,7 @@ router.get('/payments', (req, res) => {
         <form method="post" action="/admin/payments/${p.id}/link" class="dl-row" style="align-items:baseline">
           <select name="order_id" style="flex:1 1 220px">
             <option value="">Pick the order by hand…</option>
-            ${awaiting.map((o) => html`<option value="${o.id}">${o.name} · ${o.ref} · ${money(o.total)} · ${T.fmtDayShort(o.service_date, tz())}</option>`)}
+            ${unpaid.map((o) => html`<option value="${o.id}">${o.name} · ${o.ref} · ${money(o.total)} · ${T.fmtDayShort(o.service_date, tz())}${o.payment_method === 'cash' ? ' · said cash' : ''}</option>`)}
           </select>
           <button class="btn btn--secondary" type="submit">Link</button>
         </form>
