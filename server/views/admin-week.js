@@ -19,6 +19,21 @@ function weekPage({ week, days, items, hasPrevious }) {
   // A day takes a main and nothing else. Handing it the whole list would offer
   // "Cream of Broccoli" as Tuesday's featured dish at a family-dinner price.
   const savedMains = savedOf('main');
+
+  /* The seven boxes, worked out once. The single dish picker above them needs
+     to name every day and say what is on it, and the boxes themselves need the
+     same rows, so neither can own the loop. */
+  const dayRows = T.WEEKDAYS_MON_FIRST.map((wd, offset) => {
+    const date = T.addDays(week.week_start || T.mondayOf(T.todayIn(tz())), offset);
+    const existing = days.find((d) => d.service_date === date);
+    const stub = {
+      dish_name: '', description: '', allergens: '[]', dismissed: '[]', ack: 0, ack_of: null,
+      photo: null, halal: 0, full_on: 1, full_label: '', full_price: null, full_cap: null,
+      single_on: 0, single_label: '', single_price: null, single_cap: null, daily_cap: null,
+      closed: 0, closed_note: '',
+    };
+    return { wd, date, existing, item: existing || stub };
+  });
   const published = week.status === 'published';
   const cutoffHour = settings.getInt('cutoff_hour', 22);
   const cutoffMin = settings.getInt('cutoff_minute', 0);
@@ -79,17 +94,35 @@ function weekPage({ week, days, items, hasPrevious }) {
       <p class="also">Fill in whichever days you're cooking. Leave a day blank to skip it quietly, or tick
         <em>Closed</em> to say so out loud on the menu. A pickup-window override for just that day, and
         removing it, are below in Day details once it has a name.</p>
+      <!-- One picker for the whole week, not one per box.
+           It used to sit inside every weekday box, which drew the entire saved
+           list seven times: 2,600-odd options and a quarter of a megabyte of
+           HTML for a control that is used once or twice a week. The day it
+           lands on is a field beside it instead. -->
+      <div class="dl-row" style="align-items:flex-end;margin-bottom:var(--dbd-sp-4)">
+        <label style="flex:1 1 210px">Put a saved dish on
+          <select name="wd" form="usedish"${savedMains.length ? '' : ' disabled'}>
+            ${dayRows.map((r) => html`<option value="${r.wd}">${T.WEEKDAY_LABELS[r.wd]},
+              ${T.fmtMonthDay(r.date, tz())} — ${r.item.closed
+                ? 'closed'
+                : (r.item.dish_name || 'nothing yet')}</option>`)}
+          </select></label>
+        <label style="flex:2 1 260px">Dish
+          <select name="dish_id" form="usedish"${savedMains.length ? '' : ' disabled'}>
+            ${savedMains.length
+              ? html`<option value="">Choose a saved dish…</option>
+                  ${savedMains.map((s) => html`<option value="${s.id}">${s.name}${s.used_count ? ` — ${s.used_count}×` : ''}</option>`)}`
+              : html`<option>No saved dishes yet</option>`}
+          </select></label>
+        <button class="btn btn--secondary" type="submit" form="usedish"${savedMains.length ? '' : ' disabled'}>Use it</button>
+      </div>
+      ${savedMains.length ? '' : html`
+        <p class="also" style="margin-bottom:var(--dbd-sp-4)">Nothing saved yet.
+          Use <strong>Save "…" to my dishes</strong> inside a day once it has a name on it,
+          or publish a week — every featured dish on it is filed here automatically.</p>`}
+
       <form method="post" action="/admin/week/${week.id}/weekdays" data-autosave>
-        ${T.WEEKDAYS_MON_FIRST.map((wd, offset) => {
-          const date = T.addDays(weekStart, offset);
-          const existing = days.find((d) => d.service_date === date);
-          const stub = {
-            dish_name: '', description: '', allergens: '[]', dismissed: '[]', ack: 0, ack_of: null,
-            photo: null, halal: 0, full_on: 1, full_label: '', full_price: null, full_cap: null,
-            single_on: 0, single_label: '', single_price: null, single_cap: null, daily_cap: null,
-            closed: 0, closed_note: '',
-          };
-          const item = existing || stub;
+        ${dayRows.map(({ wd, date, existing, item }) => {
           return html`
           <!-- Open only while the day is still empty, so a week in progress
                shows the boxes still wanting something and keeps the finished
@@ -114,31 +147,13 @@ function weekPage({ week, days, items, hasPrevious }) {
                 value="${item.closed_note || ''}" placeholder="e.g. Back on Thursday">
             </fieldset>
 
-            <!-- Saved dishes. These controls belong to the day they sit under
-                 but post to their own routes, so they are associated by their form attribute
-                 with the little forms at the foot of the page — the weekday
-                 boxes are one big form and HTML has no nested ones.
+            <!-- The Save button belongs to the day it sits under but posts to
+                 its own route, so it is associated by its form attribute with
+                 the little form at the foot of the page — the weekday boxes are
+                 one big form and HTML has no nested ones.
 
-                 The row renders whether anything is saved or not. It used to
-                 hide itself until the list had something in it, which meant the
-                 one moment the feature most needed explaining — an empty
-                 library, on a dashboard where nobody had met it yet — was the
-                 one moment it said nothing at all. Disabled and labelled beats
-                 absent: the owner can see the door before they have the key. -->
-            <div class="dl-row" style="align-items:flex-end;margin-bottom:var(--dbd-sp-3)">
-              <label style="flex:1 1 200px">Put a saved dish here
-                <select name="dish_id" form="usedish-${wd}"${savedMains.length ? '' : ' disabled'}>
-                  ${savedMains.length
-                    ? html`<option value="">Choose a saved dish…</option>
-                        ${savedMains.map((s) => html`<option value="${s.id}">${s.name}${s.used_count ? ` — ${s.used_count}×` : ''}</option>`)}`
-                    : html`<option>No saved dishes yet</option>`}
-                </select></label>
-              <button class="btn btn--secondary" type="submit" form="usedish-${wd}"${savedMains.length ? '' : ' disabled'}>Use it</button>
-            </div>
-            ${savedMains.length ? '' : html`
-              <p class="also" style="margin-bottom:var(--dbd-sp-3)">Nothing saved yet.
-                Use <strong>Save "…" to my dishes</strong> below once this day has a name on it,
-                or publish a week — every featured dish on it is filed here automatically.</p>`}
+                 Loading a saved dish is NOT here: that control is one picker
+                 above all seven boxes. -->
             ${V.itemEditor({ prefix: wd, item, nameLabel: 'Featured dish' })}
             ${item.dish_name && item.dish_name.trim() ? html`
               <p><button class="btn btn--secondary" type="submit" form="savedish-${wd}">
@@ -154,9 +169,13 @@ function weekPage({ week, days, items, hasPrevious }) {
       </form>
 
       <!-- The targets of the form attributes above. Empty on purpose: the
-           select and the buttons up in each day carry the values. -->
+           selects and the buttons carry the values.
+
+           One "use" form for the week, because there is one picker; still one
+           "save" per day, because that button names the dish sitting in its
+           own box. -->
+      <form method="post" action="/admin/week/${week.id}/dish/use" id="usedish"></form>
       ${T.WEEKDAYS_MON_FIRST.map((wd) => html`
-        <form method="post" action="/admin/week/${week.id}/dish/${wd}/use" id="usedish-${wd}"></form>
         <form method="post" action="/admin/week/${week.id}/dish/${wd}/save" id="savedish-${wd}"></form>`)}
     </div>
 

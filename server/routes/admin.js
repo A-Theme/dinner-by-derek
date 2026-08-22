@@ -307,7 +307,15 @@ router.post('/week/:id/dish/:wd/save', (req, res) => {
     : `"${day.dish_name}" saved. You can put it on any day from now on.`);
 });
 
-router.post('/week/:id/dish/:wd/use', (req, res) => {
+/**
+ * Put a saved dish on a day. The day arrives in the body rather than the path.
+ *
+ * There used to be one of these controls inside every weekday box, which meant
+ * the page carried the whole saved list seven times over — 2,600 options and a
+ * quarter of a megabyte before the library had even finished growing. One
+ * picker with a day beside it says the same thing once.
+ */
+router.post('/week/:id/dish/use', (req, res) => {
   const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(Number(req.params.id));
   if (!week) return back(res, req, null, 'That week no longer exists.');
   const dish = DISH.byId(req.body.dish_id);
@@ -319,8 +327,8 @@ router.post('/week/:id/dish/:wd/use', (req, res) => {
     return back(res, req, null, `"${dish.name}" is a saved ${dish.kind}, not a main. `
       + 'Soups, salads and desserts go on the week, further down this page.');
   }
-  const date = weekdayDate(week, req.params.wd);
-  if (!date) return back(res, req, null, 'That isn\'t a day of the week.');
+  const date = weekdayDate(week, req.body.wd);
+  if (!date) return back(res, req, null, 'Pick which day it goes on first.');
 
   // The day may not exist yet — an empty weekday box has no row behind it
   // until something is entered. Putting a dish on it is something entered.

@@ -1696,7 +1696,7 @@ const PAST_DATE = T.addDays(today, -2);
 
     // The guard that matters: a soup must not become a day's featured dish.
     const soup = DISH.all({ kind: 'soup' }).find((d) => d.name === 'Aardvark Bisque');
-    r = await POST(`/admin/week/${weekId}/dish/mon/use`, { dish_id: String(soup.id) });
+    r = await POST(`/admin/week/${weekId}/dish/use`, { wd: 'mon', dish_id: String(soup.id) });
     const day = require('../server/db').db.prepare(
       'SELECT dish_name FROM service_days WHERE week_id = ? AND dish_name = ?')
       .get(weekId, 'Aardvark Bisque');
@@ -1708,6 +1708,27 @@ const PAST_DATE = T.addDays(today, -2);
       "SELECT name, ack FROM week_items WHERE week_id = ? AND kind = 'soup'").get(weekId);
     check('the soup lands on the week', wi && wi.name, 'Aardvark Bisque');
     check('unreviewed, as everything copied forward is', wi && wi.ack, 0);
+
+    // The single picker: one dish, one day, both from the body.
+    const zuluRow = DISH.all({ kind: 'main' }).find((d) => d.name === 'Zulu Beef');
+    r = await POST(`/admin/week/${weekId}/dish/use`, { wd: 'fri', dish_id: String(zuluRow.id) });
+    const friday = require('../server/db').db.prepare(
+      `SELECT sd.dish_name, sd.ack FROM service_days sd WHERE sd.week_id = ?
+         AND sd.dish_name = 'Zulu Beef'`).get(weekId);
+    check('the picker puts a main on the day it names', friday && friday.dish_name, 'Zulu Beef');
+    check('unreviewed on arrival', friday && friday.ack, 0);
+
+    r = await POST(`/admin/week/${weekId}/dish/use`, { dish_id: String(zuluRow.id) });
+    ok('with no day named, it asks for one rather than guessing',
+      r.status === 303 || r.status === 302, String(r.status));
+    const stray = require('../server/db').db.prepare(
+      "SELECT COUNT(*) n FROM service_days WHERE week_id = ? AND dish_name = 'Zulu Beef'").get(weekId).n;
+    check('and puts it nowhere', stray, 1);
+
+    r = await POST(`/admin/week/${weekId}/dish/use`, { wd: 'notaday', dish_id: String(zuluRow.id) });
+    const stillOne = require('../server/db').db.prepare(
+      "SELECT COUNT(*) n FROM service_days WHERE week_id = ? AND dish_name = 'Zulu Beef'").get(weekId).n;
+    check('a weekday that is not one changes nothing', stillOne, 1);
 
     r = await POST(`/admin/week/${weekId}/dessert/use`, { dish_id: String(soup.id) });
     const wd = require('../server/db').db.prepare(
