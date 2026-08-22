@@ -215,7 +215,7 @@ Whatever you pick, it must have:
 | **2 GB RAM minimum** | 4 GB is comfortable | The app resizes phone photos with `sharp`, holding the whole image in memory. [server/index.js](../server/index.js) caps an upload at 26 MB, and the comment there measures concurrent uploads moving the process 232 MB. A 512 MB box is the cheapest plan on most hosts and the kernel will kill it the first time Derek uploads three photos in a row. |
 | **20 GB disk minimum** | 40 GB is plenty | Photos accumulate. Nothing else here is large. |
 | **Ubuntu 24.04** | no control panel | LTS, supported to 2029. Every command below assumes it. |
-| **A North American location** | east coast for Ontario/Quebec | European datacentres are cheaper and add roughly 100ms to every page load. |
+| **A North American location** | east coast for Ontario/Quebec — Boston on Hostinger, Ashburn on Hetzner | European datacentres are cheaper and add roughly 100ms to every page load. |
 | **Root access over SSH** | | Any real VPS has this. Shared hosting does not, which is why shared hosting cannot run this app. |
 
 > **Do not pick an OS template that bundles a control panel** — hPanel,
@@ -225,13 +225,33 @@ Whatever you pick, it must have:
 
 ### On Hostinger
 
-**VPS → Buy new VPS → KVM 1** (1 vCPU, 4 GB RAM, 50 GB NVMe). During setup
-choose **Ubuntu 24.04 with no panel**, and paste your **public** SSH key
-(`id_ed25519.pub` — never the private one) when it offers.
+**VPS → Buy new VPS → KVM 1** — 1 vCPU, 4 GB RAM, 50 GB disk, 4 TB transfer.
+Choose the **Boston** data centre: Phoenix, Boston and Boston 2 are the only
+North American ones, and Boston is far and away the closest to Kitchener.
 
-Hostinger's headline price needs a 24-month prepayment and roughly doubles at
-renewal. The 12-month term costs a little more per month and commits you to
-one year instead of two.
+For the operating system pick **Ubuntu 24.04 LTS**, the plain entry with no
+suffix. The list is mostly templates with something preinstalled — CloudPanel,
+CyberPanel, HestiaCP, aaPanel, half a dozen others — and every one of them
+brings a web server that will fight nginx for port 80 in
+[step 9](#9-nginx-and-the-certificate). There is an Ubuntu 26.04 as well; 24.04
+is what the commands below are written against and is supported to 2029.
+
+Paste your **public** SSH key (`id_ed25519.pub` — never the private one) when
+it offers.
+
+Prices, read from the catalogue on 2026-08-19, in USD:
+
+| term | first term | renews at |
+|---|---|---|
+| monthly | $9.99/mo | $19.49/mo |
+| **12 months** | **$83.88 — $6.99/mo** | $155.88/yr — $12.99/mo |
+| 24 months | $155.76 — $6.49/mo | $287.76/2yr — $11.99/mo |
+
+**Take the 12-month term.** Two years buys a saving of fifty cents a month
+over one year, which is not worth doubling the commitment for a supper club
+that has not taken its first online order. Note the renewal in both cases: the
+second term is roughly double the first, so put a reminder in the calendar
+before it lands rather than discovering it on a statement.
 
 ### On Hetzner
 
@@ -244,8 +264,11 @@ alone.
 
 Note that Hetzner's cheap European plans — `CX22` and friends, 4 GB for less
 money — are not sold in the US locations, and the US prices rose sharply in
-June 2026. Compare the actual Ashburn price against Hostinger before assuming
-Hetzner is cheaper; as of writing they are within about a dollar a month.
+June 2026. `CPX11` in Ashburn was about $5.93/mo at the time of writing, flat,
+with no renewal step. Against Hostinger's KVM 1 that is a little cheaper in
+the first year and roughly half the price after it, in exchange for half the
+memory. Both clear what this app needs; the choice is between more headroom
+and a flatter bill.
 
 ---
 

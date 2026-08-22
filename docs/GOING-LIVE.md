@@ -30,7 +30,7 @@ starting — this is a snapshot, not a guarantee.
 
 | | state | matters because |
 |---|---|---|
-| Hosting | **none** | Nothing can run a Node process yet. Everything else waits on this. |
+| Hosting | **none** | Nothing can run a Node process yet. Everything else waits on this. The Hostinger account holds no VPS and no domains, checked against the API on 2026-08-19. |
 | Domain | `dinnerbyderek.ca`, in Cloudflare | DNS is ready; nothing points anywhere yet. |
 | `BASE_URL` | `http://localhost:3000` | QR codes point at a placeholder, cookies are not secure, email links are dead. |
 | `NODE_ENV` | `development` | Static caching off, and the boot warnings are tuned for a laptop. |
@@ -58,9 +58,14 @@ optional; the optional things live in Part 2.
 
 ### 1. Get the server up
 
-Follow [docs/DEPLOY.md](DEPLOY.md) end to end. Hostinger KVM 1, Ubuntu 24.04
-**with no control panel**, 12-month term. Roughly an hour, most of it waiting
-on DNS.
+Follow [docs/DEPLOY.md](DEPLOY.md) end to end. Hostinger **KVM 1**, **Boston**
+data centre, **Ubuntu 24.04 LTS with no control panel**, **12-month term**
+($83.88, about $6.99/mo; it renews at roughly double, so put that in the
+calendar now). Roughly an hour, most of it waiting on DNS.
+
+Boston is the pick because Phoenix, Boston and Boston 2 are the only North
+American data centres Hostinger has, and Boston is the closest to Kitchener by
+a long way.
 
 Stop at the end of step 11 and come back here. Do not publish anything yet.
 
