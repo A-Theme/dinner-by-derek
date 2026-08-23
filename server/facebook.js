@@ -125,6 +125,41 @@ function consumeState(state) {
   return true;
 }
 
+/* --- The Pages a callback came back with ---------------------------------
+ * Between the OAuth callback and the owner choosing a Page, the Page access
+ * tokens have to live somewhere. They used to live in the page itself, one
+ * hidden input per Page, and travel back up in the POST body.
+ *
+ * Nothing was leaking them — the page is admin-only, no-store, and the CSP
+ * refuses inline script — but a long-lived credential in the DOM is reachable
+ * by anything with a foothold in the browser, and there was no reason for it to
+ * be there. The form only ever needed to say WHICH Page was chosen.
+ *
+ * Held in memory rather than in the database, deliberately: this is the one
+ * place a token exists in the clear, it is needed for about as long as it takes
+ * to click a button, and a process restart losing it costs a reconnect. Nothing
+ * is written to disk, so nothing survives to be found in a backup.
+ */
+const PENDING_TTL_MS = 15 * 60 * 1000;
+const pending = new Map();
+
+function holdPages(payload) {
+  const id = crypto.randomBytes(24).toString('hex');
+  const now = Date.now();
+  for (const [k, v] of pending) if (now - v.at > PENDING_TTL_MS) pending.delete(k);
+  pending.set(id, { at: now, ...payload });
+  return id;
+}
+
+/** The held Pages, and they are only readable once. */
+function takePages(id) {
+  const held = pending.get(String(id || ''));
+  if (!held) return null;
+  pending.delete(String(id));
+  if (Date.now() - held.at > PENDING_TTL_MS) return null;
+  return held;
+}
+
 async function graph(pathname, params, method = 'GET', body = null) {
   const u = new URL(`${GRAPH()}${pathname}`);
   if (method === 'GET') for (const [k, v] of Object.entries(params || {})) u.searchParams.set(k, v);
@@ -344,6 +379,7 @@ async function testPost(pageId, pageToken) {
 module.exports = {
   connection, saveConnection, disconnect, markStale,
   beginAuth, consumeState, completeAuth, redirectUri, testPost,
+  holdPages, takePages,
   buildPostText, postImageFor, manualAdapter, pageAdapter, decrypt,
   GROUPS_SUPPORTED: false,
   scopes: config.facebook.scopes,

@@ -228,19 +228,36 @@ async function lateDecisionEmail(order, lines, decision) {
   });
 }
 
+/**
+ * `days` may be zero or negative: the check that calls this now also fires for a
+ * token that has already died, which it used to pass over in silence. Saying
+ * "expires in -3 days" would be worse than the silence, so an expired
+ * connection gets its own sentence and its own subject line.
+ */
 async function tokenExpiryEmail(days, pageName) {
-  const html = shell('Facebook connection expiring', `
-    <p>The Facebook connection for <strong>${esc(pageName)}</strong> expires in
-      ${days} day${days === 1 ? '' : 's'}.</p>
-    <p>Reconnect it now so publishing doesn't fail on a Sunday night.</p>
+  const gone = days <= 0;
+  const when = gone
+    ? 'has expired'
+    : `expires in ${days} day${days === 1 ? '' : 's'}`;
+  const subject = gone
+    ? 'Facebook connection has expired'
+    : `Facebook connection expires in ${days} days`;
+  const why = gone
+    ? 'Publishing to the Page will fail until it is reconnected. Copy post text on '
+      + 'the week page still works in the meantime.'
+    : 'Reconnect it now so publishing doesn\'t fail on a Sunday night.';
+  const html = shell(gone ? 'Facebook connection expired' : 'Facebook connection expiring', `
+    <p>The Facebook connection for <strong>${esc(pageName)}</strong> ${when}.</p>
+    <p>${why}</p>
     <p><a href="${config.baseUrl}/admin/settings"
       style="background:${palette.tan};color:${palette.espresso};padding:10px 16px;
       border-radius:6px;text-decoration:none;display:inline-block">Reconnect Facebook</a></p>`);
   return send({
     to: owners(),
-    subject: `Facebook connection expires in ${days} days`,
+    subject,
     html,
-    text: `The Facebook connection for ${pageName} expires in ${days} days. Reconnect at ${config.baseUrl}/admin/settings`,
+    text: `The Facebook connection for ${pageName} ${when}. ${why} `
+      + `Reconnect at ${config.baseUrl}/admin/settings`,
   });
 }
 

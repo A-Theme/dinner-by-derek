@@ -218,13 +218,21 @@ router.post('/other-options/:id/duplicate', (req, res) => {
 router.get('/orders', (req, res) => {
   const where = [];
   const args = [];
-  if (req.query.date) { where.push('service_date = ?'); args.push(req.query.date); }
-  if (req.query.method) { where.push('method = ?'); args.push(req.query.method); }
-  if (req.query.status) { where.push('status = ?'); args.push(req.query.status); }
-  if (req.query.location) { where.push('location_id = ?'); args.push(Number(req.query.location)); }
-  if (req.query.q) {
+  /* Read through X.one, because a duplicated parameter arrives as an array and
+     better-sqlite3 will not bind one — ?date=a&date=b was a 500 on a page whose
+     whole job is showing a list. Last one wins. */
+  const fDate = X.one(req.query.date);
+  const fMethod = X.one(req.query.method);
+  const fStatus = X.one(req.query.status);
+  const fLocation = X.one(req.query.location);
+  const fQ = X.one(req.query.q);
+  if (fDate) { where.push('service_date = ?'); args.push(fDate); }
+  if (fMethod) { where.push('method = ?'); args.push(fMethod); }
+  if (fStatus) { where.push('status = ?'); args.push(fStatus); }
+  if (fLocation) { where.push('location_id = ?'); args.push(Number(fLocation)); }
+  if (fQ) {
     where.push("(name LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\')");
-    args.push(X.likeContains(req.query.q), X.likeContains(req.query.q));
+    args.push(X.likeContains(fQ), X.likeContains(fQ));
   }
   const sql = `SELECT * FROM orders ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
     ORDER BY CASE status WHEN 'late_request' THEN 0 ELSE 1 END, service_date DESC, id DESC LIMIT 400`;
@@ -249,27 +257,27 @@ router.get('/orders', (req, res) => {
       <div class="dl-row">
         <select name="date" style="flex:1 1 150px">
           <option value="">All service days</option>
-          ${dates.map((d) => html`<option value="${d.service_date}"${req.query.date === d.service_date ? ' selected' : ''}>${T.fmtDayShort(d.service_date, tz())}</option>`)}
+          ${dates.map((d) => html`<option value="${d.service_date}"${fDate === d.service_date ? ' selected' : ''}>${T.fmtDayShort(d.service_date, tz())}</option>`)}
         </select>
         <select name="method" style="flex:1 1 120px">
           <option value="">Pickup and delivery</option>
-          <option value="pickup"${req.query.method === 'pickup' ? ' selected' : ''}>Pickup only</option>
-          <option value="delivery"${req.query.method === 'delivery' ? ' selected' : ''}>Delivery only</option>
+          <option value="pickup"${fMethod === 'pickup' ? ' selected' : ''}>Pickup only</option>
+          <option value="delivery"${fMethod === 'delivery' ? ' selected' : ''}>Delivery only</option>
         </select>
         <select name="location" style="flex:1 1 150px">
           <option value="">All locations</option>
-          ${M.activeLocations().map((l) => html`<option value="${l.id}"${Number(req.query.location) === l.id ? ' selected' : ''}>${l.name}</option>`)}
+          ${M.activeLocations().map((l) => html`<option value="${l.id}"${Number(fLocation) === l.id ? ' selected' : ''}>${l.name}</option>`)}
         </select>
-        <input type="text" name="q" placeholder="Name or phone" value="${req.query.q || ''}" style="flex:1 1 150px">
+        <input type="text" name="q" placeholder="Name or phone" value="${fQ || ''}" style="flex:1 1 150px">
         <button class="btn btn--secondary" type="submit">Filter</button>
       </div>
       <p class="also">Downloads below use the filters you've set here.</p>
       <div class="dl-row">
         <a class="btn btn--secondary" href="/admin/export/orders.csv?${qs}">Orders CSV</a>
-        ${req.query.date ? html`
-          <a class="btn btn--secondary" href="/admin/sheet/kitchen/${req.query.date}">Kitchen sheet</a>
-          <a class="btn btn--secondary" href="/admin/sheet/pickup/${req.query.date}">Pickup sheet</a>
-          <a class="btn btn--secondary" href="/admin/sheet/delivery/${req.query.date}">Delivery run</a>` : ''}
+        ${fDate ? html`
+          <a class="btn btn--secondary" href="/admin/sheet/kitchen/${fDate}">Kitchen sheet</a>
+          <a class="btn btn--secondary" href="/admin/sheet/pickup/${fDate}">Pickup sheet</a>
+          <a class="btn btn--secondary" href="/admin/sheet/delivery/${fDate}">Delivery run</a>` : ''}
       </div>
     </form>
 

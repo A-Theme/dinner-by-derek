@@ -64,16 +64,38 @@ function likeContains(q) {
   return `%${String(q).replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 }
 
+/**
+ * One value out of a query parameter that might be several.
+ *
+ * Express turns `?date=a&date=b` into an array, and better-sqlite3 refuses to
+ * bind one — "Too many parameter values were provided" — so a duplicated
+ * parameter reached the owner as a 500 on a page that was only ever going to
+ * show a list. Both the orders screen and this file's CSV read the same query
+ * string, so both had it.
+ *
+ * Last one wins, which is what a browser does with a duplicated form field, and
+ * leaves a single value behaving exactly as before.
+ */
+function one(v) {
+  if (v === undefined || v === null) return v;
+  return String(Array.isArray(v) ? v[v.length - 1] : v);
+}
+
 function ordersCsv(filters = {}) {
   const where = [];
   const args = [];
-  if (filters.date) { where.push('o.service_date = ?'); args.push(filters.date); }
-  if (filters.method) { where.push('o.method = ?'); args.push(filters.method); }
-  if (filters.status) { where.push('o.status = ?'); args.push(filters.status); }
-  if (filters.location) { where.push('o.location_id = ?'); args.push(Number(filters.location)); }
-  if (filters.q) {
+  const date = one(filters.date);
+  const method = one(filters.method);
+  const status = one(filters.status);
+  const location = one(filters.location);
+  const q = one(filters.q);
+  if (date) { where.push('o.service_date = ?'); args.push(date); }
+  if (method) { where.push('o.method = ?'); args.push(method); }
+  if (status) { where.push('o.status = ?'); args.push(status); }
+  if (location) { where.push('o.location_id = ?'); args.push(Number(location)); }
+  if (q) {
     where.push("(o.name LIKE ? ESCAPE '\\' OR o.phone LIKE ? ESCAPE '\\')");
-    args.push(likeContains(filters.q), likeContains(filters.q));
+    args.push(likeContains(q), likeContains(q));
   }
 
   const rows = db.prepare(`
@@ -256,4 +278,4 @@ function restore(json) {
   };
 }
 
-module.exports = { ordersCsv, contactsCsv, backup, restore, filename, csv, money, likeContains };
+module.exports = { ordersCsv, contactsCsv, backup, restore, filename, csv, money, likeContains, one };

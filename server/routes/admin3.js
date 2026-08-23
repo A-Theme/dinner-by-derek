@@ -352,8 +352,11 @@ router.get('/facebook/callback', async (req, res) => {
     if (!pages.length) {
       return back(res, req, null, 'That Facebook account doesn\'t administer any Pages, so there\'s nowhere to post.');
     }
-    // Held in the signed admin session only long enough to choose a Page.
-    req.session = req.session || {};
+    /* The Pages stay on the server until one is chosen. The form carries the
+       id of the held set and which Page was picked — never the Page access
+       token itself, which used to ride in a hidden input and come back up in
+       the POST body for no reason other than that it was easy. */
+    const choice = FB.holdPages({ userName, pages, expiresAt });
     const body = html`
       <h1>Choose the Page to post to</h1>
       <p>Connected as <strong>${userName}</strong>.</p>
@@ -361,15 +364,13 @@ router.get('/facebook/callback', async (req, res) => {
         <div class="card">
           <h2>${p.name}</h2>
           <form method="post" action="/admin/facebook/select">
+            <input type="hidden" name="choice" value="${choice}">
             <input type="hidden" name="page_id" value="${p.id}">
-            <input type="hidden" name="page_name" value="${p.name}">
-            <input type="hidden" name="token" value="${p.access_token}">
-            <input type="hidden" name="user_name" value="${userName}">
-            <input type="hidden" name="expires_at" value="${expiresAt}">
             <button class="btn btn--primary" type="submit" name="action" value="use">Post to this Page</button>
             <button class="btn btn--secondary" type="submit" name="action" value="test">Test post to this Page</button>
           </form>
-        </div>`)}`;
+        </div>`)}
+      <p class="also">Pick one within fifteen minutes, or start again from Settings.</p>`;
     res.type('html').send(String(V.shell({ title: 'Choose a Page', body, current: 'settings' })));
   } catch (e) {
     back(res, req, null, 'Facebook wouldn\'t complete the connection. Try again from Settings.');
@@ -377,14 +378,26 @@ router.get('/facebook/callback', async (req, res) => {
 });
 
 router.post('/facebook/select', async (req, res) => {
-  const { page_id, page_name, token, user_name, expires_at, action } = req.body;
+  const { choice, page_id, action } = req.body;
+  /* Read once and gone. An expired or already-used hold is the ordinary case of
+     a form left open over lunch, not a fault, so it says what to do next. */
+  const held = FB.takePages(choice);
+  if (!held) {
+    return back(res, req, null,
+      'That connection took too long to finish, so it was dropped. Start again from Settings.');
+  }
+  const chosen = held.pages.find((p) => String(p.id) === String(page_id));
+  if (!chosen) {
+    return back(res, req, null, 'That Page wasn\'t one of the ones offered. Start again from Settings.');
+  }
+  const page_name = chosen.name;
   try {
     if (action === 'test') {
-      await FB.testPost(page_id, token);
+      await FB.testPost(chosen.id, chosen.access_token);
     }
     FB.saveConnection({
-      fbUserName: user_name, pageId: page_id, pageName: page_name,
-      token, scopes: FB.scopes, expiresAt: expires_at,
+      fbUserName: held.userName, pageId: chosen.id, pageName: chosen.name,
+      token: chosen.access_token, scopes: FB.scopes, expiresAt: held.expiresAt,
     });
     res.redirect(303, `/admin/settings?ok=${encodeURIComponent(
       action === 'test'

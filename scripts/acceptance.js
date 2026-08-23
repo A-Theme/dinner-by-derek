@@ -1815,6 +1815,86 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('but only the customer\'s copy of it', /forCustomer/.test(mailerSrc));
 }
 
+/* --- A parameter sent twice is not a server fault --------------------------
+   Express turns ?date=a&date=b into an array, better-sqlite3 refuses to bind
+   one, and the owner got a 500 on a page whose whole job is showing a list.
+   Both the orders screen and the CSV read the same query string. */
+{
+  const X = require('../server/exports');
+  check('one value passes through unchanged', X.one('2026-08-25'), '2026-08-25');
+  check('the last of several wins', X.one(['a', 'b', 'c']), 'c');
+  check('an absent one stays absent', X.one(undefined), undefined);
+
+  let threw = null;
+  try { X.ordersCsv({ date: ['2026-08-25', '2026-08-26'] }); } catch (e) { threw = e; }
+  ok('a duplicated date does not throw out of the CSV', !threw, threw && threw.message);
+
+  threw = null;
+  try { X.ordersCsv({ q: ['bob', 'jane'], method: ['pickup', 'delivery'] }); }
+  catch (e) { threw = e; }
+  ok('and neither do the other filters', !threw, threw && threw.message);
+
+  // The orders screen reads the same values, so it must read them the same way.
+  const admin2Src = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'admin2.js'), 'utf8');
+  ok('the orders screen binds nothing straight off req.query',
+    !/args\.push\(req\.query\./.test(admin2Src));
+}
+
+/* --- A token that has already died is the urgent case ----------------------
+   The warning fired only for a token with time left on it, so a machine off
+   over a holiday — or a token that arrived with under a week on it — meant no
+   email at all, ever. The subject line is read back off the log, because
+   without SMTP configured that is where send() puts it. */
+{
+  const mailer = require('../server/mailer');
+  const said = [];
+  const realWarn = console.warn;
+  console.warn = (...a) => said.push(a.join(' '));
+  try {
+    mailer.tokenExpiryEmail(5, 'Dinner By Derek');
+    mailer.tokenExpiryEmail(-3, 'Dinner By Derek');
+    mailer.tokenExpiryEmail(0, 'Dinner By Derek');
+  } finally { console.warn = realWarn; }
+
+  ok('a token with days left still says how many', /expires in 5 days/.test(said[0]));
+  ok('an expired one says it has expired', /has expired/.test(said[1]));
+  ok('and does not offer a negative countdown', !/-3/.test(said[1]));
+  ok('the day it dies counts as expired', /has expired/.test(said[2]));
+
+  /* The condition itself, not any mention of it — the comment above it quotes
+     the old one, which is exactly the sort of thing a looser pattern matches. */
+  const indexSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'index.js'), 'utf8');
+  ok('the check fires on an expired token', /if \(left <= WARN_MS\)/.test(indexSrc));
+  ok('and no longer requires time remaining', !/if \(left > 0/.test(indexSrc));
+}
+
+/* --- A Page token has no reason to be in the page --------------------------
+   Between the OAuth callback and the owner picking a Page, the tokens were
+   rendered one per hidden input and posted back. Nothing was leaking them, and
+   nothing needed them there either: the form only has to say which Page. */
+{
+  const FB = require('../server/facebook');
+  const held = { userName: 'Derek', expiresAt: '2026-12-01', pages: [
+    { id: '1', name: 'Dinner By Derek', access_token: 'SECRET-TOKEN-VALUE' },
+    { id: '2', name: 'Other Page', access_token: 'SECOND-TOKEN' },
+  ] };
+  const id = FB.holdPages(held);
+  ok('the hold gives back an unguessable id', typeof id === 'string' && id.length >= 32);
+
+  const got = FB.takePages(id);
+  check('and the pages come back by it', got.pages.length, 2);
+  check('with the token that never went to the browser', got.pages[0].access_token, 'SECRET-TOKEN-VALUE');
+  check('reading it a second time gives nothing', FB.takePages(id), null);
+  check('and an id nobody issued gives nothing', FB.takePages('deadbeef'), null);
+  check('nor does a missing one', FB.takePages(undefined), null);
+
+  const admin3Src = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'admin3.js'), 'utf8');
+  ok('the chooser no longer renders a token into the form',
+    !/name="token"/.test(admin3Src));
+  ok('and does not interpolate one into markup either',
+    !/value="\$\{p\.access_token\}"/.test(admin3Src));
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {

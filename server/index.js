@@ -258,8 +258,20 @@ function checkTokenExpiry() {
     const row = db.prepare('SELECT * FROM fb_connection WHERE id = 1').get();
     if (!row || !row.expires_at || row.warned_at) return;
     const left = new Date(row.expires_at).getTime() - Date.now();
-    if (left > 0 && left <= WARN_MS) {
-      const days = Math.max(1, Math.round(left / 86_400_000));
+    /* Inside the window, or already past it.
+     *
+     * The condition used to be `left > 0 && left <= WARN_MS`, which says nothing
+     * at all once the token has actually died. Seven days is a narrow target for
+     * a job that only runs while the server does: a machine off over a holiday,
+     * or a token that arrives with less than a week left on it, and the warning
+     * never fires — and then never fires again, because the only branch that
+     * could send it needs time remaining. The owner finds out when a Sunday
+     * publish fails.
+     *
+     * Expired is the more urgent of the two and got the quieter treatment. Both
+     * send now, both stamp warned_at, so it stays one email either way. */
+    if (left <= WARN_MS) {
+      const days = Math.round(left / 86_400_000);
       mailer.tokenExpiryEmail(days, row.page_name || 'your Page')
         .catch((e) => console.error('[email] token warning', e));
       db.prepare('UPDATE fb_connection SET warned_at = ? WHERE id = 1')
