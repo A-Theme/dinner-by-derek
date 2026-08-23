@@ -25,7 +25,7 @@ question that is deliberately left open until there is evidence to settle it.
 
 ## Where things stand today
 
-Recorded 2026-08-19 from the live database and `.env`, re-checked 2026-08-22.
+Read from the live database and `.env` on 2026-08-23.
 Check it again before starting — this is a snapshot, not a guarantee.
 
 | | state | matters because |
@@ -36,14 +36,14 @@ Check it again before starting — this is a snapshot, not a guarantee.
 | `NODE_ENV` | `development` | Static caching off, and the boot warnings are tuned for a laptop. |
 | Admin password | **plaintext**, not hashed | `ADMIN_PASSWORD_HASH` is empty. Fine on a laptop, not on a public server. |
 | `TRUST_PROXY` | unset | Correct until nginx exists. Becomes `1` then. |
-| Weeks | one draft, **zero service days** | Publishing it shows customers an empty menu. |
+| Weeks | one draft, **one service day** | Not enough to publish as a week anyone would want to read. |
 | Soup / salad | none | |
-| Standing items | 6, **all unreviewed**; 3 have no description | Other Options is invisible to customers until these are written and ticked. |
-| Saved dishes | 0 | The Load picker is disabled until this has something in it. |
-| Orders | 0 | Nothing to preserve. The database can be rebuilt freely right now. |
+| Standing items | 6, **all unreviewed**; 3 have no description | Other Options is invisible to customers until these are written and ticked. **This is the one blocking item on the list.** |
+| Saved dishes | **817** | A catalogue was imported. The Load picker is live and long, which is why it now sorts by how often a dish has run. |
+| Orders | 0 | Nothing to preserve. The database can still be rebuilt freely. |
 | Locations | 1 — Waterloo, home kitchen | |
-| Email | off | Orders are recorded and shown in the dashboard; nothing is sent. |
-| Payments | **table not created yet** | The reconciliation feature exists in the code; its table appears the first time the app boots against this database. Nothing to do — noted so an empty Payments screen is not alarming. |
+| Email | off | Orders are recorded and shown in the dashboard; nothing is sent. Also the reason a customer sees the e-transfer reference only once, on screen — see [payments](#knowing-which-transfer-paid-for-what). |
+| Payments | table exists, **0 rows** | The app has booted against this database, so the table is there. Empty is the correct state until a transfer arrives. |
 | Facebook | not connected | Manual copy-and-paste publishing works without it. |
 
 **The freedom in that table is worth using.** Zero orders means nothing is
@@ -91,12 +91,16 @@ before this is public".
 
 ### 3. Build a real week
 
-The draft in the database has no service days. It cannot be published into
-anything a customer would want to see.
+The draft in the database has a single service day on it. That is not a week
+anyone would want to read, and it is not what to publish.
 
 In the dashboard: **This Week** → set the week start → add the service dates →
 fill each day's featured dish with name, description and prices → add soup and
 salad if there are any this week.
+
+The dish library now holds 817 saved dishes, so **Put a saved dish on…** at the
+top of This Week will do most of the typing for you. It sorts by how often each
+dish has run, which is empty ordering today and useful ordering in a month.
 
 **Do not publish yet.** The next step is what makes publishing legal.
 
@@ -234,13 +238,16 @@ Full reasoning in [DEPLOY.md](DEPLOY.md#optional-the-orange-cloud).
 
 ## Part 3 — Desktop or phone: measure, do not guess
 
-**This is the open question, and it should stay open for about a month.**
+**This was left open deliberately, and then answered anyway.** The day editor
+got a phone layout in `fdcc210` before a single real week had been built on
+either device — reorder below 760px, keep the desktop form above it. That may
+well be right. It was reasoned rather than measured, and the measurement it
+was waiting for is still worth taking.
 
 Three controls went missing in one week — the Save button, the Load picker,
 and the camera button. All three were present and working; all three lost to
 something louder next to them, and all three losses were specific to a narrow
-screen. Fixing the editor properly means knowing which screen matters, and
-right now neither of us knows.
+screen. Shaping the editor properly means knowing which screen matters.
 
 Guessing is expensive in both directions. Optimise for the phone and a desktop
 week-build gets a cramped, over-collapsed form. Optimise for the desktop and
@@ -286,7 +293,10 @@ answer.
 
 ## Part 4 — The day-editor pass
 
-Do this **after** Part 3 has an answer, not before.
+**Largely done, ahead of the evidence.** `fdcc210` gave the editor a phone
+layout, `b26f152` stopped the saved-dish picker being drawn seven times per
+page, and the Load and camera misses are fixed. What follows is what remains,
+and what to check once Part 3 has an answer.
 
 ### The problem, stated once
 
@@ -301,9 +311,9 @@ a loud unimportant one:
 
 | control | what beat it | status |
 |---|---|---|
-| Save "…" to my dishes | buried below the editor, inside a collapsed box | still true |
-| Load / "Use it" | hid itself entirely when the library was empty | fixed, `141a2c1` |
-| Take photo | a box 3× its size, above it, saying "Tap to choose a photo" | fixed, `84cdff4` |
+| Save "…" to my dishes | buried below the editor, inside a collapsed box | **still true** |
+| Load / "Use it" | hid itself entirely when the library was empty | fixed, `141a2c1`; redrawn once per page in `b26f152` |
+| Take photo | a box 3× its size, above it, saying "Tap to choose a photo" | fixed, `84cdff4`, and the real cause in `ef60d78` |
 
 ### Work that pays off either way
 
