@@ -25,6 +25,11 @@ process.env.UPLOAD_DIR = path.join(scratch, 'uploads');
 process.env.PORT = String(PORT);
 process.env.BASE_URL = `http://127.0.0.1:${PORT}`;
 process.env.ADMIN_PASSWORD = 'flow-test-password';
+/* And no hash, whatever the real .env holds. config.js prefers the hash when
+ * both are set, so a developer who has hashed their own password would other-
+ * wise have every sign-in here refused against a password this suite cannot
+ * know. The hashed branch is exercised deliberately further down instead. */
+process.env.ADMIN_PASSWORD_HASH = '';
 process.env.SESSION_SECRET = 'flow-test-secret';
 process.env.NODE_ENV = 'development';        // keeps the cookie non-secure over http
 process.env.SMTP_HOST = '';                  // email off; orders must survive that

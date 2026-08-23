@@ -910,7 +910,11 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     return `${payload}.${crypto.createHmac('sha256', key).update(payload).digest('base64url')}`;
   };
   const secret = process.env.SESSION_SECRET;
-  const password = process.env.ADMIN_PASSWORD;
+  /* Whatever the password is stored as: the hash where there is one, the
+   * plaintext otherwise. Reading ADMIN_PASSWORD directly held only in the
+   * plaintext setup, and started failing the moment .env moved to a hash —
+   * which is the configuration the server is supposed to run in. */
+  const password = require('../server/config').adminVerifier;
 
   ok('a session signed under the current password is accepted',
     auth.verify(sessionFor(secret, password)));
