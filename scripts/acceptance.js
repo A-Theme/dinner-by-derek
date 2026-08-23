@@ -2116,7 +2116,7 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
    uses and throws on anything else. A generator that quietly drops a construct
    produces a page missing a paragraph nobody notices is missing. */
 {
-  const H = require('./handoff');
+  const H = require('./artifact-page');
 
   /* Escaping first, because this ships to somebody else's browser. */
   check('angle brackets in prose are escaped',
@@ -2136,6 +2136,39 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   const throws = (md) => {
     try { H.render(md); return null; } catch (e) { return e.message; }
   };
+  /* CRLF. Some documents here are stored with \r\n, and `.` does not match \r —
+     so `(.*)$` failed on every heading, the line fell through to the paragraph
+     branch, and that branch refused it without consuming it. An infinite loop,
+     which presented as the build hanging rather than as anything about newlines. */
+  check('a CRLF document renders the same as an LF one',
+    H.render('# T\r\n\r\npara\r\n').join('|'), H.render('# T\n\npara\n').join('|'));
+
+  /* Front matter goes through the same normalisation, because it did not:
+     startsWith('---' + newline) is false for a CRLF file, so the block was
+     silently treated as body text and the figures strip stopped appearing. */
+  const crlf = ['---', 'title: X', '---', '', 'body', ''].join(String.fromCharCode(13, 10));
+  check('front matter is read from a CRLF file', H.frontMatter(crlf).meta.title, 'X');
+  check('and the body comes back without it', H.frontMatter(crlf).body.trim(), 'body');
+
+  /* An indented line is the nearest thing to an unrenderable one: every other
+     shape is claimed by the paragraph branch, which is why the guard beneath it
+     is a net rather than something a document can reach. */
+  ok('an indented line outside a list is named, not spun on',
+    /no code blocks/.test(throws('    stray')));
+
+  /* Code spans were parked as " 0 ", which collided with ordinary numbers: a
+     sentence counting to 8 restored a span that did not exist. */
+  check('a number in prose is not mistaken for a parked code span',
+    H.inline('eight tries in 8 minutes and `npm test`', 1),
+    'eight tries in 8 minutes and <code>npm test</code>');
+
+  /* Fenced blocks, which the operational guides are mostly made of. */
+  check('a fence becomes a pre block',
+    H.render('```bash\nnpm test\n```').join(''), '<pre><code>npm test</code></pre>');
+  ok('markdown inside a fence stays literal',
+    /\*\*not bold\*\*/.test(H.render('```\n**not bold**\n```').join('')));
+  ok('an unclosed fence is refused', /never closed/.test(throws('```\nx')));
+
   ok('an unclosed backtick is refused', /unclosed backtick/.test(throws('a `b')));
   ok('unbalanced bold is refused', /unbalanced/.test(throws('a **b')));
   ok('a table with no divider is refused', /divider/.test(throws('| a | b |\n| c | d |')));
@@ -2164,7 +2197,10 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
      is for. This is the check that fails if the markdown grows a construct the
      renderer does not know. */
   let built = null, buildErr = null;
-  try { built = H.build(); } catch (e) { buildErr = e; }
+  try {
+    built = H.buildPage(fs.readFileSync(
+      path.join(__dirname, '..', 'docs', 'HANDOFF.md'), 'utf8'));
+  } catch (e) { buildErr = e; }
   ok('docs/HANDOFF.md builds', !buildErr, buildErr && buildErr.message);
   if (built) {
     ok('the page carries the shared theme', /--parchment/.test(built));

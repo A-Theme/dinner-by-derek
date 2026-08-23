@@ -15,7 +15,8 @@
     "contrast": "node scripts/contrast.js",
     "menu-history": "node scripts/import-facebook-menus.js",
     "ledger": "node scripts/ledger.js",
-    "handoff": "node scripts/handoff.js",
+    "pages": "node scripts/pages.js",
+    "handoff": "node scripts/pages.js handoff",
     "test": "node scripts/acceptance.js && node scripts/flow.js",
     "acceptance": "node scripts/acceptance.js",
     "flow": "node scripts/flow.js"
