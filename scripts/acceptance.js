@@ -2169,6 +2169,44 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     /\*\*not bold\*\*/.test(H.render('```\n**not bold**\n```').join('')));
   ok('an unclosed fence is refused', /never closed/.test(throws('```\nx')));
 
+  /* The three things a page needed that markdown had no way to say. Without
+     them, generating Going Live would have been a downgrade on the hand-written
+     page it replaced — no contents list, no status chips, no callouts. */
+  {
+    const doc = H.render([
+      '# T', '', '<!-- toc -->', '', '## First bit', '',
+      '> [!NOTE] Use this while it lasts', '> Nothing is precious yet.', '',
+      '## Second bit', '', '| Thing | State |', '|---|---|',
+      '| Hosting | {{todo:none}} |', '| Domain | {{ok:ready}} |', '',
+      '> [!WARNING] One to avoid', '> Do not do that.',
+    ].join('\n')).join('\n');
+
+    ok('a contents list is built from the headings', /<nav class="toc">/.test(doc));
+    check('and lists every section', (doc.match(/<li><a href="#/g) || []).length, 2);
+    ok('headings carry the anchor it points at', /id="first-bit"/.test(doc));
+
+    ok('a NOTE becomes a callout', /<div class="note">/.test(doc));
+    ok('with its label as the heading', /<h2>Use this while it lasts<\/h2>/.test(doc));
+    ok('a WARNING becomes the flagged variant', /<div class="note note--flag">/.test(doc));
+
+    ok('a chip renders as a chip', /<span class="tag todo">none<\/span>/.test(doc));
+    ok('and knows its other state', /<span class="tag ok">ready<\/span>/.test(doc));
+  }
+
+  ok('an unknown chip kind is refused', /is not a chip/.test(throws('{{bogus:x}}')));
+  ok('a bare block quote is refused, pointing at the callout syntax',
+    /\[!NOTE\]/.test(throws('> just quoting')));
+  ok('an empty callout is refused', /nothing in it/.test(throws('> [!NOTE]')));
+
+  /* The contents list is emitted before the first section, and the masthead
+     used to keep only the title and the paragraphs — so a document could ask
+     for one and silently not get one. */
+  {
+    const page = H.buildPage('# T\n\nstand\n\n<!-- toc -->\n\n## A section\n\nbody\n');
+    ok('a contents list survives into the page', /<nav class="toc">/.test(page));
+    ok('and sits below the masthead', page.indexOf('</header>') < page.indexOf('<nav class="toc">'));
+  }
+
   ok('an unclosed backtick is refused', /unclosed backtick/.test(throws('a `b')));
   ok('unbalanced bold is refused', /unbalanced/.test(throws('a **b')));
   ok('a table with no divider is refused', /divider/.test(throws('| a | b |\n| c | d |')));
@@ -2181,7 +2219,8 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     + '| a | b |\n|---|---|\n| 1 | 2 |\n');
   const all = blocks.join('\n');
   ok('an h1 is the title', /<h1>T<\/h1>/.test(all));
-  ok('an h2 takes the section class', /<h2 class="section">S<\/h2>/.test(all));
+  ok('an h2 takes the section class and an anchor',
+    /<h2 class="section" id="s">S<\/h2>/.test(all));
   ok('a dash list becomes the findings list', /<ul class="findings">/.test(all));
   ok('a numbered list becomes the steps list', /<ol class="steps">/.test(all));
   ok('a table is wrapped so it can scroll', /<div class="tablewrap">/.test(all));

@@ -68,6 +68,19 @@ function inline(src, lineNo) {
     throw new Error(`line ${lineNo}: an unclosed backtick — code spans must be paired`);
   }
 
+  /* A status chip: {{ok:ready}} or {{todo:localhost}}. Written this way because
+   * a state table wants the state to read as a state — "none", "localhost",
+   * "hashed" — rather than as another sentence, and because a bare word in a
+   * cell cannot carry that on its own. Two braces so ordinary prose does not
+   * trip it. An unknown kind is refused rather than styled as nothing. */
+  const KINDS = ['ok', 'todo', 'warn'];
+  s = s.replace(/\{\{([a-z]+):([^}]+)\}\}/g, (_, kind, label) => {
+    if (!KINDS.includes(kind)) {
+      throw new Error(`line ${lineNo}: "${kind}" is not a chip — use ${KINDS.join(', ')}`);
+    }
+    return `<span class="tag ${kind}">${label.trim()}</span>`;
+  });
+
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, text, href) =>
     `<a href="${href}">${text}</a>`);
   s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -123,6 +136,14 @@ function frontMatter(raw) {
  * the findings list, an ordered one the numbered steps, and a table is wrapped
  * so a wide one scrolls inside itself rather than taking the page with it.
  */
+/** A heading turned into an anchor a contents list can point at. */
+function slug(text) {
+  return String(text).toLowerCase()
+    .replace(/`[^`]*`/g, ' ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '') || 'section';
+}
+
 function render(md) {
   /* Carriage returns first. Some documents in this repo are stored CRLF, and in
    * a regular expression `.` does not match \r — so `(.*)$` failed on every
@@ -166,7 +187,7 @@ function render(md) {
       const level = h[1].length;
       const text = inline(h[2], no);
       if (level === 1) out.push(`<h1>${text}</h1>`);
-      else if (level === 2) out.push(`<h2 class="section">${text}</h2>`);
+      else if (level === 2) out.push(`<h2 class="section" id="${slug(h[2])}">${text}</h2>`);
       else out.push(`<h3 class="sub">${text}</h3>`);
       i++;
       continue;
@@ -220,8 +241,50 @@ function render(md) {
     if (/^\s+\S/.test(line)) {
       throw new Error(`line ${no}: indented text outside a list — these pages have no code blocks`);
     }
+    /* A callout, in GitHub's blockquote-admonition spelling:
+     *
+     *   > [!NOTE] Use this while it lasts
+     *   > Zero orders means nothing is precious yet.
+     *
+     * The label after the tag is optional and becomes the small heading the
+     * shared sheet puts on a .note. WARNING and IMPORTANT get the flagged
+     * variant, which is the one that reads as "do not skip this". */
+    const callout = /^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$/i.exec(line);
+    if (callout) {
+      const kind = callout[1].toUpperCase();
+      const label = callout[2].trim();
+      const flagged = kind === 'WARNING' || kind === 'IMPORTANT' || kind === 'CAUTION';
+      i++;
+      const paras = [];
+      let cur = [];
+      while (i < lines.length && /^>/.test(lines[i])) {
+        const text = lines[i].replace(/^>\s?/, '').trim();
+        if (!text) { if (cur.length) { paras.push(cur.join(' ')); cur = []; } }
+        else cur.push(text);
+        i++;
+      }
+      if (cur.length) paras.push(cur.join(' '));
+      if (!paras.length && !label) {
+        throw new Error(`line ${no}: a callout with nothing in it`);
+      }
+      out.push(`<div class="note${flagged ? ' note--flag' : ''}">`
+        + (label ? `\n      <h2>${inline(label, no)}</h2>` : '')
+        + paras.map((p) => `\n      <p>${inline(p, no)}</p>`).join('')
+        + '\n    </div>');
+      continue;
+    }
     if (/^>/.test(line)) {
-      throw new Error(`line ${no}: block quotes have no style in these pages; use a bold lead-in`);
+      throw new Error(`line ${no}: a bare block quote has no style here — `
+        + 'use > [!NOTE] or > [!WARNING] for a callout');
+    }
+
+    /* A contents list, written where it should appear. Built from the h2s, so
+     * it cannot list a section that no longer exists — which is the failure a
+     * hand-maintained contents list always eventually has. */
+    if (/^<!--\s*toc\s*-->$/i.test(line.trim())) {
+      out.push('<!--TOC-->');
+      i++;
+      continue;
     }
 
     // A paragraph runs until a blank line or the next block.
@@ -242,7 +305,18 @@ function render(md) {
     }
     out.push(`<p>${inline(para.join(' '), no)}</p>`);
   }
-  return out;
+
+  /* The contents list is filled in last, once every h2 has been seen. Written
+     before them it would be a promise about sections that may not arrive. */
+  const toc = out
+    .map((b) => /^<h2 class="section" id="([^"]+)">(.*)<\/h2>$/.exec(b))
+    .filter(Boolean)
+    .map((m) => `      <li><a href="#${m[1]}">${m[2]}</a></li>`);
+  return out.map((b) => (b === '<!--TOC-->'
+    ? (toc.length
+      ? `<nav class="toc">\n    <ol>\n${toc.join('\n')}\n    </ol>\n  </nav>`
+      : '')
+    : b));
 }
 
 /* Only what the shared sheet has no opinion on. Every value is one of its
@@ -299,6 +373,31 @@ const EXTRA_CSS = `
   }
   pre code { background: none; padding: 0; font-size: .85rem; line-height: 1.55; }
   footer p { color: var(--ink-faint); }
+
+  /* A callout that means "do not skip this" reads in the accent rather than the
+     leaf, so the two are tellable apart at a glance down the page. */
+  .note--flag { border-left-color: var(--accent); }
+  .note--flag h2 { color: var(--accent); }
+  .note + .note { margin-top: 12px; }
+
+  /* Status chips. The sheet already dresses .tag; these are the three states a
+     readiness table needs, in its own colours. */
+  .tag.ok   { background: var(--leaf-soft); color: var(--leaf); }
+  .tag.todo { background: var(--accent-soft); color: var(--accent); }
+  .tag.warn { background: transparent; color: var(--ink-faint); border: 1px solid var(--rule-strong); font-weight: 500; }
+  td .tag:first-child { margin-left: 0; }
+
+  /* Contents. Built from the headings, so it cannot name a section that is not
+     there any more. */
+  nav.toc {
+    background: var(--surface-alt); padding: 18px 22px 18px 40px; margin: 32px 0 0;
+  }
+  nav.toc ol { margin: 0; padding: 0 0 0 4px; }
+  nav.toc li { margin-bottom: 5px; font-size: .95rem; }
+  nav.toc a { color: var(--ink-soft); text-underline-offset: 3px; }
+  nav.toc a:hover { color: var(--accent); }
+  h2.section { scroll-margin-top: 16px; }
+  a:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 `;
 
 /**
@@ -327,6 +426,15 @@ function buildPage(markdown, opts = {}) {
   const title = head.find((b) => b.startsWith('<h1')) || `<h1>${esc(fallbackTitle)}</h1>`;
   const stand = head.filter((b) => b.startsWith('<p>'))
     .map((p, n) => (n === 0 ? p.replace('<p>', '<p class="standfirst">') : p));
+
+  /* Anything else that appeared before the first section — in practice the
+   * contents list — goes below the masthead rather than into it. It used to be
+   * dropped on the floor here: the masthead kept the title and the paragraphs
+   * and silently discarded the rest, so a document could ask for a contents
+   * list and simply not get one. Rules are skipped, since the masthead already
+   * ends in a border. */
+  const beforeSections = head
+    .filter((b) => !b.startsWith('<h1') && !b.startsWith('<p>') && b !== '<hr>' && b !== '');
 
   const figureRows = meta.figures.map((f) =>
     `    <div class="fig"><b>${esc(f.value)}</b><span>${esc(f.label)}</span></div>`);
@@ -357,6 +465,8 @@ function buildPage(markdown, opts = {}) {
     eyebrow + '  ' + title,
     stand.map((p) => '  ' + p).join('\n'),
     figures + '</header>',
+    '',
+    beforeSections.map((b) => '  ' + b).join('\n\n'),
     '',
     rest.map((b) => '    ' + b).join('\n\n'),
     '',
