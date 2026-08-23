@@ -1,0 +1,240 @@
+/* ============================================================
+   Dinner By Derek — the look of the published pages.
+
+   NOT public/theme.css, and not a copy of it. That file dresses the app,
+   which is light-only and loads its fonts from disk so an installed PWA
+   never flashes unstyled. These pages are standalone HTML that lands on
+   somebody else's screen in whatever theme they keep, so they carry a dark
+   palette of their own and pull Fraunces and Karla off the network.
+
+   It lives under brand/ because that is what it is: how the kitchen looks
+   when it is published, alongside IDENTITY.txt. The hex literals here are
+   the same five brand colours plus their dark-mode counterparts, and brand/
+   is the one tree the palette check in scripts/acceptance.js does not walk.
+   App code stays on var(--dbd-*) in public/theme.css; nothing here is
+   loaded by the app.
+   ============================================================ */
+
+  /* Palette lifted from brand/IDENTITY.txt so the ledger looks like the app it feeds. */
+  :root {
+    --parchment: #F4EFEB;
+    --espresso:  #2C1E18;
+    --umber:     #4A2A1A;
+    --olive:     #5A6643;
+    --tan:       #BE8146;
+
+    --ground:      var(--parchment);
+    --surface:     #FBF8F5;
+    --surface-alt: #EFE7E0;
+    --ink:         var(--espresso);
+    --ink-soft:    #6B584E;   /* warm grey, biased to umber */
+    --ink-faint:   #9A867A;
+    --rule:        #DDD0C6;
+    --rule-strong: #C6B4A6;
+    --accent:      #A9642C;   /* tan, darkened for contrast on parchment */
+    --accent-soft: #E7D3BE;
+    --leaf:        var(--olive);
+    --leaf-soft:   #DFE3D4;
+    --focus:       #7A4A1E;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #221711;
+      --surface:     #2C1E18;
+      --surface-alt: #3A2820;
+      --ink:         #F0E6DE;
+      --ink-soft:    #C3AC9C;
+      --ink-faint:   #948075;
+      --rule:        #46332A;
+      --rule-strong: #5E4536;
+      --accent:      #E0A063;
+      --accent-soft: #4A3120;
+      --leaf:        #9DAA83;
+      --leaf-soft:   #35402B;
+      --focus:       #E9BC85;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:      #221711;
+    --surface:     #2C1E18;
+    --surface-alt: #3A2820;
+    --ink:         #F0E6DE;
+    --ink-soft:    #C3AC9C;
+    --ink-faint:   #948075;
+    --rule:        #46332A;
+    --rule-strong: #5E4536;
+    --accent:      #E0A063;
+    --accent-soft: #4A3120;
+    --leaf:        #9DAA83;
+    --leaf-soft:   #35402B;
+    --focus:       #E9BC85;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: Karla, "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px 80px; }
+
+  /* --- masthead --------------------------------------------------------- */
+  .masthead { padding: 56px 0 28px; border-bottom: 2px solid var(--rule-strong); }
+  .eyebrow {
+    font-size: 12px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--leaf); font-weight: 700; margin: 0 0 14px;
+  }
+  h1 {
+    font-family: Fraunces, Georgia, serif;
+    font-optical-sizing: auto;
+    font-weight: 800;
+    font-size: clamp(2.4rem, 6vw, 3.9rem);
+    line-height: 1.02;
+    letter-spacing: -.02em;
+    margin: 0 0 16px;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+  .standfirst {
+    max-width: 60ch; margin: 0; color: var(--ink-soft); font-size: 1.06rem;
+  }
+  .standfirst a { color: var(--accent); text-underline-offset: 3px; }
+
+  .figures {
+    display: grid; gap: 1px; margin: 32px 0 0;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    background: var(--rule); border: 1px solid var(--rule);
+  }
+  .fig { background: var(--surface); padding: 16px 18px; }
+  .fig b {
+    display: block; font-family: Fraunces, Georgia, serif; font-weight: 600;
+    font-size: 2rem; line-height: 1.1; font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+  .fig span {
+    display: block; font-size: 12px; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--ink-faint); margin-top: 4px;
+  }
+
+  /* --- the note --------------------------------------------------------- */
+  .note {
+    margin: 32px 0 0; padding: 20px 22px;
+    background: var(--surface); border-left: 3px solid var(--leaf);
+  }
+  .note h2 {
+    font-family: Karla, sans-serif; font-size: 13px; letter-spacing: .1em;
+    text-transform: uppercase; margin: 0 0 10px; color: var(--leaf);
+  }
+  .note p { margin: 0 0 10px; color: var(--ink-soft); font-size: .95rem; }
+  .note p:last-child { margin-bottom: 0; }
+  .note strong { color: var(--ink); }
+
+  /* --- controls --------------------------------------------------------- */
+  .controls {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    padding: 14px 0; margin: 44px 0 0;
+    background: var(--ground); border-bottom: 1px solid var(--rule);
+  }
+  .search {
+    flex: 1 1 240px; min-width: 0;
+    padding: 9px 12px; font: inherit; font-size: .95rem;
+    color: var(--ink); background: var(--surface);
+    border: 1px solid var(--rule-strong); border-radius: 2px;
+  }
+  .search::placeholder { color: var(--ink-faint); }
+  .chip {
+    font: inherit; font-size: .84rem; font-weight: 500;
+    padding: 7px 13px; cursor: pointer; border-radius: 2px;
+    color: var(--ink-soft); background: transparent;
+    border: 1px solid var(--rule-strong);
+  }
+  .chip[aria-pressed="true"] {
+    background: var(--accent-soft); border-color: var(--accent); color: var(--ink);
+    font-weight: 700;
+  }
+  .search:focus-visible, .chip:focus-visible, .more:focus-visible {
+    outline: 2px solid var(--focus); outline-offset: 2px;
+  }
+  .count-note {
+    flex-basis: 100%; font-size: .82rem; color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* --- the ledger ------------------------------------------------------- */
+  .rows { margin-top: 4px; }
+  .row {
+    display: grid; gap: 4px 18px; align-items: baseline;
+    grid-template-columns: 56px 1fr auto;
+    padding: 13px 0; border-bottom: 1px solid var(--rule);
+  }
+  .tally { grid-row: span 2; }
+  .n {
+    font-family: Fraunces, Georgia, serif; font-weight: 600; font-size: 1.35rem;
+    font-variant-numeric: tabular-nums; color: var(--ink); line-height: 1;
+  }
+  .n small { font-size: .62em; color: var(--ink-faint); font-family: Karla, sans-serif; }
+  .bar { height: 3px; background: var(--accent); margin-top: 6px; min-width: 2px; }
+  .dish { font-weight: 700; color: var(--ink); }
+  .tag {
+    display: inline-block; margin-left: 8px; padding: 1px 7px;
+    font-size: 10px; letter-spacing: .09em; text-transform: uppercase; font-weight: 700;
+    vertical-align: 1px; border-radius: 2px;
+  }
+  .tag.meatless { background: var(--leaf-soft); color: var(--leaf); }
+  .tag.single   { background: var(--accent-soft); color: var(--accent); }
+  .tag.unreviewed { background: transparent; color: var(--ink-faint); border: 1px solid var(--rule-strong); font-weight: 500; }
+  .meta {
+    text-align: right; font-size: .82rem; color: var(--ink-faint);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .meta b { display: block; font-size: .95rem; color: var(--ink-soft); font-weight: 700; }
+  .desc {
+    grid-column: 2 / -1; font-size: .9rem; color: var(--ink-soft);
+    max-width: 70ch;
+  }
+  .empty { padding: 40px 0; color: var(--ink-faint); }
+
+  /* --- the side lists --------------------------------------------------- */
+  h2.section {
+    font-family: Fraunces, Georgia, serif; font-weight: 600;
+    font-size: 1.7rem; margin: 56px 0 4px; color: var(--ink);
+  }
+  .section-note { margin: 0 0 18px; color: var(--ink-faint); font-size: .9rem; }
+  .cols { columns: 2 260px; column-gap: 36px; }
+  .cols li {
+    break-inside: avoid; list-style: none;
+    display: flex; gap: 10px; align-items: baseline;
+    padding: 5px 0; border-bottom: 1px solid var(--rule); font-size: .93rem;
+  }
+  .cols ul { margin: 0; padding: 0; }
+  .cols .c {
+    flex: none; width: 26px; text-align: right; font-variant-numeric: tabular-nums;
+    font-weight: 700; color: var(--accent);
+  }
+  .more {
+    margin-top: 16px; font: inherit; font-size: .88rem; font-weight: 700;
+    padding: 8px 14px; cursor: pointer; border-radius: 2px;
+    color: var(--ink); background: var(--surface); border: 1px solid var(--rule-strong);
+  }
+
+  footer {
+    margin-top: 64px; padding-top: 20px; border-top: 2px solid var(--rule-strong);
+    font-size: .85rem; color: var(--ink-faint);
+  }
+
+  @media (max-width: 620px) {
+    .row { grid-template-columns: 48px 1fr; }
+    .meta { grid-column: 2; text-align: left; margin-top: 2px; }
+    .meta b { display: inline; margin-right: 8px; }
+    .desc { grid-column: 2; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
