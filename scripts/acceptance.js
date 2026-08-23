@@ -769,6 +769,61 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('but a stout still is', raises('Stout braised beef', 'gluten'));
 }
 
+/* --- The words this kitchen actually uses ----------------------------------
+   Chosen by reading the 817 saved dishes rather than by imagining a menu. Each
+   of these appears on the list, and each raised nothing at all before: 42% of
+   the saved dishes were silent, now 36%. The rest are silent because they are
+   genuinely clean — a roast beef has no allergen in its name and should not
+   invent one.
+
+   Every entry is still only a suggestion. Nothing here can tag a dish; it can
+   only put a chip in front of Derek, and a wrong one costs him a tap. */
+{
+  const raises = (t, a) => A.detect(t).some((h) => h.allergen === a);
+  const expect = [
+    ['BBQ Glazed Meatloaf', 'wheat and triticale'],   // breadcrumbs bind it
+    ['BBQ Glazed Meatloaf', 'eggs'],
+    ['Italian Meatballs', 'wheat and triticale'],
+    ['Chocolate Pudding Cake', 'milk'],               // 23 dishes, 20 silent
+    ['Chocolate Pudding Cake', 'soy'],                // lecithin in the bar
+    ['Chocolate Pudding Cake', 'eggs'],               // the cake, not the choc
+    ['Chicken Pot Pie', 'wheat and triticale'],
+    ['Beef Wellington', 'gluten'],
+    ['Curried Vegetable Turnovers', 'wheat and triticale'],
+    ['Beef Fajita Burritos', 'gluten'],
+    ['Chicken Cordon Swiss Melts', 'milk'],
+    ['Chicken Cordon Swiss Melts', 'wheat and triticale'],
+    ['Spanakopita', 'milk'],
+    ['Spanakopita', 'gluten'],
+    ['Beef Braciole', 'wheat and triticale'],
+    ['Apple Cobbler', 'wheat and triticale'],
+    ['Sausage Stuffing', 'gluten'],
+    ['Poutine', 'milk'],
+    ['Beef Stroganoff', 'milk'],
+    ['Chicken Alfredo', 'milk'],
+    ['Bacon Cheeseburgers', 'wheat and triticale'],
+    // Rouladen is spread with mustard before it is rolled, and mustard is a
+    // priority allergen that the dish name is the only mention of.
+    ['Beef Rouladen', 'mustard'],
+    // The two fused compounds named in the audit and missing everywhere.
+    ['Fishcakes with dill', 'fish'],
+    ['Nutloaf', 'tree nuts'],
+    ['Crabcakes', 'crustaceans and molluscs'],
+  ];
+  for (const [text, allergen] of expect) {
+    ok(`${JSON.stringify(text)} raises ${allergen}`, raises(text, allergen),
+      `got: ${A.detect(text).map((h) => h.allergen).join(', ') || 'nothing'}`);
+  }
+
+  /* The boundaries these additions must not cross. A taco is a corn tortilla
+     where a burrito is a flour one, and a shepherd's pie is topped with mashed
+     potato rather than pastry — so neither inherits wheat from its neighbour. */
+  ok('a beef taco is not a burrito', !raises('Beef Tacos', 'wheat and triticale'));
+  ok('a shepherds pie is not a pot pie', !raises('Shepherds Pie', 'wheat and triticale'));
+  ok('a roast beef stays clean', A.detect('Roast Beef').length === 0);
+  ok('and a ratatouille does too', A.detect('Ratatouille').length === 0);
+}
+
 /* --- A dictionary fix has to reach a database that already exists ----------
    The checks above passed for months while the live dictionary raised nothing
    for "cheesecake". The seed ran only when allergen_terms was empty, so a word
@@ -1524,6 +1579,25 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
 
   check('thousands separators survive', P.parseNotification('Subject: you got $1,234.56').amount, 123456);
   check('a whole-dollar amount survives', P.parseNotification('Subject: you got $25').amount, 2500);
+  /* One decimal place is what a person types where a bank sends two. It used to
+     read as $25.00 — matching "25" and throwing the ".5" away — which is fifty
+     cents light, fails the exact-amount test, and drops a transfer that would
+     have matched into the pile waiting to be done by hand. */
+  check('a single decimal place is not silently dropped',
+    P.parseNotification('Subject: you got $25.5').amount, 2550);
+  check('and two still read the same as ever',
+    P.parseNotification('Subject: you got $25.50').amount, 2550);
+  check('a few cents on their own survive',
+    P.parseNotification('Subject: you got $0.05').amount, 5);
+
+  /* Three letters is the right floor for an ordinary name, and applied without
+     a fallback it dropped some names entirely: "Li Wu" has no token that long,
+     so the set was empty and that customer could never be suggested by name.
+     Whose names those are is not evenly distributed. */
+  check('a short name matches itself', P.nameOverlap('LI WU', 'Li Wu'), 1);
+  check('and still does not match a different one', P.nameOverlap('LI WU', 'Bob Jones'), 0);
+  check('while a long name is unchanged', P.nameOverlap('JANE A. SMITH', 'Jane Smith'), 1);
+  check('and an initial alone is not a match', P.nameOverlap('J', 'Jane Smith'), 0);
   check('text with no money in it is not a payment', P.parseNotification('Your statement is ready.'), null);
   check('and neither is nothing at all', P.parseNotification(''), null);
 

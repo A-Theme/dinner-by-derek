@@ -33,7 +33,13 @@ const { db } = require('./db');
  * in it at all, which is not a payment notification by any reading.
  */
 
-const AMOUNT_RE = /\$\s*([0-9][0-9,]*(?:\.[0-9]{2})?)/;
+/* One or two decimal places, not exactly two. "$25.50" is what a bank sends and
+ * "$25.5" is what a person types, and the old pattern read the second as $25.00
+ * — it matched "25", stopped, and threw the ".5" away. Silently fifty cents
+ * light, which then fails the exact-amount test and drops a transfer that would
+ * have matched into the pile waiting for a person. Wrong in the safe direction,
+ * and still wrong. */
+const AMOUNT_RE = /\$\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/;
 
 /**
  * Every quantifier here is bounded, and that is not tidiness.
@@ -193,10 +199,24 @@ function ordersNamedIn(text) {
 function nameTokens(s) {
   // Accents stripped rather than compared: banks and order forms disagree
   // about them constantly, and "Renee" must find "Renée".
-  return new Set(String(s == null ? '' : s)
+  const words = String(s == null ? '' : s)
     .normalize('NFD').replace(/\p{M}/gu, '')
     .toLowerCase().replace(/[^a-z0-9 ]+/g, ' ')
-    .split(/\s+/).filter((w) => w.length >= 3));
+    .split(/\s+/).filter(Boolean);
+  /* Three letters is the right floor for an ordinary name — it drops the
+   * initials and the "de"s and "van"s that would otherwise match everybody.
+   * Applied without a fallback it also drops some names entirely: "Li Wu" has
+   * no token three letters long, so the set came back empty, nameOverlap
+   * returned 0, and that customer could never be suggested by name at all.
+   * Whose names those are is not evenly distributed, which is what makes it
+   * worth the extra line.
+   *
+   * So the floor is a preference rather than a rule: keep the long tokens when
+   * there are any, and fall back to the short ones when there are not. A name
+   * made only of short words is matched on those words, and every match here is
+   * a suggestion a person still has to accept. */
+  const long = words.filter((w) => w.length >= 3);
+  return new Set(long.length ? long : words.filter((w) => w.length >= 2));
 }
 
 function nameOverlap(a, b) {
