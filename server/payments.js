@@ -66,16 +66,61 @@ const AMOUNT_RE = /\$\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/;
  * rather than `\s`, because `\s` crosses newlines and these are anchored to a
  * line — which was a second source of the same ambiguity.
  */
+/**
+ * Interac writes its details as a grid, not as sentences.
+ *
+ * Every field in a real notification looks like this — the label alone on one
+ * line, a blank line, then the value:
+ *
+ *     Message:
+ *
+ *     Order A1B2C3D4
+ *
+ *     Date:
+ *
+ *     Aug 23, 2026
+ *
+ * which is what a two-column HTML table flattens to. Patterns written for
+ * `Label: value` find nothing in it, and the field that matters most is the
+ * message: it is the only part of a transfer the customer controls, so it is
+ * where the order reference travels, and it is the difference between a
+ * payment that settles itself and one that waits for Derek.
+ *
+ * The lookahead is the guard. Reading forward to the next non-empty line means
+ * that a label with no value under it — an empty message, a field this bank
+ * leaves blank — would otherwise swallow the *next label* as its value. Naming
+ * the labels this format uses is not elegant, but a memo that reads "Date:"
+ * would be worse: memos are what the automatic match reads.
+ */
+const GRID_LABEL = '(?:date|reference number|sent from|amount|message|sent by|memo)';
+const gridValue = (label) => new RegExp(
+  `^[ \\t]{0,20}${label}[ \\t]{0,20}:[ \\t]{0,20}\\n(?:[ \\t]{0,20}\\n){0,4}`
+  + `[ \\t]{0,20}(?!${GRID_LABEL}[ \\t]{0,20}:[ \\t]{0,20}$)(.{1,200}?)[ \\t]{0,20}$`,
+  'im');
+
 const SENDER_PATTERNS = [
+  /* Interac puts the customer's name in the From: display name and its own
+     address after it, on the original and inside a forward alike. It is the
+     only place the name appears as a field rather than inside a sentence, so
+     it is tried first and anchored to the address it must not be confused
+     with — Derek's own From: line, or the customer's real email. */
+  /^[ \t]{0,20}From[ \t]{0,20}:[ \t]{0,20}([^<\n]{1,120}?)[ \t]{0,20}<[^>\n]{0,120}@payments\.interac\.ca>/im,
+  gridValue('sent from'),
   /INTERAC[^:\n]{0,80}[:\s-]{1,10}[ \t]{0,10}([^\n,]{1,120}?)\s{1,20}sent you\b/i,
   /(?:money transfer|funds|transfer|e-?transfer)\s{1,20}from\s{1,20}([^\n,]{1,120}?)\s{1,20}(?:has|have|was|were)\b/i,
-  /you(?:'ve| have)?\s{1,20}received\s{1,20}(?:\$[\d.,]{1,20}\s{1,20})?from\s{1,20}([^\n,.]{1,120})/i,
+  /* The subject names the sender inside a sentence that carries on past it:
+     "…received $37.00 from KRISTYN CLAIRMONT and it has been automatically
+     deposited." Stopping at the clause rather than at the full stop is the
+     difference between a name and a paragraph — a header that happens to wrap
+     after the name used to look like this pattern working. */
+  /you(?:'ve| have)?\s{1,20}received\s{1,20}(?:\$[\d.,]{1,20}\s{1,20})?from\s{1,20}([^\n,.]{1,120}?)(?=\s{1,20}and\s|\s{0,20}[.,]|\s{0,20}$)/i,
   /^[ \t]{0,20}Sent by[ \t]{0,20}:[ \t]{0,20}(.{1,120}?)[ \t]{0,20}$/im,
   /^[ \t]{0,20}([^\n,]{1,120}?)\s{1,20}sent you\b/im,
 ];
 
 const MEMO_PATTERNS = [
   /^[ \t]{0,20}(?:sender'?s?[ \t]{1,20})?message[ \t]{0,20}:[ \t]{0,20}(.{1,200}?)[ \t]{0,20}$/im,
+  gridValue('message'),
   /^[ \t]{0,20}message from [^:\n]{1,120}:[ \t]{0,20}(.{1,200}?)[ \t]{0,20}$/im,
   /^[ \t]{0,20}memo[ \t]{0,20}:[ \t]{0,20}(.{1,200}?)[ \t]{0,20}$/im,
 ];
@@ -121,8 +166,21 @@ function parseNotification(input) {
   if (!text.trim()) return null;
 
   const subject = tidy((text.match(/^Subject\s*:[ \t]*(.+)$/im) || [])[1] || '');
-  const messageId = ((text.match(/^Message-ID\s*:[ \t]*<([^>\n]+)>/im) || [])[1] || '').trim();
   const dateHeader = ((text.match(/^Date\s*:[ \t]*(.+)$/im) || [])[1] || '').trim();
+
+  /* Headers fold. Outlook and SES both put a long Message-ID on the line after
+     its own name, and requiring the `<` to sit on the same line quietly threw
+     away the bank's own guarantee that one email is seen once.
+     `[ \t]*\n?[ \t]*` steps over exactly one fold and nothing else. */
+  const header = (name) => ((text.match(
+    new RegExp(`^${name}\\s*:[ \\t]{0,20}\\n?[ \\t]{0,20}<([^>\\n]{1,200})>`, 'im')) || [])[1] || '').trim();
+
+  /* A forwarded notification carries two identities: the forward's own, and —
+     in In-Reply-To and References — the identity of the notification Interac
+     sent. The second is the one that belongs to the money. Preferring it means
+     the same transfer is recognised as one payment however it arrives: read
+     straight out of Derek's mailbox, forwarded once, or forwarded twice. */
+  const messageId = header('In-Reply-To') || header('References') || header('Message-ID');
 
   // The subject carries the amount on every format seen so far and never
   // carries a second one; a body can hold a fee line or an account balance.
@@ -131,7 +189,13 @@ function parseNotification(input) {
   const amount = cents(amountMatch[1]);
   if (amount == null || amount <= 0) return null;
 
-  let senderName = firstMatch(SENDER_PATTERNS, subject) || firstMatch(SENDER_PATTERNS, text);
+  /* The body before the subject, which is the opposite of the amount above.
+     An amount is safer read from the subject because a body can hold a second
+     one; a name is safer read from the body, because there it is a field with
+     an end, and in the subject it is a phrase inside a sentence that runs on
+     past it. Whether that sentence happened to wrap after the name is not
+     something to let decide what gets stored. */
+  let senderName = firstMatch(SENDER_PATTERNS, text) || firstMatch(SENDER_PATTERNS, subject);
   // A From: header names the bank, not the customer. Never let one through.
   if (senderName.includes('@')) senderName = '';
 

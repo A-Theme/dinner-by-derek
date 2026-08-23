@@ -1577,6 +1577,81 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('and its amount', classic.amount, 1850);
   check('and its message', classic.memo, 'for tuesday');
 
+  /* --- The grid Interac actually sends ----------------------------------
+   * Taken from real notifications, with the names changed. Every field is a
+   * label alone on a line and the value below it, which is what the two-column
+   * table in the HTML flattens to. Patterns written for `Label: value` read
+   * none of it, and the message is the field that matters: it is where the
+   * order reference rides, so an unread one is the difference between a
+   * payment that settles itself and one that waits for a person.
+   */
+  const interacGrid = ({ from = 'ALEX RIVERS', amount = '37.00', message = 'Order A1B2C3D4',
+    fwd = false, origin = 'orig-1', outer = 'fwd-1' }) => [
+    ...(fwd
+      ? [`From: Derek Hines <derekhines@hotmail.com>`,
+        `Subject: Fw: Interac e-Transfer: You've received $${amount} from ${from}`,
+        ' and it has been automatically deposited.',
+        'Date: Sun, 23 Aug 2026 15:57:35 -0400',
+        'Message-ID:', `\t<${outer}@outlook.com>`,
+        'In-Reply-To:', `\t<${origin}@ca-central-1.amazonses.com>`,
+        '', `From: ${from} <notify@payments.interac.ca>`]
+      : [`From: ${from} <notify@payments.interac.ca>`,
+        `Subject: Interac e-Transfer: You've received $${amount} from ${from} and it`,
+        ' has been automatically deposited.',
+        'Date: Sun, 23 Aug 2026 15:41:30 -0400',
+        'Message-ID:', `\t<${origin}@ca-central-1.amazonses.com>`]),
+    '', 'Hi DEREK HINES,', 'Funds Deposited!', `$${amount}`, '',
+    'Transfer Details', '',
+    ...(message === null ? [] : ['Message:', '', message, '']),
+    'Date:', '', 'Aug 23, 2026', '',
+    'Reference Number:', '', 'C1AkzbyKNVdV', '',
+    'Sent From:', '', from, '',
+    'Amount:', '', `$${amount} (CAD)`,
+  ].join('\n');
+
+  const grid = P.parseNotification(interacGrid({}));
+  check('the message is read out of the grid', grid.memo, 'Order A1B2C3D4');
+  check('and counts as a field, so it may settle an order', grid.memo_parsed, 1);
+  check('the sender is read out of the grid too', grid.sender_name, 'ALEX RIVERS');
+  check('and the amount', grid.amount, 3700);
+
+  /* The label is read forward to the next non-empty line, so a label with
+     nothing under it must not swallow the label after it. A memo of "Date:" is
+     not a cosmetic problem: memos are what the automatic match reads. */
+  const emptyMemo = P.parseNotification(
+    ['Transfer Details', '', 'Message:', '', 'Date:', '', 'Aug 23, 2026', '', 'Amount:', '', '$12.00'].join('\n'));
+  check('an empty message does not swallow the next label', emptyMemo.memo, '');
+  check('and is not counted as a message that was found', emptyMemo.memo_parsed, 0);
+
+  /* The subject names the sender inside a sentence that carries on past it.
+     Where the mail client happened to wrap that sentence used to decide what
+     got stored — the same notification giving three different answers. */
+  const wrapped = "Subject: Interac e-Transfer: You've received $9.00 from ALEX RIVERS\n and it has been automatically deposited.";
+  check('a sender read from a wrapped subject stops at the name',
+    P.parseNotification(wrapped).sender_name, 'ALEX RIVERS');
+  check('and stops at the same place when nothing wrapped',
+    P.parseNotification(wrapped.replace('\n ', ' ')).sender_name, 'ALEX RIVERS');
+
+  /* Derek forwards these by hand today and a poller may read them straight out
+     of his mailbox tomorrow. The same transfer must be one payment either way,
+     or the changeover quietly doubles everything in flight. */
+  const direct = P.parseNotification(interacGrid({ origin: 'shared-id' }));
+  const forwarded = P.parseNotification(interacGrid({ origin: 'shared-id', fwd: true }));
+  check('a forwarded notification is identified by the original, not the forward',
+    forwarded.external_id, `msgid:shared-id@ca-central-1.amazonses.com`);
+  check('so forwarding one does not make it a second payment',
+    forwarded.external_id, direct.external_id);
+  check('and the forward still gives up its sender', forwarded.sender_name, 'ALEX RIVERS');
+  check('and its message', forwarded.memo, 'Order A1B2C3D4');
+  ok('two different transfers are still two payments',
+    P.parseNotification(interacGrid({ origin: 'a' })).external_id
+      !== P.parseNotification(interacGrid({ origin: 'b' })).external_id);
+
+  /* A folded header is not a missing one. Both Outlook and SES put a long
+     Message-ID on the line after its own name. */
+  check('a Message-ID folded onto the next line is still found',
+    P.parseNotification('Subject: you got $5\nMessage-ID:\n\t<folded@x>').external_id, 'msgid:folded@x');
+
   check('thousands separators survive', P.parseNotification('Subject: you got $1,234.56').amount, 123456);
   check('a whole-dollar amount survives', P.parseNotification('Subject: you got $25').amount, 2500);
   /* One decimal place is what a person types where a bank sends two. It used to
