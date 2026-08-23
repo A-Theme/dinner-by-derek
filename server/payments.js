@@ -35,19 +35,54 @@ const { db } = require('./db');
 
 const AMOUNT_RE = /\$\s*([0-9][0-9,]*(?:\.[0-9]{2})?)/;
 
+/**
+ * Every quantifier here is bounded, and that is not tidiness.
+ *
+ * These patterns all had the same shape: a lazy `([^\n,]+?)` with no ceiling,
+ * followed by `\s+`, over a character class that itself matches spaces. On text
+ * that does not match, the engine has to try every way of splitting a run of
+ * whitespace between the two, and the cost climbs about cubically. Measured on
+ * the old `^\s*([^\n,]+?)\s+sent you\b`: 500 spaces took 232ms, 1,000 took
+ * 486ms, 2,000 took 3.5s and 4,000 took 26.5 seconds.
+ *
+ * This module runs on one thread that also serves the menu, so those 26 seconds
+ * are 26 seconds in which nobody can read a menu or place an order. The trigger
+ * does not have to be an attack: a forwarded notification carrying a rendered
+ * table or quoted-printable padding is a long run of spaces on one line.
+ *
+ * It matters more than the paste screen suggests. `record()` is the documented
+ * entry point for the mailbox poller, and the moment that exists this becomes
+ * reachable by anyone who can send an email to the address it reads.
+ *
+ * The ceilings are the ones the code already imposes downstream: a sender name
+ * is stored `.slice(0, 120)` and a memo `tidy()`s to 200, so matching further
+ * than that was never going to be kept. Line-leading whitespace is `[ \t]`
+ * rather than `\s`, because `\s` crosses newlines and these are anchored to a
+ * line — which was a second source of the same ambiguity.
+ */
 const SENDER_PATTERNS = [
-  /INTERAC[^:\n]*[:\s-]+\s*([^\n,]+?)\s+sent you\b/i,
-  /(?:money transfer|funds|transfer|e-?transfer)\s+from\s+([^\n,]+?)\s+(?:has|have|was|were)\b/i,
-  /you(?:'ve| have)?\s+received\s+(?:\$[\d.,]+\s+)?from\s+([^\n,.]+)/i,
-  /^\s*Sent by\s*:\s*(.+?)\s*$/im,
-  /^\s*([^\n,]+?)\s+sent you\b/im,
+  /INTERAC[^:\n]{0,80}[:\s-]{1,10}[ \t]{0,10}([^\n,]{1,120}?)\s{1,20}sent you\b/i,
+  /(?:money transfer|funds|transfer|e-?transfer)\s{1,20}from\s{1,20}([^\n,]{1,120}?)\s{1,20}(?:has|have|was|were)\b/i,
+  /you(?:'ve| have)?\s{1,20}received\s{1,20}(?:\$[\d.,]{1,20}\s{1,20})?from\s{1,20}([^\n,.]{1,120})/i,
+  /^[ \t]{0,20}Sent by[ \t]{0,20}:[ \t]{0,20}(.{1,120}?)[ \t]{0,20}$/im,
+  /^[ \t]{0,20}([^\n,]{1,120}?)\s{1,20}sent you\b/im,
 ];
 
 const MEMO_PATTERNS = [
-  /^\s*(?:sender'?s?\s+)?message\s*:\s*(.+?)\s*$/im,
-  /^\s*message from [^:\n]+:\s*(.+?)\s*$/im,
-  /^\s*memo\s*:\s*(.+?)\s*$/im,
+  /^[ \t]{0,20}(?:sender'?s?[ \t]{1,20})?message[ \t]{0,20}:[ \t]{0,20}(.{1,200}?)[ \t]{0,20}$/im,
+  /^[ \t]{0,20}message from [^:\n]{1,120}:[ \t]{0,20}(.{1,200}?)[ \t]{0,20}$/im,
+  /^[ \t]{0,20}memo[ \t]{0,20}:[ \t]{0,20}(.{1,200}?)[ \t]{0,20}$/im,
 ];
+
+/**
+ * A ceiling on the text itself, as the second half of the same guard.
+ *
+ * Bounded quantifiers cap the work done at each starting position; this caps
+ * how many starting positions there are. A real Interac notification is a few
+ * kilobytes, and the body parser already refuses anything over a megabyte, so
+ * this only ever bites on something that was never a notification.
+ */
+const MAX_INPUT = 100_000;
 
 /** Cents from "$1,234.56", "$25.00" or "$25". */
 function cents(str) {
@@ -76,7 +111,7 @@ function firstMatch(patterns, text) {
  * which is what forwarding one by hand produces.
  */
 function parseNotification(input) {
-  const text = String(input == null ? '' : input).replace(/\r\n/g, '\n');
+  const text = String(input == null ? '' : input).replace(/\r\n/g, '\n').slice(0, MAX_INPUT);
   if (!text.trim()) return null;
 
   const subject = tidy((text.match(/^Subject\s*:[ \t]*(.+)$/im) || [])[1] || '');

@@ -1440,6 +1440,55 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('text with no money in it is not a payment', P.parseNotification('Your statement is ready.'), null);
   check('and neither is nothing at all', P.parseNotification(''), null);
 
+  /* --- Text that used to stop the whole server -------------------------
+     The sender and memo patterns paired an unbounded lazy `([^\n,]+?)` with a
+     following `\s+`, over a class that matches spaces itself. On text that does
+     not match, the engine tries every way of splitting a run of whitespace
+     between the two. It cost about n-cubed: 2,000 spaces took 3.5 seconds and
+     4,000 took 26.5, on the one thread that also serves the menu — so a single
+     paste stopped customers ordering for as long as it ran.
+
+     A budget rather than a curve, because a curve is a benchmark and this is a
+     regression check. The margin is the point: this input took 26 seconds and
+     now takes under a millisecond, so a second of headroom distinguishes the
+     two without being able to fail on a busy machine. */
+  {
+    const evil = 'Subject: you got $25\n' + ' '.repeat(4000) + 'X';
+    const t0 = Date.now();
+    const parsed = P.parseNotification(evil);
+    const ms = Date.now() - t0;
+    ok(`4,000 spaces parse in well under a second (took ${ms}ms)`, ms < 1000);
+    check('and it is still read as a payment', parsed.amount, 2500);
+
+    const huge = 'Subject: you got $25\n' + 'a b'.repeat(80_000);
+    const t1 = Date.now();
+    ok('so does text far past any real notification', P.parseNotification(huge) !== null
+      && Date.now() - t1 < 1000);
+  }
+
+  /* Bounding the quantifiers meant tightening line-leading whitespace from \s
+     to [ \t], since \s crosses newlines and these patterns anchor to a line.
+     These hold the wording that still has to parse. */
+  {
+    const indented = P.parseNotification([
+      'Subject: INTERAC e-Transfer: you got $30.00',
+      '',
+      '   Sent by  :   Dana Okafor  ',
+      '   Message  :   A1B2C3D4 for thursday  ',
+    ].join('\n'));
+    check('an indented sender line still parses', indented.sender_name, 'Dana Okafor');
+    check('and an indented message line', indented.memo, 'A1B2C3D4 for thursday');
+  }
+
+  /* A name longer than the bound is not matched into oblivion. It stops at the
+     ceiling the stored column uses anyway, rather than costing the parse. */
+  {
+    const long = P.parseNotification(
+      `Subject: INTERAC e-Transfer: ${'Bartholomew '.repeat(30)}sent you $12.00`);
+    ok('an absurdly long sender name does not stall the parse', long !== null);
+    ok('and is not stored past the column width', long.sender_name.length <= 120);
+  }
+
   const noMemo = P.parseNotification(email({ message: null }));
   check('a transfer with no message parses anyway', noMemo.amount, 5200);
   check('and says the message was not a field', noMemo.memo_parsed, 0);
