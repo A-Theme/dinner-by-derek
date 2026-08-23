@@ -34,9 +34,9 @@ Check it again before starting — this is a snapshot, not a guarantee.
 | Domain | `dinnerbyderek.ca`, in Cloudflare | DNS is ready; nothing points anywhere yet. |
 | `BASE_URL` | `http://localhost:3000` | QR codes point at a placeholder, cookies are not secure, email links are dead. |
 | `NODE_ENV` | `development` | Static caching off, and the boot warnings are tuned for a laptop. |
-| Admin password | **plaintext**, not hashed | `ADMIN_PASSWORD_HASH` is empty. Fine on a laptop, not on a public server. |
+| Admin password | **hashed** (scrypt) | `ADMIN_PASSWORD_HASH` is set and the plaintext `ADMIN_PASSWORD` line is gone. Step 2 is already done; confirm the boot output rather than redo it. |
 | `TRUST_PROXY` | unset | Correct until nginx exists. Becomes `1` then. |
-| Weeks | one draft, **one service day** | Not enough to publish as a week anyone would want to read. |
+| Weeks | one draft, **no service days**, for a week that has already passed | An empty shell, not a week part-way to being finished — `week_start` is `2026-08-17`. There is nothing publishable in the database at all, so step 3 starts from nothing rather than from something half-built. |
 | Soup / salad | none | |
 | Standing items | 6, **all unreviewed**; 3 have no description | Other Options is invisible to customers until these are written and ticked. **This is the one blocking item on the list.** |
 | Saved dishes | **817** | A catalogue was imported. The Load picker is live and long, which is why it now sorts by how often a dish has run. |
@@ -91,8 +91,10 @@ before this is public".
 
 ### 3. Build a real week
 
-The draft in the database has a single service day on it. That is not a week
-anyone would want to read, and it is not what to publish.
+The draft in the database is empty — no service days, no soup, no salad — and
+it is dated to a week that has already gone by. There is nothing here to finish
+off. Set its week start forward, or delete it and start a new one; either is
+cheap while the orders table is empty.
 
 In the dashboard: **This Week** → set the week start → add the service dates →
 fill each day's featured dish with name, description and prices → add soup and
