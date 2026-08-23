@@ -270,6 +270,30 @@ const link = db.transaction((paymentId, orderId, by) => {
   const p = db.prepare('SELECT * FROM payments WHERE id = ?').get(paymentId);
   const o = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   if (!p || !o) return null;
+
+  /* Two refusals, both of which used to be silent corruption rather than an
+   * answer. Returned as a reason rather than thrown, because each one is
+   * something the screen has to say in a sentence — and because a constraint
+   * error would reach the owner as "something went wrong" on an action that is
+   * perfectly sensible to have attempted.
+   *
+   * An order that already has a payment against it. The flag only flips when
+   * the order was not already paid, so a second payment recorded set_paid = 0,
+   * and unlinking the first then marked the order unpaid while the second was
+   * still linked to it. A genuine second transfer for the same order stays in
+   * the unclaimed list, which is where money nobody has accounted for belongs. */
+  const held = db.prepare('SELECT * FROM payments WHERE order_id = ? AND id != ?')
+    .get(orderId, paymentId);
+  if (held) return { refused: 'order_taken', held };
+
+  /* A payment that is already linked somewhere else. Moving it overwrote
+   * order_id and recomputed set_paid against the new order, which left the old
+   * one marked paid with nothing standing behind it and no way to notice.
+   * Unlink first: that path already restores the old order exactly. */
+  if (p.order_id && p.order_id !== orderId) {
+    return { refused: 'already_linked', held: p };
+  }
+
   const flips = o.paid ? 0 : 1;
   db.prepare(`UPDATE payments SET order_id = ?, matched_by = ?, matched_at = datetime('now'),
               set_paid = ? WHERE id = ?`).run(orderId, by, flips, paymentId);
@@ -312,8 +336,14 @@ function record(input, { source = 'paste' } = {}) {
   const best = candidatesFor(payment)[0];
 
   if (best && best.reason === 'exact' && !best.taken) {
-    payment = link(id, best.order.id, 'auto');
-    return { ok: true, payment, matched: best.order, auto: true };
+    /* `taken` already says another payment holds this order, so a refusal here
+     * means the two disagreed — and the automatic path is the last place to
+     * insist. It falls through and waits for a person, which is what every
+     * rung below `exact` does anyway. */
+    const linked = link(id, best.order.id, 'auto');
+    if (linked && !linked.refused) {
+      return { ok: true, payment: linked, matched: best.order, auto: true };
+    }
   }
   return { ok: true, payment, suggestions: candidatesFor(payment) };
 }

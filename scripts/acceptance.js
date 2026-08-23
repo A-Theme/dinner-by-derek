@@ -1659,6 +1659,74 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('so unlinking leaves it paid, the way he left it',
     db.prepare('SELECT paid FROM orders WHERE id=?').get(o5.id).paid, 1);
 
+  /* --- One order, one payment -------------------------------------------
+     The sequence that used to end with money in hand and the customer being
+     chased for it. Two payments could point at the same order, because nothing
+     said they could not: the flag only flips when the order was not already
+     paid, so the second recorded set_paid = 0, and unlinking the FIRST then set
+     the order back to unpaid while the second was still linked to it.
+
+     Run in that exact order, because the corruption is in the order. */
+  {
+    const o6 = mkOrder('FFFF6666', 'Twice Over', 4400);
+    const first = P.record(email({ from: 'TWICE OVER', amount: '44.00', message: 'FFFF6666', id: 'm6' }));
+    ok('the first payment settles the order', first.auto === true);
+    check('so it is paid', db.prepare('SELECT paid FROM orders WHERE id=?').get(o6.id).paid, 1);
+    check('and that payment is what flipped it', first.payment.set_paid, 1);
+
+    // A second transfer for the same order, of the same amount, naming it too.
+    const second = P.record(email({ from: 'TWICE OVER', amount: '44.00', message: 'FFFF6666', id: 'm7' }));
+    ok('the second is not applied on its own', !second.auto);
+    check('it is left unclaimed rather than stacked on the order',
+      second.payment.order_id, null);
+
+    // Linking it by hand is refused, and says which payment is in the way.
+    const refused = P.link(second.payment.id, o6.id, 'owner');
+    check('and linking it by hand is refused', refused.refused, 'order_taken');
+    check('naming the payment already standing there', refused.held.id, first.payment.id);
+
+    // The step that used to corrupt: undo the first while the second exists.
+    P.unlink(first.payment.id);
+    check('unlinking the first leaves the order unpaid, correctly',
+      db.prepare('SELECT paid FROM orders WHERE id=?').get(o6.id).paid, 0);
+    check('and no payment is left claiming it',
+      db.prepare('SELECT COUNT(*) n FROM payments WHERE order_id=?').get(o6.id).n, 0);
+
+    // The database refuses it too, not only the code above.
+    let constraintHeld = false;
+    try {
+      P.link(first.payment.id, o6.id, 'owner');
+      db.prepare('UPDATE payments SET order_id=? WHERE id=?').run(o6.id, second.payment.id);
+    } catch (e) { constraintHeld = /UNIQUE|constraint/i.test(e.message); }
+    ok('a direct write cannot put two payments on one order either', constraintHeld);
+    db.prepare(`UPDATE payments SET order_id=NULL, matched_by='', matched_at=NULL, set_paid=0
+                WHERE order_id=?`).run(o6.id);
+    db.prepare('UPDATE orders SET paid=0 WHERE id=?').run(o6.id);
+  }
+
+  /* Moving a linked payment to a different order used to overwrite order_id and
+     recompute set_paid against the new one, leaving the old order marked paid
+     with nothing behind it and nothing to notice it by. */
+  {
+    const oA = mkOrder('AAAA7777', 'First Home', 1500);
+    const oB = mkOrder('BBBB8888', 'Second Home', 1500);
+    const r = P.record(email({ from: 'FIRST HOME', amount: '15.00', message: 'AAAA7777', id: 'm8' }));
+    check('it lands on the order it named', r.payment.order_id, oA.id);
+
+    const moved = P.link(r.payment.id, oB.id, 'owner');
+    check('moving it to another order is refused', moved.refused, 'already_linked');
+    check('the first order is still paid', db.prepare('SELECT paid FROM orders WHERE id=?').get(oA.id).paid, 1);
+    check('and the second was never touched', db.prepare('SELECT paid FROM orders WHERE id=?').get(oB.id).paid, 0);
+
+    // Unlinking first is the route that works, and it restores the old order.
+    P.unlink(r.payment.id);
+    check('unlinking puts the first order back', db.prepare('SELECT paid FROM orders WHERE id=?').get(oA.id).paid, 0);
+    const relinked = P.link(r.payment.id, oB.id, 'owner');
+    ok('and then it moves', relinked && !relinked.refused);
+    check('settling the second order', db.prepare('SELECT paid FROM orders WHERE id=?').get(oB.id).paid, 1);
+    P.unlink(relinked.id);
+  }
+
   /* --- What the screen reads from --------------------------------------- */
   ok('money nobody has claimed is listed', P.unmatched().length > 0);
   ok('and so are the orders still owing', P.awaiting().some((o) => o.ref === 'BBBB2222'));

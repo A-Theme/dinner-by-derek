@@ -492,6 +492,24 @@ router.post('/payments/:id/link', (req, res) => {
   const p = P.link(Number(req.params.id), orderId, 'owner');
   if (!p) return back(res, req, null, 'That payment or order no longer exists.');
   const o = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+
+  /* Both refusals name the payment standing in the way and the one action that
+     clears it, because "that didn't work" on a screen about money is the least
+     useful thing this app could say. */
+  if (p.refused === 'order_taken') {
+    return back(res, req, null,
+      `${o.name}'s order ${o.ref} already has ${money(p.held.amount)} against it`
+      + `${p.held.sender_name ? ` from ${p.held.sender_name}` : ''}. Unlink that payment `
+      + 'first if this is the one that really paid for it. If both are real, leave this '
+      + 'one unclaimed — two transfers for one order is worth being able to see.');
+  }
+  if (p.refused === 'already_linked') {
+    const other = db.prepare('SELECT * FROM orders WHERE id=?').get(p.held.order_id);
+    return back(res, req, null,
+      `That payment is already linked to ${other ? `${other.name}'s order ${other.ref}` : 'another order'}. `
+      + 'Unlink it there first — that puts the other order back exactly as it was.');
+  }
+
   return back(res, req, p.set_paid
     ? `Linked. ${o.name}'s order ${o.ref} is marked as paid.`
     : `Linked. ${o.name}'s order ${o.ref} was already marked paid, so nothing else changed.`);

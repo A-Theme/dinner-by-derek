@@ -518,6 +518,47 @@ db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_dishes_kind_name
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_submission
          ON orders(submission_key) WHERE submission_key IS NOT NULL`);
 
+/* One payment per order, enforced by the database rather than by remembering.
+ *
+ * Nothing stopped two payments pointing at the same order, and the damage did
+ * not show up until an unlink. link() only flips `paid` when the order was not
+ * already paid, so the second payment recorded set_paid = 0; unlinking the
+ * first then set the order back to unpaid while the second was still sitting
+ * against it. The result is an order with a payment linked to it that appears
+ * in the chase list — money in hand and a customer being nudged for it.
+ *
+ * A partial index, matching idx_orders_submission above: order_id is NULL for
+ * every unclaimed payment and NULL never collides in SQLite, so unclaimed money
+ * is unaffected.
+ *
+ * Any database that already carries a duplicate has to be tidied before the
+ * index can exist, or this line takes the app down at boot on exactly the
+ * databases that hit the bug. The extras are unlinked rather than deleted —
+ * that returns them to the unclaimed list, which is where money nobody has
+ * accounted for belongs, and it is the same state a fresh paste would produce.
+ * The one kept is whichever actually flipped the flag, so the unlink that
+ * follows still restores the order correctly.
+ */
+{
+  const dupes = db.prepare(`SELECT order_id FROM payments WHERE order_id IS NOT NULL
+                            GROUP BY order_id HAVING COUNT(*) > 1`).all();
+  if (dupes.length) {
+    const keepFor = db.prepare(`SELECT id FROM payments WHERE order_id = ?
+                                ORDER BY set_paid DESC, id ASC LIMIT 1`);
+    const release = db.prepare(`UPDATE payments SET order_id = NULL, matched_by = '',
+                                matched_at = NULL, set_paid = 0
+                                WHERE order_id = ? AND id != ?`);
+    const tx = db.transaction(() => {
+      for (const d of dupes) release.run(d.order_id, keepFor.get(d.order_id).id);
+    });
+    tx();
+    console.warn(`[db] ${dupes.length} order(s) had more than one payment against them. `
+      + 'The extras are back in the unclaimed list on the Payments screen.');
+  }
+}
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_one_per_order
+         ON payments(order_id) WHERE order_id IS NOT NULL`);
+
 function renameColumn(table, from, to) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();
   if (cols.some((c) => c.name === from) && !cols.some((c) => c.name === to)) {
