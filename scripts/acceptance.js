@@ -2107,6 +2107,75 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   db.prepare('DELETE FROM weeks WHERE id=?').run(wid);
 }
 
+/* --- The handoff page is generated, not written twice ----------------------
+   It existed as markdown in the repo and as hand-written HTML in a published
+   artifact, and the two had already disagreed — the HTML carried a table of
+   .env state the markdown described in prose. One source now.
+
+   The renderer is strict on purpose: it understands the subset the document
+   uses and throws on anything else. A generator that quietly drops a construct
+   produces a page missing a paragraph nobody notices is missing. */
+{
+  const H = require('./handoff');
+
+  /* Escaping first, because this ships to somebody else's browser. */
+  check('angle brackets in prose are escaped',
+    H.inline('a <script>alert(1)</script> b', 1),
+    'a &lt;script&gt;alert(1)&lt;/script&gt; b');
+  check('and quotes', H.inline('say "hi"', 1), 'say &quot;hi&quot;');
+
+  check('bold becomes strong', H.inline('a **b** c', 1), 'a <strong>b</strong> c');
+  check('backticks become code', H.inline('run `npm test` now', 1),
+    'run <code>npm test</code> now');
+  /* The order these are applied in matters: a code span holding asterisks is
+     the one place ** is literal, and taking bold first would eat it. */
+  check('asterisks inside code stay literal', H.inline('`a ** b`', 1),
+    '<code>a ** b</code>');
+  check('a link becomes an anchor', H.inline('[x](/y)', 1), '<a href="/y">x</a>');
+
+  const throws = (md) => {
+    try { H.render(md); return null; } catch (e) { return e.message; }
+  };
+  ok('an unclosed backtick is refused', /unclosed backtick/.test(throws('a `b')));
+  ok('unbalanced bold is refused', /unbalanced/.test(throws('a **b')));
+  ok('a table with no divider is refused', /divider/.test(throws('| a | b |\n| c | d |')));
+  ok('a block quote is refused rather than dropped', /block quote/.test(throws('> quoted')));
+  ok('an h4 is refused rather than styled as an h3', /deeper than/.test(throws('#### x')));
+  ok('an indented line outside a list is refused', /no code blocks/.test(throws('    x')));
+
+  /* Block level, against the shared sheet's classes. */
+  const blocks = H.render('# T\n\npara\n\n## S\n\n- one\n- two\n\n1. first\n2. second\n\n'
+    + '| a | b |\n|---|---|\n| 1 | 2 |\n');
+  const all = blocks.join('\n');
+  ok('an h1 is the title', /<h1>T<\/h1>/.test(all));
+  ok('an h2 takes the section class', /<h2 class="section">S<\/h2>/.test(all));
+  ok('a dash list becomes the findings list', /<ul class="findings">/.test(all));
+  ok('a numbered list becomes the steps list', /<ol class="steps">/.test(all));
+  ok('a table is wrapped so it can scroll', /<div class="tablewrap">/.test(all));
+  ok('and has a header row', /<thead><tr><th>a<\/th><th>b<\/th><\/tr><\/thead>/.test(all));
+
+  /* A wrapped list item is one item, not two. The document wraps at 80
+     columns, so every step in it is a continuation line. */
+  const wrapped = H.render('- first line\n  continues here\n- second\n').join('');
+  check('a wrapped bullet stays one item', (wrapped.match(/<li>/g) || []).length, 2);
+  ok('and keeps its continuation', /first line continues here/.test(wrapped));
+
+  /* The real document has to build, and has to still say the things the page
+     is for. This is the check that fails if the markdown grows a construct the
+     renderer does not know. */
+  let built = null, buildErr = null;
+  try { built = H.build(); } catch (e) { buildErr = e; }
+  ok('docs/HANDOFF.md builds', !buildErr, buildErr && buildErr.message);
+  if (built) {
+    ok('the page carries the shared theme', /--parchment/.test(built));
+    ok('and pulls the same two fonts', /Fraunces.*Karla/s.test(built));
+    ok('it has a masthead', /class="masthead"/.test(built));
+    ok('and the figures strip from the front matter', /class="fig"/.test(built));
+    ok('no doctype, which the artifact host adds', !/^<!doctype/i.test(built));
+    ok('no raw markdown survived', !/\*\*/.test(built.replace(/<style>[\s\S]*<\/style>/, '')));
+  }
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {

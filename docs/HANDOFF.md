@@ -1,3 +1,12 @@
+---
+eyebrow: Handoff · 23 August 2026
+figures:
+  13 = commits today
+  933 = checks passing
+  5 = days on the menu
+  3 = items unreviewed
+---
+
 # Handoff — 23 August 2026
 
 Where the project stands at the end of a long day, and what to pick up next.
@@ -39,37 +48,39 @@ else can mean it.
 
 ### `.env`
 
-Ready: `ADMIN_PASSWORD_HASH` (plaintext line gone), `SESSION_SECRET`, `DB_PATH`.
-
-Not set: `BASE_URL` (still `http://localhost:3000`), `TOKEN_ENCRYPTION_KEY`,
-all `SMTP_*`, `FB_APP_ID` / `FB_APP_SECRET`. `NODE_ENV=development`,
-`TRUST_PROXY` unset.
+| In .env | State |
+|---|---|
+| Admin password | **hashed**, and the plaintext line is gone |
+| Session secret | set |
+| `BASE_URL` | still `http://localhost:3000` — everything downstream waits on this |
+| `TOKEN_ENCRYPTION_KEY` | empty; needed only for Facebook one-tap publishing |
+| `SMTP_*` | empty; orders are still recorded, nothing is sent |
+| `FB_APP_ID` / `FB_APP_SECRET` | empty; copy-and-paste publishing works without them |
+| `NODE_ENV` / `TRUST_PROXY` | `development`, and unset |
 
 ---
 
 ## Next steps
 
-**1. Hosting.** Nothing that can run a Node process exists yet, and everything
-below waits on it. The guide recommends OVHcloud VPS-1 in Beauharnois, Quebec —
-chosen so customer names, phones and delivery addresses stay in Canada, not for
-latency. Hostinger is the documented runner-up. Two OVH figures are flagged
-unverified in `DEPLOY.md`: whether the headline price assumes a longer
-commitment, and the renewal rate.
-
-**2. `BASE_URL` on the real domain.** More hangs off this than it looks:
-secure cookies, every link in every email, the QR codes on the card and
-stickers, and Facebook's ability to fetch a post image at all. Set it, then
-**regenerate the graphics before anything reaches a printer** — a wrong QR on
-paper is the expensive version of this mistake.
-
-**3. The three standing-item reviews.** The only work here nobody but the owner
-can do.
-
-**4. Optional, in rough order of value.** SMTP, so an order arriving is
-something you learn without opening the dashboard — set `SMTP_*` and `BASE_URL`
-together or not at all, because mail with a localhost base is mail whose every
-button is dead. Then `TOKEN_ENCRYPTION_KEY` if Facebook one-tap publishing is
-wanted; the copy-and-paste path works without it. Then the IMAP poller.
+1. **Hosting.** Nothing that can run a Node process exists yet, and everything
+   below waits on it. The guide recommends OVHcloud VPS-1 in Beauharnois, Quebec —
+   chosen so customer names, phones and delivery addresses stay in Canada, not for
+   latency. Hostinger is the documented runner-up. Two OVH figures are flagged
+   unverified in `DEPLOY.md`: whether the headline price assumes a longer
+   commitment, and the renewal rate.
+2. **`BASE_URL` on the real domain.** More hangs off this than it looks: secure
+   cookies, every link in every email, the QR codes on the card and stickers, and
+   Facebook's ability to fetch a post image at all. Set it, then **regenerate the
+   graphics before anything reaches a printer** — a wrong QR on paper is the
+   expensive version of this mistake.
+3. **The three standing-item reviews.** The only work here nobody but Derek can
+   do. The tick means he checked that dish, as written, for the menu it is going
+   on.
+4. **Then, optionally, in this order.** SMTP, so an order arriving is something
+   you learn without opening the dashboard — set `SMTP_*` and `BASE_URL` together
+   or not at all, because mail with a localhost base is mail whose every button is
+   dead. Then `TOKEN_ENCRYPTION_KEY` if Facebook one-tap publishing is wanted; the
+   copy-and-paste path works without it. Then the IMAP poller.
 
 ---
 
