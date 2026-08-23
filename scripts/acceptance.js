@@ -769,6 +769,58 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('but a stout still is', raises('Stout braised beef', 'gluten'));
 }
 
+/* --- A dictionary fix has to reach a database that already exists ----------
+   The checks above passed for months while the live dictionary raised nothing
+   for "cheesecake". The seed ran only when allergen_terms was empty, so a word
+   added to allergen-seed.js after a database was created never arrived in it —
+   and every suite builds a fresh database, which is the one state where the
+   old gate looked right.
+
+   So the seed is re-applied on every boot. These checks stand on the two halves
+   of that being safe: a word added later turns up, and a word the owner threw
+   out stays out. */
+{
+  const { seedAllergenTerms } = require('../server/db');
+  const present = (t, a) => !!db.prepare(
+    'SELECT 1 FROM allergen_terms WHERE term=? AND allergen=?').get(t, a);
+
+  // A term the seed carries, deleted the way the dashboard deletes it, without
+  // the headstone the route writes. This is a database that predates the term.
+  db.prepare('DELETE FROM allergen_terms WHERE term=? AND allergen=?').run('cheesecake', 'milk');
+  ok('a seeded term can be missing from an existing database', !present('cheesecake', 'milk'));
+
+  seedAllergenTerms();
+  ok('re-seeding brings it back', present('cheesecake', 'milk'));
+  ok('and the dish that exposed the gap now raises milk',
+    A.detect('Cheesecake with berries').some((h) => h.allergen === 'milk'));
+
+  // The other half. Removing a word has to survive the re-seed, or the owner
+  // fights the same false suggestion after every restart.
+  db.prepare('DELETE FROM allergen_terms WHERE term=? AND allergen=?').run('vinegar', 'sulphites');
+  db.prepare('INSERT OR IGNORE INTO allergen_terms_removed (term, allergen) VALUES (?,?)')
+    .run('vinegar', 'sulphites');
+  seedAllergenTerms();
+  ok('a term the owner removed is not put back', !present('vinegar', 'sulphites'));
+  ok('and removing one term does not disturb its neighbours',
+    present('balsamic', 'sulphites'));
+
+  // Adding it again by hand clears the headstone, the way the add route does.
+  db.prepare('INSERT OR IGNORE INTO allergen_terms (term, allergen) VALUES (?,?)')
+    .run('vinegar', 'sulphites');
+  db.prepare('DELETE FROM allergen_terms_removed WHERE term=? AND allergen=?')
+    .run('vinegar', 'sulphites');
+  seedAllergenTerms();
+  ok('adding it back makes it stick', present('vinegar', 'sulphites'));
+
+  // Re-running must not multiply rows: UNIQUE(term, allergen) carries this, and
+  // a duplicate would show up as a repeated chip on every dish.
+  const before = db.prepare('SELECT COUNT(*) n FROM allergen_terms').get().n;
+  seedAllergenTerms();
+  seedAllergenTerms();
+  check('re-seeding twice more changes nothing',
+    db.prepare('SELECT COUNT(*) n FROM allergen_terms').get().n, before);
+}
+
 /* --- A price box that doesn't hold a price ---------------------------------
    Blank leaves the size off the menu. Anything unreadable has to do the same:
    the stripping that lets "$22.00" through also reduced "free" to nothing,

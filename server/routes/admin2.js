@@ -969,13 +969,31 @@ router.post('/allergen-terms/add', (req, res) => {
   if (!term || !A.HEALTH_CANADA_ORDER.includes(allergen)) {
     return back(res, req, null, 'Enter a word and pick which allergen it points to.');
   }
-  db.prepare('INSERT OR IGNORE INTO allergen_terms (term, allergen) VALUES (?,?)').run(term, allergen);
+  const tx = db.transaction(() => {
+    db.prepare('INSERT OR IGNORE INTO allergen_terms (term, allergen) VALUES (?,?)').run(term, allergen);
+    /* Adding a word back clears its headstone, so it stops being skipped by the
+     * seed. Without this, removing a seeded term and later typing it in again
+     * would leave a row that quietly deleted itself on the next restart. */
+    db.prepare('DELETE FROM allergen_terms_removed WHERE term=? AND allergen=?').run(term, allergen);
+  });
+  tx();
   back(res, req, `"${term}" now suggests ${allergen} the next time you edit a description.`);
 });
 
 router.post('/allergen-terms/remove', (req, res) => {
-  db.prepare('DELETE FROM allergen_terms WHERE term=? AND allergen=?')
-    .run(String(req.body.term || ''), String(req.body.allergen || ''));
+  const term = String(req.body.term || '');
+  const allergen = String(req.body.allergen || '');
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM allergen_terms WHERE term=? AND allergen=?').run(term, allergen);
+    /* Written down, or the seed would put it back on the next restart. Recorded
+     * for every removal rather than only for words that came from the seed: a
+     * term the owner typed and then removed is not in the seed, so the row is
+     * harmless, and checking first would mean this route had to know what the
+     * seed contains. */
+    db.prepare('INSERT OR IGNORE INTO allergen_terms_removed (term, allergen) VALUES (?,?)')
+      .run(term, allergen);
+  });
+  tx();
   back(res, req, 'Word removed. Tags already on your dishes are untouched.');
 });
 

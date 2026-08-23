@@ -247,6 +247,19 @@ CREATE TABLE IF NOT EXISTS allergen_terms (
   UNIQUE(term, allergen)
 );
 
+-- Words from the seed that the owner has deliberately taken out.
+--
+-- The seed is re-applied on every boot so that terms added in a later release
+-- reach a database that already exists. That is only safe if a removal is
+-- remembered: the owner is told to drop terms that fire wrongly for their
+-- cooking, and a word that came back on every restart would be a worse bug
+-- than the one re-seeding fixes.
+CREATE TABLE IF NOT EXISTS allergen_terms_removed (
+  term     TEXT NOT NULL,
+  allergen TEXT NOT NULL,
+  PRIMARY KEY (term, allergen)
+);
+
 -- Facebook ------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS fb_connection (
   id            INTEGER PRIMARY KEY CHECK (id = 1),
@@ -417,17 +430,37 @@ if (db.prepare('SELECT COUNT(*) n FROM locations').get().n === 0) {
     .run('Kitchener — Home kitchen', 'Set this address in Locations & Delivery', 'Side door, ring bell');
 }
 
-/* --- Seed: allergen dictionary ------------------------------------------ */
-if (db.prepare('SELECT COUNT(*) n FROM allergen_terms').get().n === 0) {
+/* --- Seed: allergen dictionary ------------------------------------------
+ * Applied on every boot, not only to an empty table.
+ *
+ * It used to run only when the table held nothing, which meant a term added to
+ * allergen-seed.js in a later release reached a database created after it and
+ * no other. "cheesecake" was added the day the compound-word gap was found and
+ * never appeared in the live dictionary at all — so months later the very dish
+ * that exposed the gap still raised no milk, in the one place it mattered.
+ *
+ * The tests could not see it. Both suites build a scratch database, where an
+ * empty table means the seed always applies in full, so the check that asserts
+ * cheesecake raises milk passed while production missed it. A fix that ships in
+ * the code and never reaches the data is the shape of bug this guards against.
+ *
+ * INSERT OR IGNORE leaves an existing row alone, so re-running is cheap and
+ * never disturbs a term the owner edited. Removals are the case that needs
+ * remembering, and allergen_terms_removed is where they are written down.
+ */
+function seedAllergenTerms() {
   const seed = require('./allergen-seed');
-  const ins = db.prepare('INSERT OR IGNORE INTO allergen_terms (term, allergen) VALUES (?,?)');
+  const ins = db.prepare(`INSERT OR IGNORE INTO allergen_terms (term, allergen)
+    SELECT ?, ? WHERE NOT EXISTS (
+      SELECT 1 FROM allergen_terms_removed WHERE term = ? AND allergen = ?)`);
   const tx = db.transaction(() => {
     for (const [allergen, terms] of Object.entries(seed)) {
-      for (const t of terms) ins.run(t, allergen);
+      for (const t of terms) ins.run(t, allergen, t, allergen);
     }
   });
   tx();
 }
+seedAllergenTerms();
 
 /* --- Migrations ----------------------------------------------------------
  * CREATE TABLE IF NOT EXISTS won't add a column to a database that already
@@ -682,4 +715,12 @@ function all() {
   return out;
 }
 
-module.exports = { db, settings: { get, getInt, set, all, guard, usableTimezone } };
+module.exports = {
+  db,
+  settings: { get, getInt, set, all, guard, usableTimezone },
+  /* Exported so the suite can drive a re-seed rather than restarting a process.
+   * The old gate could not be tested at all from outside: it ran once at
+   * require time against a database the test had just created empty, which is
+   * the one state in which it behaves correctly. */
+  seedAllergenTerms,
+};
