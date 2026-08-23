@@ -66,8 +66,23 @@ const postalCodeStrategy = {
 
 const STRATEGIES = { postal_code: postalCodeStrategy };
 
+/**
+ * The configured strategy, or the built one.
+ *
+ * `STRATEGIES[name] || postalCodeStrategy` read as a safe fallback and was not
+ * one. Every object inherits constructor, toString and __proto__, so a setting
+ * of "constructor" returned the Object function — truthy, so the fallback never
+ * ran — and check() then threw on every delivery order and every eligibility
+ * probe, permanently, with no form in the dashboard able to put it back.
+ *
+ * Same shape as the fix in graphics.js: ask whether this object actually has
+ * the key, not whether looking it up produced something.
+ */
 function resolve() {
-  return STRATEGIES[settings.get('delivery_strategy', 'postal_code')] || postalCodeStrategy;
+  const id = settings.get('delivery_strategy', 'postal_code');
+  return Object.prototype.hasOwnProperty.call(STRATEGIES, id)
+    ? STRATEGIES[id]
+    : postalCodeStrategy;
 }
 
 /**

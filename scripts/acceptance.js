@@ -875,6 +875,93 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   settings.set('cutoff_hour', saved);
 }
 
+/* --- A lookup that says yes to a word it has never heard of -----------------
+   Every object in JavaScript inherits constructor, toString, valueOf and
+   __proto__, so `TABLE[name]` returns something truthy for four names nobody
+   defined. The app had this four times: the graphics set (found and fixed
+   earlier), the delivery strategy, the saved-dish sort order, and the kind of a
+   week item. Each one guarded something different and each was bypassable the
+   same way.
+
+   The consequences ran from harmless to lasting. The sort order interpolates
+   into an ORDER BY clause. The delivery strategy is read on every order and
+   appears on no form, so a bad value could not be corrected from the dashboard
+   at all.
+
+   These check the inherited names by name, on every table that takes one from
+   outside. A fifth table added later will not be caught by this — it is caught
+   by the settings check below, and by the fix being the same two lines in each
+   place, so the next reviewer has four examples to copy. */
+{
+  const DANGEROUS = ['constructor', 'toString', 'valueOf', '__proto__', 'hasOwnProperty'];
+  const DISH = require('../server/dishes');
+  const { settings } = require('../server/db');
+  const savedStrategy = settings.get('delivery_strategy');
+
+  for (const name of DANGEROUS) {
+    // The delivery strategy: a value only a restored backup could ever write.
+    settings.set('delivery_strategy', name);
+    const r = D.check('N2L 3G1');
+    ok(`delivery still answers with delivery_strategy=${name}`,
+      r && typeof r.ok === 'boolean');
+
+    // The sort order, which ends up inside SQL text.
+    let rows = null, threw = null;
+    try { rows = DISH.all({ sort: name }); } catch (e) { threw = e; }
+    ok(`the dish list still sorts with sort=${name}`, !threw && Array.isArray(rows),
+      threw && threw.message);
+
+    // A settings key nobody defined is not stored under any name.
+    check(`guard() refuses the key ${name}`, settings.guard(name, 'x'), null);
+  }
+
+  if (savedStrategy === null) {
+    db.prepare('DELETE FROM settings WHERE key = ?').run('delivery_strategy');
+  } else {
+    settings.set('delivery_strategy', savedStrategy);
+  }
+
+  // And the one real value still selects the one real strategy.
+  settings.set('delivery_strategy', 'postal_code');
+  ok('the configured strategy is still the one that runs',
+    D.check('N2L 3G1').ok === true || D.check('N2L 3G1').reason === 'out_of_area');
+  if (savedStrategy === null) {
+    db.prepare('DELETE FROM settings WHERE key = ?').run('delivery_strategy');
+  }
+}
+
+/* --- The settings allow-list has to know every key the app uses -------------
+   guard() now refuses a key that is not on the list, which is what stops a
+   restored backup writing whatever it likes. The cost of that is a list which
+   goes stale: add a setting, forget this, and the Settings form saves it while
+   a restore silently drops it — a difference nobody would look for.
+
+   So the list is checked against the code rather than against itself. Every
+   settings key literal in server/ has to be on it. */
+{
+  const { settings } = require('../server/db');
+  const dir = path.join(__dirname, '..', 'server');
+  const files = [];
+  (function walk(d) {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith('.js')) files.push(p);
+    }
+  })(dir);
+
+  const used = new Set();
+  for (const f of files) {
+    for (const m of fs.readFileSync(f, 'utf8')
+      .matchAll(/settings\.(?:get|getInt|set)\('([a-z0-9_]+)'/g)) used.add(m[1]);
+  }
+
+  ok('the sweep found the settings keys at all', used.size > 20);
+  for (const k of [...used].sort()) {
+    ok(`the allow-list knows about ${k}`, settings.ALLOWED.has(k));
+  }
+}
+
 /* --- A CSV cell is data, never a formula -----------------------------------
    Four of the exported columns are typed by the customer. A spreadsheet reads
    a leading = + - @ as the start of a formula, so those have to reach Derek's

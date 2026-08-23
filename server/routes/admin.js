@@ -350,7 +350,8 @@ router.post('/week/:id/dish/use', (req, res) => {
 });
 
 router.get('/dishes', (req, res) => {
-  const sort = DISH.SORTS[req.query.sort] ? req.query.sort : 'name';
+  const sort = Object.prototype.hasOwnProperty.call(DISH.SORTS, req.query.sort)
+    ? req.query.sort : 'name';
   const kind = DISH.KINDS.includes(req.query.kind) ? req.query.kind : '';
   const dishes = DISH.all({ sort, kind });
   const counts = DISH.countsByKind();
@@ -459,11 +460,18 @@ router.post('/week/:id/day/:dayId/delete', (req, res) => {
 
 const WEEK_ITEM_LABELS = { soup: 'Soup', salad: 'Salad', dessert: 'Dessert' };
 
+/* One copy, because there are three routes asking it, and because
+ * `WEEK_ITEM_LABELS[kind]` answered for inherited names: POSTing to
+ * /admin/week/1/constructor walked past the guard and reached the INSERT, where
+ * the table's CHECK constraint refused it and the owner got a 500. The database
+ * was doing the guard's job, which is a fine backstop and a poor front door. */
+const isWeekItemKind = (k) => Object.prototype.hasOwnProperty.call(WEEK_ITEM_LABELS, k);
+
 /* Keep this week's soup, salad or dessert on the saved list — the same button
    the featured dish of a day has, at the level above it. */
 router.post('/week/:id/:kind/save', (req, res, next) => {
   const kind = req.params.kind;
-  if (!WEEK_ITEM_LABELS[kind]) return next();
+  if (!isWeekItemKind(kind)) return next();
   const item = db.prepare('SELECT * FROM week_items WHERE week_id = ? AND kind = ?')
     .get(Number(req.params.id), kind);
   if (!item || !item.name.trim()) {
@@ -479,7 +487,7 @@ router.post('/week/:id/:kind/save', (req, res, next) => {
 /* Put a saved soup, salad or dessert on this week. */
 router.post('/week/:id/:kind/use', (req, res, next) => {
   const kind = req.params.kind;
-  if (!WEEK_ITEM_LABELS[kind]) return next();
+  if (!isWeekItemKind(kind)) return next();
   const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(Number(req.params.id));
   if (!week) return back(res, req, null, 'That week no longer exists.');
 
@@ -494,7 +502,7 @@ router.post('/week/:id/:kind/use', (req, res, next) => {
 
 router.post('/week/:id/:kind', (req, res, next) => {
   const kind = req.params.kind;
-  if (!WEEK_ITEM_LABELS[kind]) return next();
+  if (!isWeekItemKind(kind)) return next();
   const weekId = Number(req.params.id);
   const item = IF.parse(req.body, kind, { withWeekdays: true });
 

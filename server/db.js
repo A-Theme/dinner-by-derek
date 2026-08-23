@@ -698,14 +698,47 @@ const GUARDS = {
 };
 
 /**
+ * Every key this app stores, and so the only ones it will accept.
+ *
+ * Restore walks whatever the file's `settings` object happens to hold and hands
+ * each key to guard(), which used to store anything it did not recognise. A
+ * backup is a file that travels — through email, through cloud storage, through
+ * whoever sent it — so "any key at all" was a wider door than it looked.
+ *
+ * `delivery_strategy` is the one that made it matter: it decides which
+ * eligibility strategy runs, is read by delivery.js, and appears on no form, so
+ * a value written into it could not be seen or corrected from the dashboard.
+ *
+ * The list is the seeded defaults plus the three the app writes for itself. A
+ * check in the acceptance suite reads every settings key literal out of
+ * server/ and fails if one is missing here, so adding a setting and forgetting
+ * this list is caught rather than discovered by a restore that drops it.
+ */
+const ALLOWED_SETTINGS = new Set([
+  ...Object.keys(DEFAULTS),
+  'delivery_strategy',        // which eligibility strategy resolve() picks
+  'missing_week_warned_for',  // publish.js: one reminder per week
+  'signin_alert_hour',        // signin.js: one alert per bad hour
+]);
+
+/**
  * The value to store, or null when it cannot be stored at all.
  *
  * Null means "keep what is already there and tell the owner". Never means
  * "store a default": silently correcting a timezone to somewhere the owner
- * does not live would move every cutoff in the app without saying so.
+ * does not live would move every cutoff in the app without saying so. An
+ * unknown key is the same answer, and restore names it in the sentence it
+ * shows rather than dropping it in silence.
  */
 function guard(key, value) {
-  const g = GUARDS[key];
+  if (!ALLOWED_SETTINGS.has(key)) return null;
+  /* GUARDS[key] answered for names nobody defined — every object inherits
+   * constructor, toString and __proto__, so `guard('constructor', v)` reached
+   * `g(value)` with g being the Object constructor. The allow-list above makes
+   * that unreachable today; the check stays because the two lines are one
+   * argument apart and the next key added to the list should not have to be
+   * the one that remembers this. */
+  const g = Object.prototype.hasOwnProperty.call(GUARDS, key) ? GUARDS[key] : null;
   if (!g) return value === null || value === undefined ? null : String(value);
   return g(value);
 }
@@ -717,7 +750,7 @@ function all() {
 
 module.exports = {
   db,
-  settings: { get, getInt, set, all, guard, usableTimezone },
+  settings: { get, getInt, set, all, guard, usableTimezone, ALLOWED: ALLOWED_SETTINGS },
   /* Exported so the suite can drive a re-seed rather than restarting a process.
    * The old gate could not be tested at all from outside: it ran once at
    * require time against a database the test had just created empty, which is

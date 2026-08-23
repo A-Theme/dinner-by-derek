@@ -63,7 +63,14 @@ const SORT_LABELS = {
  * should show the list, not an empty page.
  */
 function all({ sort, kind } = {}) {
-  const order = SORTS[sort] || SORTS.name;
+  /* This one ends up inside the SQL text rather than bound to a parameter, so
+   * the lookup is the whole of the guard. `SORTS[sort]` answered for inherited
+   * names — ?sort=constructor produced the Object function and an ORDER BY
+   * clause reading "function Object() { [native code] }", which is a syntax
+   * error and a 500. Nothing an attacker writes could reach the statement, but
+   * a guard that says yes to a word it has never heard of is the wrong guard
+   * to have in front of interpolated SQL. */
+  const order = Object.prototype.hasOwnProperty.call(SORTS, sort) ? SORTS[sort] : SORTS.name;
   if (KINDS.includes(kind)) {
     return db.prepare(`SELECT * FROM saved_dishes WHERE kind = ? ORDER BY ${order}`).all(kind);
   }
