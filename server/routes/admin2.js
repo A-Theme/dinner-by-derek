@@ -533,6 +533,69 @@ router.post('/payments/:id/unlink', (req, res) => {
     : `Unlinked. ${o.name}'s order stays marked paid — you had marked it yourself.`);
 });
 
+/* ============================ MENU HISTORY ==============================
+   What was cooked on each date, newest first.
+
+   Grouped by the calendar week the DATE falls in rather than by the week row it
+   is attached to, which is the whole point: a day left behind by a change to
+   "Week starts" is attached to one week and sits in another, and grouping by
+   week_id would file it where it is not. Aug 18th belongs under the week of the
+   17th on this page however it is stored.
+
+   Read-only. These are records of what was on a menu, and a page for looking
+   back is the wrong place to be able to change one. */
+router.get('/history', (req, res) => {
+  const rows = db.prepare(`
+    SELECT sd.service_date, sd.dish_name, sd.closed, sd.ack, sd.photo,
+           w.id AS week_id, w.title AS week_title, w.status AS week_status,
+           w.week_start
+    FROM service_days sd JOIN weeks w ON w.id = sd.week_id
+    ORDER BY sd.service_date DESC LIMIT 400`).all();
+
+  const today = T.todayIn(tz());
+  const groups = new Map();
+  for (const r of rows) {
+    const monday = T.mondayOf(r.service_date);
+    if (!groups.has(monday)) groups.set(monday, []);
+    /* Attached to a week whose seven dates do not contain it. It no longer
+       appears on that week's menu, here or for a customer, and saying so is
+       kinder than leaving it looking like an ordinary day that vanished. */
+    const adrift = r.week_start
+      && (r.service_date < r.week_start || r.service_date >= T.addDays(r.week_start, 7));
+    groups.get(monday).push({ ...r, adrift });
+  }
+
+  const body = html`
+    <h1>Menu history</h1>
+    <p class="also">Every service day that has ever been written down, newest first,
+      grouped by the week the date falls in. Nothing here can be edited — the current
+      week is edited in <a href="/admin/week">This Week</a>.</p>
+
+    ${groups.size ? [...groups.entries()].map(([monday, days]) => html`
+      <div class="card">
+        <h2>${T.fmtWeekRange(monday, tz())}${monday === T.mondayOf(today)
+          ? html` <span class="flag flag--ok">This week</span>` : ''}</h2>
+        <table class="dtable">
+          <thead><tr><th>Day</th><th>Dish</th><th></th></tr></thead>
+          <tbody>
+            ${days.map((d) => html`<tr>
+              <td data-label="Day">${T.fmtDayShort(d.service_date, tz())}</td>
+              <td data-label="Dish">${d.closed
+                ? html`<em>Kitchen closed</em>`
+                : (d.dish_name && d.dish_name.trim() ? d.dish_name : html`<em>No dish</em>`)}</td>
+              <td data-label="">
+                ${d.week_status === 'published' ? html`<span class="variant__label">published</span>` : ''}
+                ${d.adrift ? html`<span class="flag flag--warn">Not on ${d.week_title}</span>` : ''}
+              </td>
+            </tr>`)}
+          </tbody>
+        </table>
+      </div>`)
+      : html`<div class="card"><p>No service days have been written down yet.</p></div>`}`;
+
+  res.type('html').send(String(V.shell({ title: 'Menu history', body, current: 'history' })));
+});
+
 /* ======================= LOCATIONS & DELIVERY =========================== */
 router.get('/locations', (req, res) => {
   const locs = db.prepare('SELECT * FROM locations ORDER BY sort, id').all();

@@ -1937,6 +1937,69 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     adminSrc.indexOf('router.use(auth.required)') < adminSrc.indexOf("router.post('/logout'"));
 }
 
+/* --- A day belongs to the week whose dates contain it ----------------------
+   Moving "Week starts" re-labels the boxes and never touches a day already
+   filled in, which is right — a date change must not quietly discard a dish.
+   What it leaves is a day attached to a week by week_id while sitting outside
+   the dates that week covers. The live database had a week starting Aug 24
+   carrying Aug 18, 19 and 20.
+
+   The display was the least of it. serviceDaysOf feeds the customer week view,
+   so publishing would have offered three dates already in the past, with their
+   cutoffs long gone; and it feeds the publish gate, where an unreviewed
+   straggler blocks publishing from a row no screen shows. */
+{
+  const P = require('../server/publish');
+  const M = require('../server/menu');
+  const wid = db.prepare("INSERT INTO weeks (slug,title,week_start,status) VALUES (?,?,?,'draft')")
+    .run('week-range-test', 'Range test', '2026-08-24').lastInsertRowid;
+  const addDay = (date, dish, ack) => db.prepare(
+    `INSERT INTO service_days (week_id, service_date, dish_name, ack, ack_of)
+     VALUES (?,?,?,?,?)`).run(wid, date, dish, ack, ack ? `${dish}\n` : null);
+
+  addDay('2026-08-18', 'Left Behind', 1);      // the week before — adrift
+  addDay('2026-08-23', 'Day Before', 1);       // the Sunday before it starts
+  addDay('2026-08-24', 'Monday Dish', 1);      // first day of the week
+  addDay('2026-08-30', 'Sunday Dish', 1);      // seventh day, still in
+  addDay('2026-08-31', 'Next Monday', 1);      // one past the end — adrift
+
+  const inWeek = M.serviceDaysOf(wid).map((d) => d.service_date);
+  check('only the days inside the week come back', inWeek,
+    ['2026-08-24', '2026-08-30']);
+  check('the first day of the week is included', inWeek.includes('2026-08-24'), true);
+  check('and the seventh, which is the boundary that is easy to lose',
+    inWeek.includes('2026-08-30'), true);
+  check('the day before it starts is not', inWeek.includes('2026-08-23'), false);
+  check('nor the day after it ends', inWeek.includes('2026-08-31'), false);
+
+  check('but nothing is deleted', M.everyServiceDayOf(wid).length, 5);
+
+  /* The gate reads the filtered list, so a straggler can no longer hold a week
+     hostage from a row nobody can open. */
+  db.prepare('UPDATE service_days SET ack = 0 WHERE week_id = ? AND service_date = ?')
+    .run(wid, '2026-08-18');
+  const blockers = P.blockers(wid);
+  ok('an unreviewed day outside the week does not block publishing',
+    !blockers.some((b) => /Left Behind/.test(b)), blockers.join(' | '));
+
+  // And one inside it still does, which is the half that must not break.
+  db.prepare('UPDATE service_days SET ack = 0 WHERE week_id = ? AND service_date = ?')
+    .run(wid, '2026-08-24');
+  ok('an unreviewed day inside the week still does',
+    P.blockers(wid).some((b) => /Monday Dish/.test(b)));
+
+  /* A week from before week_start existed is not filtered into nothing. The
+     dashboard backfills one the first time such a week is opened. */
+  const oldId = db.prepare("INSERT INTO weeks (slug,title,status) VALUES (?,?,'draft')")
+    .run('week-no-start', 'No start').lastInsertRowid;
+  db.prepare('INSERT INTO service_days (week_id, service_date, dish_name) VALUES (?,?,?)')
+    .run(oldId, '2026-01-05', 'Ancient');
+  check('a week with no start date keeps its days', M.serviceDaysOf(oldId).length, 1);
+
+  db.prepare('DELETE FROM service_days WHERE week_id IN (?,?)').run(wid, oldId);
+  db.prepare('DELETE FROM weeks WHERE id IN (?,?)').run(wid, oldId);
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {

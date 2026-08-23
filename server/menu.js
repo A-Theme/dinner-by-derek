@@ -98,7 +98,48 @@ function weekBySlug(slug) {
   return db.prepare('SELECT * FROM weeks WHERE slug = ?').get(slug);
 }
 
+/**
+ * The days that belong to a week — meaning the ones inside its own seven dates.
+ *
+ * Moving "Week starts" re-labels the boxes and deliberately never touches a day
+ * already filled in, which is right: it stops a date change quietly discarding
+ * a dish. What it leaves behind is a day still attached to the week by week_id
+ * while sitting outside the dates that week covers. A week starting Aug 24 was
+ * carrying Aug 18, 19 and 20.
+ *
+ * That is not only untidy. This function feeds the customer week view, so a
+ * published week would have offered days from the week before it — three dates
+ * already in the past, orderable, with their cutoffs long gone. It also feeds
+ * the publish gate, where an unreviewed straggler could block publishing from a
+ * row no screen would show you.
+ *
+ * Nothing is deleted. The rows stay, and Menu history is where they can still
+ * be read; they simply stop being part of a week they are not in.
+ *
+ * A week with no week_start is not filtered — those predate the column, and the
+ * dashboard backfills one the first time such a week is opened.
+ */
 function serviceDaysOf(weekId) {
+  return db.prepare(`
+    SELECT sd.* FROM service_days sd
+    JOIN weeks w ON w.id = sd.week_id
+    WHERE sd.week_id = ?
+      AND (w.week_start IS NULL
+           OR (sd.service_date >= w.week_start
+               AND sd.service_date < date(w.week_start, '+7 days')))
+    ORDER BY sd.service_date`).all(weekId);
+}
+
+/**
+ * Every row attached to the week, in range or not.
+ *
+ * Two callers need this and both would break on the filtered list. The date
+ * grid checks what already exists before inserting, and UNIQUE(week_id,
+ * service_date) means a day it could not see is a constraint error rather than
+ * a no-op — move the week start back onto a straggler and the save would 500.
+ * Menu history needs it because showing the stragglers is the point.
+ */
+function everyServiceDayOf(weekId) {
   return db.prepare('SELECT * FROM service_days WHERE week_id = ? ORDER BY service_date')
     .all(weekId);
 }
@@ -294,6 +335,7 @@ function activeLocations() {
 
 module.exports = {
   SUBCATEGORY_ORDER, activeWeek, weekBySlug, serviceDaysOf, weekItemsOf,
+  everyServiceDayOf,
   standingItems, standingRunsOn, weekItemRunsOn, pickupWindowFor, clock,
   deliveryOnFor, closureFor, menuForDay, findItem, alsoAvailableLine, activeLocations,
   soldOn, soldOnAll, featuredCapFor, toRenderItem,

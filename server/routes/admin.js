@@ -431,7 +431,10 @@ router.post('/dishes/:id/delete', (req, res) => {
 router.post('/week/:id/dates', (req, res) => {
   const id = Number(req.params.id);
   const dates = IF.arr(req.body.dates).map(String).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
-  const existing = M.serviceDaysOf(id);
+  /* Every row, not just the in-range ones: UNIQUE(week_id, service_date) makes
+     a day this check cannot see an error rather than a skip, so moving the week
+     start back onto an out-of-range day would fail the save. */
+  const existing = M.everyServiceDayOf(id);
   const tx = db.transaction(() => {
     for (const d of dates) {
       if (!existing.find((e) => e.service_date === d)) {
