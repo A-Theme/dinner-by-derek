@@ -294,9 +294,18 @@ function buildPostText(week) {
   L.push('', `PICKUP ${win}`);
   for (const l of M.activeLocations()) L.push(`${l.name} — ${l.address}`);
   if (settings.getInt('delivery_enabled', 1)) {
-    const { servedAreas } = require('./delivery');
     L.push('', `DELIVERY ${settings.get('delivery_window')} — ${money(settings.getInt('delivery_fee'))}`);
-    L.push(`We deliver to: ${servedAreas().join(', ')}`);
+    /* Named in plain English rather than as the FSA list. Fifteen postal
+     * prefixes is a wall of text in a Facebook post and answers a question
+     * nobody reading a menu is asking; the order form still checks the real
+     * list and still names it when a code falls outside the area, which is the
+     * moment the detail is actually wanted.
+     *
+     * This is a claim about geography that the fsas table does not enforce, so
+     * it is worth knowing they can disagree: every prefix served today is
+     * Kitchener or Waterloo, and adding one further out means changing this
+     * line too. */
+    L.push('We deliver to Kitchener and Waterloo');
   }
 
   L.push('', settings.get('payment_instructions'));

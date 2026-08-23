@@ -2000,6 +2000,38 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   db.prepare('DELETE FROM weeks WHERE id IN (?,?)').run(wid, oldId);
 }
 
+/* --- What the Facebook post says about delivery ----------------------------
+   It listed all fifteen served FSAs — "We deliver to: N2A, N2B, N2C…" — which
+   is a wall of text in a post and answers a question nobody reading a menu is
+   asking. Plain English here; the real list still does the work where it is
+   wanted, which is the order form refusing a code outside the area. */
+{
+  const FB = require('../server/facebook');
+  const { settings } = require('../server/db');
+  const wid = db.prepare("INSERT INTO weeks (slug,title,week_start,status) VALUES (?,?,?,'published')")
+    .run('week-post-text', 'Post text week', '2026-09-07').lastInsertRowid;
+  const week = db.prepare('SELECT * FROM weeks WHERE id=?').get(wid);
+  settings.set('delivery_enabled', 1);
+
+  const text = FB.buildPostText(week);
+  ok('the post names the area in words', /We deliver to Kitchener and Waterloo/.test(text));
+  ok('and does not list the postal prefixes', !/N2[A-Z], N2[A-Z]/.test(text));
+  ok('the delivery heading is still there', /DELIVERY/.test(text));
+
+  /* The detail has to survive where it is useful: a customer whose code is
+     refused needs to know which areas are served. */
+  const refused = D.check('M5V 3L9');
+  check('a code outside the area is refused', refused.reason, 'out_of_area');
+  ok('and the served list is still available to say so', D.servedAreas().length > 0);
+
+  // Delivery off means the section goes entirely, not an empty heading.
+  settings.set('delivery_enabled', 0);
+  ok('no delivery section when delivery is off', !/DELIVERY/.test(FB.buildPostText(week)));
+  settings.set('delivery_enabled', 1);
+
+  db.prepare('DELETE FROM weeks WHERE id=?').run(wid);
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {
