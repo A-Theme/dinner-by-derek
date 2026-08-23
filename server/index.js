@@ -17,6 +17,7 @@ const multer = require('multer');
 
 const config = require('./config');
 const auth = require('./auth');
+const images = require('./images');
 const { db } = require('./db');
 
 const app = express();
@@ -48,9 +49,63 @@ app.use((req, res, next) => { if (!req.body) req.body = {}; next(); });
 
 app.use(cookieParser());
 
+/* Registered here, ahead of everything that can answer, rather than after the
+ * static mounts. Below them it skipped /sw.js and both multipart rejections —
+ * four responses that went out with no CSP, no nosniff and no HSTS. None of
+ * them was exploitable, and none of them had any business being the exception
+ * either: a header set for the site should be set for the whole of it. */
+/* --- Security headers -----------------------------------------------------
+ * Everything this app loads it also serves — no CDN, no font host, no
+ * analytics — so 'self' is the whole allowance and anything a page tries to
+ * reach past it is a bug or an injection.
+ *
+ * Inline script is refused outright. That is only sayable because the handful
+ * of onclick attributes and the one inline config blob were moved into the
+ * script files first; leaving them and adding 'unsafe-inline' would have been
+ * a header that describes nothing.
+ *
+ * Inline *style* is still allowed. Seventy-odd style attributes sit in the
+ * views, several computing a width from a number, and an injected style
+ * cannot do what an injected script can. Worth revisiting, not worth blocking
+ * this on.
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self'",                    // photos, icons and graphics are all ours
+  "font-src 'self'",
+  "connect-src 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",            // nobody frames the dashboard
+  "base-uri 'none'",
+  "object-src 'none'",
+].join('; ');
+
+app.use((req, res, next) => {
+  res.set('Content-Security-Policy', CSP);
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('X-Frame-Options', 'DENY');            // for anything still reading it
+  res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=()');
+  /* Only worth sending where the browser can act on it, and only true once
+   * the site is actually reachable over https. Sent from an http address it
+   * is ignored; sent from a site that later has to fall back to http it is a
+   * promise nobody can keep. */
+  if (config.cookieSecure) {
+    res.set('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  }
+  next();
+});
+
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 26 * 1024 * 1024, files: 2, fields: 200 },
+  /* The same ceiling images.js enforces, taken from the same constant. These
+   * were 26 MB here and 25 MB there, against one error message that said 25 —
+   * so a file between the two passed multer and was refused a step later, by a
+   * different check, with wording that made the first limit look wrong. */
+  limits: { fileSize: images.MAX_RAW, files: 2, fields: 200 },
 });
 
 /**
@@ -124,50 +179,6 @@ app.get('/sw.js', (req, res) => {
  * max-age rather than the shell's seven days: they are a handful of small PNGs
  * fetched rarely, and a week-long cache on an image the owner just regenerated
  * from a phone reads as the button having done nothing. */
-/* --- Security headers -----------------------------------------------------
- * Everything this app loads it also serves — no CDN, no font host, no
- * analytics — so 'self' is the whole allowance and anything a page tries to
- * reach past it is a bug or an injection.
- *
- * Inline script is refused outright. That is only sayable because the handful
- * of onclick attributes and the one inline config blob were moved into the
- * script files first; leaving them and adding 'unsafe-inline' would have been
- * a header that describes nothing.
- *
- * Inline *style* is still allowed. Seventy-odd style attributes sit in the
- * views, several computing a width from a number, and an injected style
- * cannot do what an injected script can. Worth revisiting, not worth blocking
- * this on.
- */
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self'",                    // photos, icons and graphics are all ours
-  "font-src 'self'",
-  "connect-src 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",            // nobody frames the dashboard
-  "base-uri 'none'",
-  "object-src 'none'",
-].join('; ');
-
-app.use((req, res, next) => {
-  res.set('Content-Security-Policy', CSP);
-  res.set('X-Content-Type-Options', 'nosniff');
-  res.set('X-Frame-Options', 'DENY');            // for anything still reading it
-  res.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=()');
-  /* Only worth sending where the browser can act on it, and only true once
-   * the site is actually reachable over https. Sent from an http address it
-   * is ignored; sent from a site that later has to fall back to http it is a
-   * promise nobody can keep. */
-  if (config.cookieSecure) {
-    res.set('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
-  }
-  next();
-});
-
 const graphics = require('./graphics');
 for (const [key, dir] of Object.entries(graphics.dirs)) {
   fs.mkdirSync(dir, { recursive: true });

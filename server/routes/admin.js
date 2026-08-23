@@ -51,9 +51,14 @@ router.post('/login', rateLimit('login', 8, 10 * 60_000), async (req, res) => {
   res.redirect(303, next.startsWith('/admin') ? next : '/admin');
 });
 
-router.post('/logout', (req, res) => { auth.clear(res); res.redirect(303, '/admin/login'); });
-
 router.use(auth.required);
+
+/* Below the guard, not above it. Signing out is a state change, and up here it
+ * answered anyone — so a form on another site could clear the session of
+ * whoever loaded it. Only a nuisance, since it destroys access rather than
+ * granting it, but a request with no session has nothing to sign out of and the
+ * login page is where it wants to go anyway. */
+router.post('/logout', (req, res) => { auth.clear(res); res.redirect(303, '/admin/login'); });
 
 /* --- Today --------------------------------------------------------------- */
 router.get('/', (req, res) => {

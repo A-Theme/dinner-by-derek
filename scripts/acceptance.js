@@ -1895,6 +1895,48 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     !/value="\$\{p\.access_token\}"/.test(admin3Src));
 }
 
+/* --- A date off a URL is not a date until it is checked --------------------
+   parseDate trusts what it is handed, which is right for the callers reading
+   out of the database and wrong for the print sheets, which read one off the
+   URL and pass it to Intl. */
+{
+  ok('an ordinary date passes', T.isCalendarDate('2026-08-25'));
+  ok('a leap day passes', T.isCalendarDate('2024-02-29'));
+  ok('but not in a year without one', !T.isCalendarDate('2025-02-29'));
+  ok('nonsense is refused', !T.isCalendarDate('abc'));
+  ok('so is the wrong shape', !T.isCalendarDate('2026-8-5'));
+  ok('and an empty string', !T.isCalendarDate(''));
+  ok('and something that is not a string', !T.isCalendarDate(undefined));
+  /* The interesting one. This has the right shape, and Date.UTC rolls it
+     forward to the 1st of September — so before the round-trip check a mistyped
+     link answered confidently about a different day than the one asked for. */
+  ok('a day past the end of the month is refused, not rolled',
+    !T.isCalendarDate('2026-08-32'));
+  check('and the roll is real, which is why the check is', T.addDays('2026-08-31', 1), '2026-09-01');
+
+  const admin3Src = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'admin3.js'), 'utf8');
+  const sheetGuards = (admin3Src.match(/const date = sheetDate\(req, res\);/g) || []).length;
+  check('all three print sheets check the date first', sheetGuards, 3);
+}
+
+/* --- Headers belong to the whole site --------------------------------------
+   The security headers were registered after the static mounts, so /sw.js and
+   both multipart rejections answered without them. */
+{
+  const indexSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'index.js'), 'utf8');
+  const at = (needle) => indexSrc.indexOf(needle);
+  ok('the headers go on before anything can answer',
+    at('Content-Security-Policy') < at("app.get('/sw.js'"));
+  ok('and before the multipart handler that can refuse a request',
+    at('Content-Security-Policy') < at("app.use('/admin', (req, res, next)"));
+  ok('the upload ceiling is one number, not two',
+    /fileSize: images\.MAX_RAW/.test(indexSrc));
+
+  const adminSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'admin.js'), 'utf8');
+  ok('signing out is behind the guard, like every other state change',
+    adminSrc.indexOf('router.use(auth.required)') < adminSrc.indexOf("router.post('/logout'"));
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {

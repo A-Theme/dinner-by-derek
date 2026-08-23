@@ -75,6 +75,13 @@ async function store(buf) {
   try {
     // .rotate() with no argument applies the EXIF orientation tag, which is
     // what stops phone photos appearing sideways.
+    //
+    // failOn:'none' is deliberate — a phone photo with a truncated last block
+    // should still import rather than being refused over a byte nobody can see.
+    // It also switches off the guard that would refuse a decompression bomb, so
+    // what actually bounds the decode is sharp's default limitInputPixels
+    // (~268 megapixels). That default is load-bearing here: do not pass
+    // limitInputPixels:false alongside this.
     const base = sharp(working, { failOn: 'none' }).rotate();
 
     await base.clone()

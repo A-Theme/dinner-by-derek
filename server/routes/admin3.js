@@ -106,8 +106,21 @@ function sheetShell(title, body) {
   });
 }
 
-strict.get('/sheet/kitchen/:date', auth.requiredStrict, (req, res) => {
+/* The three sheets are the only places a date arrives off a URL rather than out
+   of the database, and every one of them hands it to Intl by way of parseDate.
+   A shape parseDate cannot read became a 500 that blamed the server. */
+function sheetDate(req, res) {
   const date = req.params.date;
+  if (!T.isCalendarDate(date)) {
+    res.status(404).type('text/plain').send('That is not a date this app can print.');
+    return null;
+  }
+  return date;
+}
+
+strict.get('/sheet/kitchen/:date', auth.requiredStrict, (req, res) => {
+  const date = sheetDate(req, res);
+  if (!date) return;
   const totals = O.kitchenTotals(date);
   const notes = db.prepare(`SELECT name, allergy_notes FROM orders
     WHERE service_date=? AND status='confirmed' AND allergy_notes != '' ORDER BY name`).all(date);
@@ -135,7 +148,8 @@ strict.get('/sheet/kitchen/:date', auth.requiredStrict, (req, res) => {
 });
 
 strict.get('/sheet/pickup/:date', auth.requiredStrict, (req, res) => {
-  const date = req.params.date;
+  const date = sheetDate(req, res);
+  if (!date) return;
   const orders = db.prepare(`SELECT * FROM orders WHERE service_date=? AND method='pickup'
     AND status='confirmed' ORDER BY location_name, name`).all(date);
 
@@ -168,7 +182,8 @@ strict.get('/sheet/pickup/:date', auth.requiredStrict, (req, res) => {
 });
 
 strict.get('/sheet/delivery/:date', auth.requiredStrict, (req, res) => {
-  const date = req.params.date;
+  const date = sheetDate(req, res);
+  if (!date) return;
   const orders = db.prepare(`SELECT * FROM orders WHERE service_date=? AND method='delivery'
     AND status='confirmed' ORDER BY fsa, postal_norm, name`).all(date);
 
@@ -389,6 +404,15 @@ router.post('/facebook/select', async (req, res) => {
   const chosen = held.pages.find((p) => String(p.id) === String(page_id));
   if (!chosen) {
     return back(res, req, null, 'That Page wasn\'t one of the ones offered. Start again from Settings.');
+  }
+  /* The same check /facebook/connect makes, because this is where it bites.
+     saveConnection encrypts the token and encrypt() throws without a key, so
+     this failed closed already — but into the catch below, which blames
+     Facebook for refusing something it was never asked. The server is missing a
+     setting; say that, since it is the only one of the two the owner can fix. */
+  if (!config.tokenKey) {
+    return back(res, req, null, 'The server is missing its token encryption key, so the '
+      + 'connection can\'t be stored safely. Set TOKEN_ENCRYPTION_KEY and connect again.');
   }
   const page_name = chosen.name;
   try {

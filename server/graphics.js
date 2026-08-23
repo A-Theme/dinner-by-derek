@@ -138,6 +138,11 @@ async function run(key, opts) {
  */
 function list(key) {
   const set = get(key);
+  /* Unreachable today — every caller passes a key straight out of
+   * Object.values(SETS) — but get() is allowed to answer null and the next line
+   * reads a property off it. One line, so that adding a caller cannot turn a
+   * typo into a 500. */
+  if (!set) return [];
   // A set whose filenames are not known ahead of time reads them off disk.
   const entries = set.listFiles ? set.listFiles() : set.files;
   return entries.map(([name, label, size]) => {

@@ -262,6 +262,17 @@ function create(payload) {
     if (existing) return { order: existing, lines: linesOf(existing.id), repeat: true };
   }
 
+  /* quote() reads what is left of a day's stock and the insert below writes
+   * against it, and the two are not one transaction. That is safe here for a
+   * reason worth writing down rather than rediscovering: better-sqlite3 is
+   * synchronous and there is no await between them, so Node's single thread
+   * makes the whole read-check-write atomic by construction.
+   *
+   * It stops being true the moment either half of that changes — a second
+   * worker against the same file, or an await introduced anywhere inside
+   * create(). Then two orders for the last portion both pass the check and the
+   * day oversells. Nothing to fix today; something to notice before adding the
+   * await that looks harmless. */
   const { order: o, lines } = quote(payload);
   o.submission_key = key;
 

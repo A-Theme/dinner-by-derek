@@ -35,11 +35,23 @@ function tzOffsetMs(instant, tz) {
   return asUTC - instant.getTime();
 }
 
-/** Convert a local wall-clock time in `tz` to a UTC Date. */
+/**
+ * Convert a local wall-clock time in `tz` to a UTC Date.
+ *
+ * Two passes settle the offset even when the guess lands on the other side of a
+ * DST boundary. What two passes cannot settle is a wall-clock time that is not
+ * one: on the spring-forward date 02:30 never happens, and on the fall-back date
+ * 01:30 happens twice. This resolves both without saying so — it returns one
+ * instant, and which one is an artefact of the arithmetic rather than a choice.
+ *
+ * It does not matter at the defaults. The cutoff is 22:00 and the late cutoff
+ * 06:00, and neither is anywhere near a transition. It would matter if a cutoff
+ * were ever configured inside the small hours, which the Settings form permits:
+ * twice a year that deadline would land an hour from where it reads. Worth
+ * knowing before someone sets one, not worth guessing at a rule for now.
+ */
 function zonedToUtc(y, m, d, hh, mm, tz) {
   const naive = Date.UTC(y, m - 1, d, hh, mm, 0, 0);
-  // Two passes settle the offset even when the guess lands on the other side
-  // of a DST boundary.
   let guess = naive - tzOffsetMs(new Date(naive), tz);
   guess = naive - tzOffsetMs(new Date(guess), tz);
   return new Date(guess);
@@ -49,6 +61,28 @@ function zonedToUtc(y, m, d, hh, mm, tz) {
 function parseDate(iso) {
   const [y, m, d] = iso.split('-').map(Number);
   return { y, m, d };
+}
+
+/**
+ * Is this a real calendar date, written the way this app writes them?
+ *
+ * parseDate trusts what it is given, which is right for the callers that read
+ * dates out of the database and wrong for the two that read one off a URL. A
+ * shape it cannot parse becomes NaN, NaN reaches Intl, and Intl throws
+ * RangeError — a 500 blaming the server for a request that was only malformed.
+ *
+ * The round-trip is the half that catches the interesting case. '2026-08-32'
+ * has the right shape and Date.UTC quietly rolls it to the 1st of September, so
+ * a link with a typo in it would answer confidently about a different day than
+ * the one asked for. If it does not come back as it went in, it was not a date.
+ */
+function isCalendarDate(iso) {
+  if (typeof iso !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+  const { y, m, d } = parseDate(iso);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return Number.isFinite(t.getTime()) && fmtDate({
+    y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate(),
+  }) === iso;
 }
 
 function fmtDate({ y, m, d }) {
@@ -210,7 +244,7 @@ function fmtWeekRange(startIso, tz) {
 module.exports = {
   WEEKDAYS, WEEKDAY_LABELS, WEEKDAYS_MON_FIRST,
   tzOffsetMs, zonedToUtc, addDays, weekdayOf, mondayOf, mondayOnOrAfter,
-  cutoffFor, lateCutoffFor, dayState,
+  cutoffFor, lateCutoffFor, dayState, isCalendarDate,
   todayIn, fmtLocal, fmtDayLong, fmtDayShort, fmtMonthDay,
   fmtClock, fmtWindow, fmtWeekRange, parseDate,
 };
