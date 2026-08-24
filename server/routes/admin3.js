@@ -76,8 +76,14 @@ strict.post('/restore', auth.requiredStrict, (req, res) => {
         + `couldn't be used and ${n.skipped.length === 1 ? 'was' : 'were'} left as ${
           n.skipped.length === 1 ? 'it is' : 'they are'}: ${n.skipped.join(', ')}.`
       : '';
+    /* An older backup has no saved dishes in it, so the list on disk was left
+     * where it was rather than emptied. Say so plainly — the alternative is an
+     * owner who thinks the whole database came from the file. */
+    const dishes = n.keptLibrary
+      ? ' That file predates saved dishes, so your saved list was left as it is.'
+      : ` ${n.dishes} saved dish${n.dishes === 1 ? '' : 'es'} came back too.`;
     back(res, req, `Restored ${n.weeks} weeks, ${n.orders} orders and `
-      + `${n.standing} standing items.${kept}`);
+      + `${n.standing} standing items.${dishes}${kept}`);
   } catch (e) {
     // The message names what was wrong with the file when the file was the
     // problem, because "check it's the right backup" is no help to someone

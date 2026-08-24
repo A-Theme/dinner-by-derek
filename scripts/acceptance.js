@@ -1186,6 +1186,18 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
 {
   const X = require('../server/exports');
   const { settings } = require('../server/db');
+
+  /* The saved list has to be in the file before the round trip can prove
+     anything, and the block above empties it on its way out. Written with SQL
+     rather than DISH.save so this tests the backup, not the save path. */
+  const seedDish = (kind, name, allergens) => db.prepare(
+    `INSERT INTO saved_dishes (kind, name, description, allergens, dismissed, full_price)
+     VALUES (?,?,?,?,?,?)`).run(kind, name, name.toLowerCase(), allergens, '[]', 5000);
+  db.prepare('DELETE FROM saved_dishes').run();
+  seedDish('main', 'Swedish Meatballs', '["milk","eggs"]');
+  seedDish('main', 'Pork Schnitzel', '[]');
+  seedDish('soup', 'Beef Barley', '[]');
+
   const good = X.backup();                       // the state everything above left
 
   const wrap = (extra) => JSON.stringify({ format: 'dinner-by-derek-backup', ...extra });
@@ -1289,6 +1301,72 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('with the dictionary intact',
     db.prepare('SELECT COUNT(*) n FROM allergen_terms').get().n > 300);
   check('and the timezone as it was', settings.get('timezone'), before);
+
+  /* --- The saved list travels with the backup ------------------------------
+     It did not, for as long as the saved list has existed. The tables were
+     listed by hand in backup(), saved_dishes was added to the app afterwards,
+     and a restore therefore put the week back and left the library empty —
+     three years of menus, and the other copy of them is gitignored. */
+  const dishCount = () => db.prepare('SELECT COUNT(*) n FROM saved_dishes').get().n;
+
+  /* Read defensively. A backup() that has forgotten the table again hands back
+     undefined here, and reaching into it would throw out of the whole suite —
+     which reports the regression as a crash on this line rather than as the
+     one sentence that says what broke. */
+  const inFile = JSON.parse(good).saved_dishes;
+  ok('a backup carries the saved dishes', Array.isArray(inFile) && inFile.length === 3,
+    `saved_dishes in the file: ${JSON.stringify(inFile)}`);
+  check('and says which version wrote it', JSON.parse(good).version, 2);
+  check('the round trip brought them back', dishCount(), 3);
+  check('and counted them for the owner', back.dishes, 3);
+
+  db.prepare('DELETE FROM saved_dishes').run();
+  const again = X.restore(good);
+  check('a restore refills an emptied library', dishCount(), 3);
+  /* Same defence: a dish that did not come back makes get() return undefined,
+     and reading a column off it crashes the suite instead of failing a check. */
+  const dishField = (name, col) => {
+    const row = db.prepare(`SELECT ${col} FROM saved_dishes WHERE name = ?`).get(name);
+    return row ? row[col] : `(no dish named ${name})`;
+  };
+  check('with the allergen tags still on the dish',
+    dishField('Swedish Meatballs', 'allergens'), '["milk","eggs"]');
+  check('and the soup still filed as a soup', dishField('Beef Barley', 'kind'), 'soup');
+  check('and does not claim it kept anything', again.keptLibrary, false);
+
+  /* A version 1 file has no saved_dishes section. Reading that silence as "the
+     library was empty" would delete the library on the way to restoring a
+     week, which is the loss this whole change exists to prevent. */
+  const v1 = JSON.parse(good);
+  delete v1.saved_dishes;
+  const old = X.restore(JSON.stringify(v1));
+  check('an older backup leaves the saved list alone', dishCount(), 3);
+  ok('and says so, rather than reporting a restore that did not happen', old.keptLibrary);
+  check('and counts no dishes restored', old.dishes, 0);
+
+  /* An empty list is a statement, not a silence, and does empty it. */
+  const emptied = X.restore(JSON.stringify({ ...JSON.parse(good), saved_dishes: [] }));
+  check('a backup holding an empty library empties it', dishCount(), 0);
+  check('and that is not reported as keeping anything', emptied.keptLibrary, false);
+
+  // Back to the state the file describes, for anything that runs after this.
+  X.restore(good);
+  check('and the library is back for whatever runs next', dishCount(), 3);
+
+  /* saved_dishes carries two JSON columns, so the check that stopped an
+     unreadable allergen list reaching the menu has to cover it here too. */
+  const badDish = refuses(
+    (() => {
+      const f = JSON.parse(good);
+      if (Array.isArray(f.saved_dishes) && f.saved_dishes[1]) {
+        f.saved_dishes[1].allergens = 'milk, wheat';
+      }
+      return JSON.stringify(f);
+    })(),
+    'an unreadable allergen list on a saved dish stops the restore');
+  ok('and names the row and the column',
+    badDish.includes('Row 2') && badDish.includes('allergens'), badDish);
+  check('and the refusal left the library standing', dishCount(), 3);
 }
 
 

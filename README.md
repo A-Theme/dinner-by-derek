@@ -994,7 +994,7 @@ button, having seen the preview.
 **Settings → Backup.**
 
 **Download a backup** gives you one JSON file containing every week, item,
-order, location, delivery area and setting. Filenames are dated, so
+order, location, delivery area, saved dish and setting. Filenames are dated, so
 `backup_2026-08-16_dinner-by-derek.json` is obvious a year later.
 
 The Facebook token is **never** included. A backup file is safe to email
@@ -1003,6 +1003,13 @@ yourself or drop in cloud storage.
 **Restore** replaces everything currently in the app with the contents of a
 backup file. It asks you to type `RESTORE` first, because it is not undoable.
 Take a fresh backup before restoring one.
+
+Backups taken before the saved dish list was added to the file say
+`"version": 1` and carry no `saved_dishes` section. Restoring one puts the week
+and the orders back and **leaves your saved dishes where they are** rather than
+emptying them, and the message afterwards says so. What you end up with is a
+week from the file and a dish list from before it, which is worth knowing
+before you go looking for something the restore did not change.
 
 Photos are files on disk, not part of the JSON — so a full backup is the JSON
 file **plus** the `UPLOAD_DIR` folder.

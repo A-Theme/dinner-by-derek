@@ -139,12 +139,20 @@ function contactsCsv() {
  * Full backup. Deliberately excludes fb_connection and oauth_states — a
  * backup file travels through email and cloud storage, and an access token
  * must never travel with it.
+ *
+ * Version 2 carries saved_dishes. Version 1 did not, and the omission was the
+ * expensive kind: the tables were listed by hand here, the saved list was
+ * added to the app later, and nobody came back to this function. A backup
+ * taken the day before a restore would have put the week and the orders back
+ * and left the dish library empty — 800-odd rows, three years of menus read
+ * out of Facebook, and the only other copy of them is a file in data/ that is
+ * gitignored. Adding a table to the schema means adding it here.
  */
 function backup() {
   const t = (name) => db.prepare(`SELECT * FROM ${name}`).all();
   return JSON.stringify({
     format: 'dinner-by-derek-backup',
-    version: 1,
+    version: 2,
     exported_at: new Date().toISOString(),
     note: 'Facebook tokens and other secrets are deliberately excluded.',
     settings: settings.all(),
@@ -152,6 +160,7 @@ function backup() {
     service_days: t('service_days'),
     week_items: t('week_items'),
     standing_items: t('standing_items'),
+    saved_dishes: t('saved_dishes'),
     locations: t('locations'),
     zones: t('zones'),
     fsas: t('fsas'),
@@ -195,10 +204,28 @@ function restore(json) {
   const tables = ['order_lines', 'orders', 'service_days', 'week_items', 'weeks',
     'standing_items', 'locations', 'fsas', 'zones', 'allergen_terms'];
 
+  /**
+   * The saved list is emptied only when the file has one to put back.
+   *
+   * Every other table here is cleared before the insert, which is right when
+   * the file is a full backup: restore means "make it look like this". But
+   * version 1 files exist, they are on Derek's disk, and they carry no
+   * saved_dishes section at all. Clearing on the way in would read that
+   * silence as "the library was empty" and delete 800 dishes on the way to
+   * restoring a week — which is the exact loss this change was made to
+   * prevent, arriving through the fix for it.
+   *
+   * So an absent section leaves the library alone and the caller is told. An
+   * empty ARRAY is different and does empty it: that is a file saying the
+   * library was empty, which is a statement rather than a silence.
+   */
+  const library = Array.isArray(data.saved_dishes) ? data.saved_dishes : null;
+
   const skipped = [];
 
   const tx = db.transaction(() => {
     for (const name of tables) db.prepare(`DELETE FROM ${name}`).run();
+    if (library) db.prepare('DELETE FROM saved_dishes').run();
     const insertAll = (name, rows) => {
       if (!Array.isArray(rows) || !rows.length) return;
       if (rows.some((r) => !r || typeof r !== 'object' || Array.isArray(r))) {
@@ -253,6 +280,7 @@ function restore(json) {
     insertAll('service_days', data.service_days);
     insertAll('week_items', data.week_items);
     insertAll('standing_items', data.standing_items);
+    if (library) insertAll('saved_dishes', library);
     insertAll('zones', data.zones);
     insertAll('locations', data.locations);
     insertAll('fsas', data.fsas);
@@ -274,6 +302,12 @@ function restore(json) {
     weeks: (data.weeks || []).length,
     orders: (data.orders || []).length,
     standing: (data.standing_items || []).length,
+    dishes: library ? library.length : 0,
+    /* True when the file predates version 2 and the library on disk was left
+     * standing. The owner needs that sentence: what they have now is a week
+     * from the file and a dish list from before it, which is not what the
+     * word "restore" led them to expect. */
+    keptLibrary: !library,
     skipped,
   };
 }
