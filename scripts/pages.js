@@ -28,6 +28,22 @@
  *                         second time — which is the exact failure this file
  *                         exists to prevent.
  *
+ * And one that is hand-written on purpose:
+ *
+ *   Building Dinner By Derek
+ *     https://claude.ai/code/artifact/1fa0a89e-6069-4766-82c1-b8f2fd78ce85
+ *
+ *     A day-by-day spine with a sticky date rail and fifty entries each tagged
+ *     built / fixed / written down. A markdown source for it was written and
+ *     then deleted, because generating it would have replaced that with a flat
+ *     summary — trading a good page for a tidy pipeline, which is the opposite
+ *     of the trade the rest of this file makes.
+ *
+ *     Deliberately absent from PAGES rather than listed and skipped: an entry
+ *     here is an invitation to run the build and publish the output, and the
+ *     output would be worse than what is already there. If it ever joins, the
+ *     renderer needs the rail and the entry tags first.
+ *
  * The `url` on each entry is the artifact it publishes to. Publishing without
  * it creates a duplicate instead of updating, which is a mess to unpick.
  */
@@ -56,18 +72,6 @@ const PAGES = [
     eyebrow: 'Before a customer arrives',
     source: 'docs/GOING-LIVE.md',
     url: 'https://claude.ai/code/artifact/156e95f6-7ad5-443c-bf32-fca397be0cfd',
-  },
-  /* These two have no markdown yet. They were written straight into their
-     artifacts and the published page is still the only copy, so bringing them
-     in means writing the source first — reversing the page into docs/, which is
-     a content job rather than a wiring one. Listed here so the gap is visible
-     rather than forgotten, and skipped until the file exists. */
-  {
-    key: 'history',
-    src: 'docs/HISTORY.md',
-    out: 'data/history.html',
-    title: 'Building Dinner By Derek',
-    url: 'https://claude.ai/code/artifact/1fa0a89e-6069-4766-82c1-b8f2fd78ce85',
   },
   {
     key: 'payments',
