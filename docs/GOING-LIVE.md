@@ -31,7 +31,7 @@ Check it again before starting — this is a snapshot, not a guarantee.
 | Weeks | {{warn:published}} one week, live, starting 2026-08-24 | Five service days on the menu (Aug 24–28), all reviewed. Three further days sit outside the week dates and no longer reach a customer — they are in Menu History. Published by hand, not by the scheduler. |
 | Soup / salad | {{todo:none}} | |
 | Standing items | {{todo:3 unreviewed}} of 6; some have no description | Other Options is invisible to customers until these are written and ticked. **This is the one blocking item on the list.** |
-| Saved dishes | {{ok:817}} | A catalogue was imported. The Load picker is live and long, which is why it now sorts by how often a dish has run. |
+| Saved dishes | {{ok:816}} | A catalogue was imported. The Load picker is live and long, which is why it now sorts by how often a dish has run. |
 | Orders | {{warn:1}} a test order | One order exists (Aug 25, Pork Souvlaki). Delete it before the first real one, so the first real one is unmistakably the first. |
 | Locations | {{ok:1}} Waterloo, home kitchen | |
 | Email | {{todo:off}} | Orders are recorded and shown in the dashboard; nothing is sent. Also the reason a customer sees the e-transfer reference only once, on screen — see [payments](#knowing-which-transfer-paid-for-what). |
@@ -93,7 +93,7 @@ In the dashboard: **This Week** → set the week start → add the service dates
 fill each day's featured dish with name, description and prices → add soup and
 salad if there are any this week.
 
-The dish library now holds 817 saved dishes, so **Put a saved dish on…** at the
+The dish library now holds 816 saved dishes, so **Put a saved dish on…** at the
 top of This Week will do most of the typing for you. It sorts by how often each
 dish has run, which is empty ordering today and useful ordering in a month.
 
@@ -101,10 +101,16 @@ dish has run, which is empty ordering today and useful ordering in a month.
 
 ### 4. Do the allergen reviews
 
-Six standing items are sitting at `ack = 0`, and three of them
-— Pulled Pork, BBQ Brisket, Pulled Chicken — have no description at all. An
-item with no description shows nothing useful and cannot be reviewed
-meaningfully, so **write the descriptions first, then review**.
+Three standing items are still at `ack = 0`: **Breaded Chicken Cutlets**,
+**Pulled Pork (Reheat Bag)** and **BBQ Brisket (Reheat Bag)**. Breaded Chicken
+Cutlets already has a description and suggested allergens, so it needs only the
+read and the tick. The two reheat bags have no description at all, and an item
+with no description shows nothing useful and cannot be reviewed meaningfully —
+so **write those two first, then review all three**.
+
+One to look at while you are in here: **Pulled Chicken (Reheat Bag)** is ticked
+but still has no description. The tick is yours and stays yours; it is only
+worth knowing that it went on an item with nothing written under it.
 
 For every item and every day's dish: read what the dictionary suggests, accept
 what is true, dismiss what is not, and tick the box. The app will refuse to
