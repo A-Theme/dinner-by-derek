@@ -1,8 +1,8 @@
 ---
 eyebrow: Handoff · 23 August 2026
 figures:
-  13 = commits today
-  933 = checks passing
+  19 = commits today
+  981 = checks passing
   5 = days on the menu
   3 = items unreviewed
 ---
@@ -24,8 +24,8 @@ snapshot of a moment.
 
 ## Where things are
 
-`main` at `e774889`, clean, in sync with `origin/main`.
-Suites green: **597 acceptance, 336 flow** (`npm test`).
+`main` at `9004ce2`, clean, in sync with `origin/main`.
+Suites green: **645 acceptance, 336 flow** (`npm test`).
 
 ### The database
 
@@ -111,7 +111,7 @@ worth remembering:
   off the 817 saved dishes rather than guessed: dishes raising nothing fell from
   42% to 36%.
 
-### Payments, the ledger, and the week — `2e5f15f` … `e774889`
+### Payments, the ledger, and the pages — `2e5f15f` … `9004ce2`
 
 - **Days belong to the week whose dates contain them** (`2e5f15f`). Moving
   "Week starts" leaves days behind, attached by `week_id` but outside the week's
@@ -128,6 +128,15 @@ worth remembering:
   the database instead of written once by hand.
 - **`GOING-LIVE.md`'s snapshot table was corrected** (`e774889`) after going
   stale within a day, in the direction that made the remaining work look smaller.
+  One of those corrections was itself wrong — read from a plain copy of the
+  database that missed 486 KB of WAL, which reported an empty draft and no
+  orders. The trap below is written from that mistake.
+- **Every published page has one source now** (`73ca006` … `06d17da`). Each is
+  a markdown file in `docs/` rendered by `npm run pages`; the artifact is the
+  output, never the thing edited. All of them had drifted from the repo copy
+  they restated, and none of the drift was visible from either side.
+- **The reviews left are named, not counted** (`9004ce2`). Step 4 of the
+  go-live list still described the state before any of them were done.
 
 ---
 
