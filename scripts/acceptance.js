@@ -2177,7 +2177,7 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
       '# T', '', '<!-- toc -->', '', '## First bit', '',
       '> [!NOTE] Use this while it lasts', '> Nothing is precious yet.', '',
       '## Second bit', '', '| Thing | State |', '|---|---|',
-      '| Hosting | {{todo:none}} |', '| Domain | {{ok:ready}} |', '',
+      '| Hosting | `todo: none` |', '| Domain | `ok: ready` |', '',
       '> [!WARNING] One to avoid', '> Do not do that.',
     ].join('\n')).join('\n');
 
@@ -2193,7 +2193,16 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     ok('and knows its other state', /<span class="tag ok">ready<\/span>/.test(doc));
   }
 
-  ok('an unknown chip kind is refused', /is not a chip/.test(throws('{{bogus:x}}')));
+  ok('a chip renders as a chip on GitHub too, as a code span',
+    /<span class="tag warn">unset<\/span>/.test(H.render('`warn: unset`').join('\n')));
+  /* The rule must not eat an ordinary snippet, which is most of what a code
+     span is in these files. */
+  ok('a code span that is not a state is still code',
+    /<code>BASE_URL<\/code>/.test(H.render('`BASE_URL`').join('\n')));
+  ok('and one that merely contains a colon is too',
+    /<code>datetime\(&#39;now&#39;\)<\/code>/.test(H.render("`datetime('now')`").join('\n')));
+  ok('the old brace syntax is refused, naming the replacement',
+    /chips are code spans now/.test(throws('{{ok:ready}}')));
   ok('a bare block quote is refused, pointing at the callout syntax',
     /\[!NOTE\]/.test(throws('> just quoting')));
   ok('an empty callout is refused', /nothing in it/.test(throws('> [!NOTE]')));

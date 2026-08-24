@@ -38,11 +38,11 @@ things happens.
 
 | The notification shows | What happens |
 |---|---|
-| The reference **and** the exact order total | {{ok:settled}} the order is marked paid, no tap |
-| The reference, a different amount | {{warn:suggested}} offered as a candidate, shortfall named |
-| No reference, but only one order is owed exactly that | {{warn:suggested}} offered as a candidate |
-| A sender name matching a customer | {{warn:suggested}} offered as a candidate |
-| None of the above | {{todo:unclaimed}} kept as money nobody has accounted for |
+| The reference **and** the exact order total | `ok: settled` the order is marked paid, no tap |
+| The reference, a different amount | `warn: suggested` offered as a candidate, shortfall named |
+| No reference, but only one order is owed exactly that | `warn: suggested` offered as a candidate |
+| A sender name matching a customer | `warn: suggested` offered as a candidate |
+| None of the above | `todo: unclaimed` kept as money nobody has accounted for |
 
 > [!IMPORTANT] Only the first row is automatic
 > It takes two independent facts agreeing: the customer typed the order

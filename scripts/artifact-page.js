@@ -57,10 +57,32 @@ function esc(s) {
  */
 const MARK = String.fromCharCode(0);
 
+/* A status chip is a code span whose content opens with its state:
+ * `ok: ready`, `todo: localhost`, `warn: unset`.
+ *
+ * IT IS WRITTEN THIS WAY SO GITHUB CAN READ IT TOO. These files are documents
+ * in the repo first and published pages second, and the first syntax — a pair
+ * of braces, `{{ok:ready}}` — was legible to exactly one of those two readers.
+ * On GitHub thirteen of them sat in the middle of the state table as literal
+ * punctuation, in the one table someone reads to find out where the project
+ * stands. A code span already renders as a small boxed token there, which is
+ * what a chip is, so the fallback needs no explaining: the state reads as a
+ * state whether or not anything built the page.
+ *
+ * Only these three states are chips. Any other code span — `BASE_URL`,
+ * `ADMIN_PASSWORD_HASH`, `datetime('now')` — is left as code, so the rule
+ * cannot capture something that was only ever a snippet.
+ */
+const CHIP_KINDS = ['ok', 'todo', 'warn'];
+const CHIP_RE = new RegExp(`^(${CHIP_KINDS.join('|')}):[ ]*(.+)$`);
+
 function inline(src, lineNo) {
   const spans = [];
   let s = esc(src).replace(new RegExp(MARK, 'g'), '').replace(/`([^`]+)`/g, (_, code) => {
-    spans.push('<code>' + code + '</code>');
+    const chip = code.match(CHIP_RE);
+    spans.push(chip
+      ? `<span class="tag ${chip[1]}">${chip[2].trim()}</span>`
+      : '<code>' + code + '</code>');
     return MARK + (spans.length - 1) + MARK;
   });
 
@@ -68,18 +90,14 @@ function inline(src, lineNo) {
     throw new Error(`line ${lineNo}: an unclosed backtick — code spans must be paired`);
   }
 
-  /* A status chip: {{ok:ready}} or {{todo:localhost}}. Written this way because
-   * a state table wants the state to read as a state — "none", "localhost",
-   * "hashed" — rather than as another sentence, and because a bare word in a
-   * cell cannot carry that on its own. Two braces so ordinary prose does not
-   * trip it. An unknown kind is refused rather than styled as nothing. */
-  const KINDS = ['ok', 'todo', 'warn'];
-  s = s.replace(/\{\{([a-z]+):([^}]+)\}\}/g, (_, kind, label) => {
-    if (!KINDS.includes(kind)) {
-      throw new Error(`line ${lineNo}: "${kind}" is not a chip — use ${KINDS.join(', ')}`);
-    }
-    return `<span class="tag ${kind}">${label.trim()}</span>`;
-  });
+  /* The old syntax, refused by name. It rendered as braces on GitHub rather
+     than as nothing, so a leftover would be a visible wart rather than a
+     silent one — but it would be a wart in the table this file exists to keep
+     honest, and the fix is one line long. */
+  if (/\{\{[a-z]+:[^}]+\}\}/.test(s)) {
+    throw new Error(`line ${lineNo}: chips are code spans now — write \`ok: ready\`, `
+      + `not {{ok:ready}}, so GitHub renders it too`);
+  }
 
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, text, href) =>
     `<a href="${href}">${text}</a>`);

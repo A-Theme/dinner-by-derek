@@ -22,19 +22,19 @@ Check it again before starting — this is a snapshot, not a guarantee.
 
 | | state | matters because |
 |---|---|---|
-| Hosting | {{todo:none}} | Nothing can run a Node process yet. Everything else waits on this. No server exists anywhere — the Hostinger account was checked against its API on 2026-08-19 and holds no VPS and no domains, and no OVH account exists yet. |
-| Domain | {{ok:ready}} `dinnerbyderek.ca`, in Cloudflare | DNS is ready; nothing points anywhere yet. |
-| `BASE_URL` | {{todo:localhost}} | QR codes point at a placeholder, cookies are not secure, email links are dead. |
-| `NODE_ENV` | {{todo:development}} | Static caching off, and the boot warnings are tuned for a laptop. |
-| Admin password | {{ok:hashed}} scrypt | `ADMIN_PASSWORD_HASH` is set and the plaintext `ADMIN_PASSWORD` line is gone. Step 2 is already done; confirm the boot output rather than redo it. |
-| `TRUST_PROXY` | {{warn:unset}} | Correct until nginx exists. Becomes `1` then. |
-| Weeks | {{warn:published}} one week, live, starting 2026-08-24 | Five service days on the menu (Aug 24–28), all reviewed. Three further days sit outside the week dates and no longer reach a customer — they are in Menu History. Published by hand, not by the scheduler. |
-| Soup / salad | {{todo:none}} | |
-| Standing items | {{todo:3 unreviewed}} of 6; some have no description | Other Options is invisible to customers until these are written and ticked. **This is the one blocking item on the list.** |
-| Saved dishes | {{ok:816}} | A catalogue was imported. The Load picker is live and long, which is why it now sorts by how often a dish has run. |
-| Orders | {{warn:1}} a test order | One order exists (Aug 25, Pork Souvlaki). Delete it before the first real one, so the first real one is unmistakably the first. |
-| Locations | {{ok:1}} Waterloo, home kitchen | |
-| Email | {{todo:off}} | Orders are recorded and shown in the dashboard; nothing is sent. Also the reason a customer sees the e-transfer reference only once, on screen — see [payments](#knowing-which-transfer-paid-for-what). |
+| Hosting | `todo: none` | Nothing can run a Node process yet. Everything else waits on this. No server exists anywhere — the Hostinger account was checked against its API on 2026-08-19 and holds no VPS and no domains, and no OVH account exists yet. |
+| Domain | `ok: ready` `dinnerbyderek.ca`, in Cloudflare | DNS is ready; nothing points anywhere yet. |
+| `BASE_URL` | `todo: localhost` | QR codes point at a placeholder, cookies are not secure, email links are dead. |
+| `NODE_ENV` | `todo: development` | Static caching off, and the boot warnings are tuned for a laptop. |
+| Admin password | `ok: hashed` scrypt | `ADMIN_PASSWORD_HASH` is set and the plaintext `ADMIN_PASSWORD` line is gone. Step 2 is already done; confirm the boot output rather than redo it. |
+| `TRUST_PROXY` | `warn: unset` | Correct until nginx exists. Becomes `1` then. |
+| Weeks | `warn: published` one week, live, starting 2026-08-24 | Five service days on the menu (Aug 24–28), all reviewed. Three further days sit outside the week dates and no longer reach a customer — they are in Menu History. Published by hand, not by the scheduler. |
+| Soup / salad | `todo: none` | |
+| Standing items | `todo: 3 unreviewed` of 6; some have no description | Other Options is invisible to customers until these are written and ticked. **This is the one blocking item on the list.** |
+| Saved dishes | `ok: 816` | A catalogue was imported. The Load picker is live and long, which is why it now sorts by how often a dish has run. |
+| Orders | `warn: 1` a test order | One order exists (Aug 25, Pork Souvlaki). Delete it before the first real one, so the first real one is unmistakably the first. |
+| Locations | `ok: 1` Waterloo, home kitchen | |
+| Email | `todo: off` | Orders are recorded and shown in the dashboard; nothing is sent. Also the reason a customer sees the e-transfer reference only once, on screen — see [payments](#knowing-which-transfer-paid-for-what). |
 | Payments | table exists, **0 rows** | The app has booted against this database, so the table is there. Empty is the correct state until a transfer arrives. |
 | Facebook | not connected | Manual copy-and-paste publishing works without it. |
 
