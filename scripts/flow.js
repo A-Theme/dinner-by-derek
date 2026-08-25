@@ -1780,6 +1780,77 @@ const PAST_DATE = T.addDays(today, -2);
     ok('and a soup cannot be used as the dessert either', !wd);
   }
 
+  /* --- Recipes are the kitchen's own document ----------------------------
+     Owner-only is a claim about routing, and routing is exactly the thing
+     unit tests cannot check. These run over HTTP, signed out and then signed
+     in, because the failure worth catching is a recipe screen answering a
+     stranger — and it would answer with the kitchen's working documents. */
+  {
+    const anon = await GET('/admin/recipes', { noCookie: true });
+    ok('signed out, the recipe list is not served', anon.status !== 200);
+    ok('it redirects to the login page instead', /\/admin\/login/.test(anon.location || ''));
+    ok('and no recipe name leaks into the body', !/Veloute|Mirepoix/.test(anon.text));
+
+    const anonDetail = await GET('/admin/recipes/brown-veal-stock', { noCookie: true });
+    ok('a recipe by name is closed to a stranger too', anonDetail.status !== 200);
+    ok('and gives up nothing in the body', !/veal bones/i.test(anonDetail.text));
+
+    const listPage = await GET('/admin/recipes');
+    ok('signed in, the list renders', listPage.status === 200);
+    ok('with the preparations the app ships with', /Brown Veal Stock/.test(listPage.text));
+    ok('and a link in the dashboard nav', /href="\/admin\/recipes"/.test(listPage.text));
+
+    const detail = await GET('/admin/recipes/veloute');
+    ok('a recipe page renders', detail.status === 200);
+    ok('and links down to the stock underneath it',
+      /\/admin\/recipes\/white-chicken-stock/.test(detail.text));
+
+    /* The suggestion, phrased as a suggestion. A veloute names no dairy in its
+       own ingredients; the milk is in the roux one level down. The screen has
+       to report that WITHOUT implying anything has been tagged or reviewed. */
+    ok('the allergen readout names milk, found through the roux', /milk/i.test(detail.text));
+    ok('and says in words that it is a prompt, not a tag',
+      /prompt, not a tag/.test(detail.text));
+    ok('and claims nothing has been applied',
+      /no\s+review box has been ticked/i.test(detail.text));
+
+    const doubled = await GET('/admin/recipes/bechamel?x=2');
+    ok('a recipe scales on the page', doubled.status === 200);
+    ok('and warns that times did not scale with it', /Times are not/.test(doubled.text));
+    const absurd = await GET('/admin/recipes/bechamel?x=999999999');
+    ok('an absurd scale factor is clamped rather than rendered raw',
+      absurd.status === 200 && !/e\+/.test(absurd.text));
+
+    /* Round-trip through the editor: what a cook types is what comes back. */
+    const made = await POST('/admin/recipes', {
+      name: 'Flow Test Braise',
+      summary: 'Written by the flow suite.',
+      category: 'dish',
+      yield_qty: '4',
+      yield_unit: 'portions',
+      ingredients: '1.5 kg beef shin, cut into 5 cm pieces\n2 tbsp butter (optional)\na good handful of parsley',
+      steps: 'Brown the meat hard.\n\nAdd the mirepoix and sweat it down.',
+      notes: '',
+    });
+    ok('a new recipe saves', made.status === 302);
+    ok('and redirects to the recipe, not back to a login',
+      !/login/.test(made.location || ''));
+
+    const back = await GET('/admin/recipes/flow-test-braise');
+    ok('the saved recipe reads back', back.status === 200);
+    ok('the prep state survived the parse', /cut into 5 cm pieces/.test(back.text));
+    ok('the optional line is still marked optional', /\(optional\)/.test(back.text));
+    ok('a line the parser could not read survived verbatim',
+      /a good handful of parsley/.test(back.text));
+    ok('and both steps are there, split on the blank line',
+      /Brown the meat hard/.test(back.text) && /sweat it down/.test(back.text));
+
+    /* And the customer never sees any of it. */
+    const menu = await GET('/', { noCookie: true });
+    ok('none of it reaches the customer menu',
+      !/Flow Test Braise|beef shin|Veloute/.test(menu.text));
+  }
+
   /* --- Report -------------------------------------------------------------- */
   console.log('\nEnd-to-end flow — Dinner By Derek\n');
   if (failures.length) {

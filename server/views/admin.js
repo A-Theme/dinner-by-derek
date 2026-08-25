@@ -33,6 +33,7 @@ ${extraHead || ''}
   <li><a href="/admin/week"${current === 'week' ? ' aria-current="page"' : ''}>This Week</a></li>
   <li><a href="/admin/history"${current === 'history' ? ' aria-current="page"' : ''}>Menu History</a></li>
   <li><a href="/admin/dishes"${current === 'dishes' ? ' aria-current="page"' : ''}>Saved Dishes</a></li>
+  <li><a href="/admin/recipes"${current === 'recipes' ? ' aria-current="page"' : ''}>Recipes</a></li>
   <li><a href="/admin/other-options"${current === 'other' ? ' aria-current="page"' : ''}>Other Options</a></li>
   <li><a href="/admin/orders"${current === 'orders' ? ' aria-current="page"' : ''}>Orders</a></li>
   <li><a href="/admin/payments"${current === 'payments' ? ' aria-current="page"' : ''}>Payments</a></li>

@@ -144,19 +144,24 @@ function get(idOrSlug) {
   const where = Number.isInteger(idOrSlug) || /^\d+$/.test(String(idOrSlug)) ? 'id = ?' : 'slug = ?';
   const recipe = db.prepare(`SELECT * FROM recipes WHERE ${where}`).get(idOrSlug);
   if (!recipe) return null;
-  recipe.ingredients = db.prepare(
-    'SELECT * FROM recipe_ingredients WHERE recipe_id = ? ORDER BY sort',
-  ).all(recipe.id);
+  // The sub-recipe's slug comes along so the screen can link to it without a
+  // second query per ingredient.
+  recipe.ingredients = db.prepare(`SELECT i.*, s.slug AS sub_slug, s.name AS sub_name
+    FROM recipe_ingredients i
+    LEFT JOIN recipes s ON s.id = i.sub_recipe_id
+    WHERE i.recipe_id = ? ORDER BY i.sort`).all(recipe.id);
   recipe.steps = db.prepare(
     'SELECT * FROM recipe_steps WHERE recipe_id = ? ORDER BY sort',
   ).all(recipe.id);
   return recipe;
 }
 
+/* Column names are written qualified because the list query joins the parent
+   recipe onto itself, and an unqualified `name` in that query is ambiguous. */
 const SORTS = {
-  name: 'name COLLATE NOCASE',
-  category: "CASE category WHEN 'preparation' THEN 0 WHEN 'component' THEN 1 ELSE 2 END, name COLLATE NOCASE",
-  recent: 'created_at DESC, name COLLATE NOCASE',
+  name: 'r.name COLLATE NOCASE',
+  category: "CASE r.category WHEN 'preparation' THEN 0 WHEN 'component' THEN 1 ELSE 2 END, r.name COLLATE NOCASE",
+  recent: 'r.created_at DESC, r.name COLLATE NOCASE',
 };
 
 /**
@@ -166,9 +171,11 @@ const SORTS = {
 function list({ category = '', q = '', sort = 'category' } = {}) {
   const where = [];
   const args = [];
-  if (category) { where.push('category = ?'); args.push(category); }
-  if (q) { where.push('(name LIKE ? OR summary LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
-  const sql = `SELECT * FROM recipes ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+  if (category) { where.push('r.category = ?'); args.push(category); }
+  if (q) { where.push('(r.name LIKE ? OR r.summary LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
+  const sql = `SELECT r.*, p.name AS parent_name, p.slug AS parent_slug
+    FROM recipes r LEFT JOIN recipes p ON p.id = r.parent_id
+    ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY ${SORTS[sort] || SORTS.category}`;
   return db.prepare(sql).all(...args);
 }
@@ -260,6 +267,158 @@ function allergenText(idOrSlug, depth = 1) {
   return parts.filter(Boolean).join('\n');
 }
 
+/* --- Writing --------------------------------------------------------------
+ *
+ * Ingredients are typed as lines, not as a form with twelve boxes per row.
+ * A cook writing out a recipe writes "500 g onion, peeled" and a screen that
+ * demands quantity, unit, item and prep in four separate inputs turns a
+ * two-minute job into a twenty-minute one, which means it does not get done.
+ *
+ * The parse is deliberately forgiving and never refuses a line. Anything it
+ * cannot read becomes the item, whole and unaltered -- "a good handful of
+ * parsley" survives as itself rather than being rejected or guessed at. A
+ * recipe with an unparsed line is a working recipe with one line that will
+ * not scale; a recipe the editor refused to save is nothing at all.
+ */
+const UNIT_WORDS = new Set([
+  ...Object.keys(TO_G), ...Object.keys(TO_ML),
+  'tsp', 'tbsp', 'cup', 'cups', 'sprig', 'sprigs', 'stem', 'stems', 'clove', 'cloves',
+  'pinch', 'dash', 'bunch', 'slice', 'slices', 'ea', 'each', 'to', 'as',
+]);
+
+/** "1/2", "1 1/2", "0.5", "2" -> Number, or null. */
+function parseQty(s) {
+  const mixed = /^(\d+)\s+(\d+)\/(\d+)$/.exec(s);
+  if (mixed) return Number(mixed[1]) + Number(mixed[2]) / Number(mixed[3]);
+  const frac = /^(\d+)\/(\d+)$/.exec(s);
+  if (frac) return Number(frac[1]) / Number(frac[2]);
+  return /^\d+(\.\d+)?$/.test(s) ? Number(s) : null;
+}
+
+function parseIngredientLine(line) {
+  let text = String(line || '').trim();
+  if (!text) return null;
+
+  let optional = 0;
+  const opt = /\s*\((optional)\)\s*$/i.exec(text);
+  if (opt) { optional = 1; text = text.slice(0, opt.index).trim(); }
+
+  const words = text.split(/\s+/);
+  let qty = null;
+  let unit = '';
+  let rest = words;
+
+  const first = parseQty(words[0]);
+  if (first != null) {
+    qty = first;
+    rest = words.slice(1);
+    // "1 1/2 cup flour" -- the fraction is part of the number, not the unit.
+    if (rest.length && parseQty(`${words[0]} ${rest[0]}`) != null) {
+      qty = parseQty(`${words[0]} ${rest[0]}`);
+      rest = rest.slice(1);
+    }
+    const maybe = String(rest[0] || '').toLowerCase().replace(/\.$/, '');
+    if (UNIT_WORDS.has(maybe)) {
+      // "to taste" and "as needed" are two words and mean one thing.
+      if ((maybe === 'to' || maybe === 'as') && rest[1]) {
+        unit = `${maybe} ${String(rest[1]).toLowerCase()}`;
+        rest = rest.slice(2);
+      } else {
+        unit = maybe;
+        rest = rest.slice(1);
+      }
+    }
+  }
+
+  const remainder = rest.join(' ').trim();
+  const comma = remainder.indexOf(',');
+  const item = comma === -1 ? remainder : remainder.slice(0, comma).trim();
+  const prep = comma === -1 ? '' : remainder.slice(comma + 1).trim();
+  if (!item) return { qty: null, unit: '', item: text, prep: '', optional };
+  return { qty, unit, item, prep, optional };
+}
+
+function slugify(name, id) {
+  const base = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '').slice(0, 60) || 'recipe';
+  const taken = db.prepare('SELECT id FROM recipes WHERE slug = ?').get(base);
+  if (!taken || (id && taken.id === id)) return base;
+  let n = 2;
+  while (db.prepare('SELECT 1 FROM recipes WHERE slug = ?').get(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}
+
+/**
+ * Create or update. `edited` is set on any save that touches a seeded recipe,
+ * which is what stops the next boot from reverting the owner's version.
+ */
+function put(fields, id = null) {
+  const name = String(fields.name || '').trim();
+  if (!name) return null;
+  const row = {
+    name,
+    category: ['preparation', 'component', 'dish'].includes(fields.category)
+      ? fields.category : 'preparation',
+    summary: String(fields.summary || '').trim(),
+    yield_qty: fields.yield_qty === '' || fields.yield_qty == null ? null : Number(fields.yield_qty),
+    yield_unit: String(fields.yield_unit || '').trim(),
+    portions: fields.portions === '' || fields.portions == null ? null : Number(fields.portions),
+    notes: String(fields.notes || '').trim(),
+  };
+
+  const tx = db.transaction(() => {
+    let rid = id;
+    if (rid) {
+      db.prepare(`UPDATE recipes SET name=@name, category=@category, summary=@summary,
+        yield_qty=@yield_qty, yield_unit=@yield_unit, portions=@portions, notes=@notes,
+        slug=@slug, edited=1 WHERE id=@id`).run({ ...row, slug: slugify(name, rid), id: rid });
+    } else {
+      rid = db.prepare(`INSERT INTO recipes
+        (slug, name, category, summary, yield_qty, yield_unit, portions, notes, source)
+        VALUES (@slug, @name, @category, @summary, @yield_qty, @yield_unit, @portions, @notes, 'house')`)
+        .run({ ...row, slug: slugify(name) }).lastInsertRowid;
+    }
+
+    db.prepare('DELETE FROM recipe_ingredients WHERE recipe_id = ?').run(rid);
+    db.prepare('DELETE FROM recipe_steps WHERE recipe_id = ?').run(rid);
+
+    String(fields.ingredients || '').split('\n')
+      .map(parseIngredientLine).filter(Boolean)
+      .forEach((ing, i) => {
+        const c = canon(ing.qty, ing.unit);
+        db.prepare(`INSERT INTO recipe_ingredients
+          (recipe_id, sort, qty, unit, item, prep, optional, canon_qty, canon_unit)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(rid, i, ing.qty, ing.unit, ing.item, ing.prep, ing.optional, c.canon_qty, c.canon_unit);
+      });
+
+    // Steps split on blank lines, so a step may run to more than one sentence
+    // without becoming two steps.
+    String(fields.steps || '').split(/\n\s*\n/).map((s) => s.trim()).filter(Boolean)
+      .forEach((text, i) => {
+        db.prepare('INSERT INTO recipe_steps (recipe_id, sort, text) VALUES (?, ?, ?)')
+          .run(rid, i, text.replace(/\s*\n\s*/g, ' '));
+      });
+
+    return rid;
+  });
+  return tx();
+}
+
+function remove(id) {
+  return db.prepare('DELETE FROM recipes WHERE id = ?').run(Number(id)).changes > 0;
+}
+
+/** The ingredient list back as editable text, exactly as the editor expects it. */
+function asLines(recipe) {
+  return (recipe.ingredients || []).map((i) => {
+    const qty = i.qty == null ? '' : String(i.qty);
+    const bits = [qty, i.unit, i.item].filter(Boolean).join(' ');
+    return `${bits}${i.prep ? `, ${i.prep}` : ''}${i.optional ? ' (optional)' : ''}`;
+  }).join('\n');
+}
+
 module.exports = {
   seedRecipes, get, list, variations, scale, allergenText, canon,
+  put, remove, asLines, parseIngredientLine, SORTS,
 };

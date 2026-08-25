@@ -2338,6 +2338,79 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   }
 }
 
+/* --- Recipes -------------------------------------------------------------
+   The recipe model exists to feed the allergen suggester a better input than
+   a description, and the whole feature is only safe while it stays a
+   suggester. These checks hold that line, plus the two places the arithmetic
+   is allowed to be wrong in a way a cook would notice. */
+{
+  const R = require('../server/recipes');
+  R.seedRecipes();
+
+  /* THE PROPERTY EVERYTHING ELSE RESTS ON. An ingredient list is the best
+     allergen signal in the app, which is exactly why it must never be allowed
+     to tag or tick anything by itself. If a later change adds an ack column
+     here, or has this module write an item's allergens, that change is wrong
+     however reasonable it looked. */
+  const cols = db.prepare('PRAGMA table_info(recipes)').all().map((c) => c.name);
+  ok('a recipe has no acknowledgement of its own', !cols.includes('ack'));
+  ok('and no ack_of either', !cols.includes('ack_of'));
+  const src = fs.readFileSync(path.join(__dirname, '..', 'server', 'recipes.js'), 'utf8');
+  ok('recipes.js never writes an allergens column or an ack',
+    !/UPDATE\s+\w+\s+SET[^`]*\b(allergens|ack)\b/i.test(src));
+
+  /* The case that justifies the sub-recipe edge. A veloute is stock, roux and
+     salt: it names no dairy anywhere in its own list, and the butter is one
+     level down in the roux. Reading the ingredients alone finds nothing. */
+  const flat = (R.get('veloute').ingredients || []).map((i) => i.item).join(' ');
+  ok('a veloute names no dairy in its own ingredients', !/butter|cream|milk/i.test(flat));
+  const found = A.detect(R.allergenText('veloute')).map((s) => s.allergen);
+  ok('but the suggester still finds milk, through the roux', found.includes('milk'));
+  ok('and wheat, the same way', found.includes('wheat and triticale'));
+
+  /* Scaling. Quantities scale; the things that are not quantities do not. */
+  const doubled = R.scale(R.get('bechamel'), 2);
+  const milk = doubled.ingredients.find((i) => /milk/i.test(i.item));
+  check('a doubled bechamel takes twice the milk', milk.qty, 2);
+  const nutmeg = doubled.ingredients.find((i) => /nutmeg/i.test(i.item));
+  check('but still a pinch of nutmeg', nutmeg.unit, 'pinch');
+  check('and the pinch did not become two and a half', nutmeg.qty, 1);
+  ok('the steps come back untouched, because time does not scale',
+    doubled.steps.every((s, i) => s.text === R.get('bechamel').steps[i].text));
+  ok('and the scaled copy admits it is scaled', doubled.scaling_caveat === true);
+
+  /* The parser is forgiving on purpose: a line it cannot read is kept whole
+     rather than refused, because a recipe with one unscalable line is a
+     working recipe and a rejected save is nothing at all. */
+  check('an ordinary line parses', R.parseIngredientLine('500 g onion, peeled'),
+    { qty: 500, unit: 'g', item: 'onion', prep: 'peeled', optional: 0 });
+  check('a mixed fraction is one number', R.parseIngredientLine('1 1/2 cup flour').qty, 1.5);
+  check('an optional line is marked', R.parseIngredientLine('2 tbsp butter (optional)').optional, 1);
+  check('and prose survives verbatim rather than being guessed at',
+    R.parseIngredientLine('a good handful of parsley').item, 'a good handful of parsley');
+
+  /* Re-seeding on boot must not revert the kitchen's own version. Same bargain
+     the allergen dictionary strikes with allergen_terms_removed. */
+  const before = R.get('mirepoix');
+  R.put({
+    name: 'Mirepoix', category: 'preparation', summary: 'Derek cuts it finer.',
+    yield_qty: 1000, yield_unit: 'g', ingredients: '600 g onion\n200 g carrot\n200 g celery',
+    steps: 'Cut it fine.',
+  }, before.id);
+  R.seedRecipes();
+  const after = R.get('mirepoix');
+  check('an edited recipe survives the next boot', after.summary, 'Derek cuts it finer.');
+  ok('and is marked as the owner’s', after.edited === 1);
+
+  /* A derivative outlives the base it was written against. */
+  const demi = R.get('demi-glace');
+  const bord = R.get('bordelaise');
+  ok('bordelaise is built on demi-glace', bord.parent_id === demi.id);
+  R.remove(demi.id);
+  ok('and survives demi-glace being deleted', !!R.get('bordelaise'));
+  check('with its parent cleared rather than dangling', R.get('bordelaise').parent_id, null);
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {

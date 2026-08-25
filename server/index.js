@@ -222,6 +222,7 @@ const publicRoutes = require('./routes/public');
 const adminRoutes = require('./routes/admin');
 const adminRoutes2 = require('./routes/admin2');
 const adminRoutes3 = require('./routes/admin3');
+const recipeRoutes = require('./routes/recipes');
 
 /* Mount order matters. admin.js applies `auth.required` to everything passing
  * through it, which redirects to the login page — right for a dashboard page,
@@ -233,6 +234,7 @@ app.use('/admin', adminRoutes3.strict);
 app.use('/admin', adminRoutes);
 app.use('/admin', adminRoutes2.router);
 app.use('/admin', adminRoutes3.router);
+app.use('/admin', recipeRoutes.router);
 app.use('/', publicRoutes);
 
 /* --- Not found ----------------------------------------------------------- */
