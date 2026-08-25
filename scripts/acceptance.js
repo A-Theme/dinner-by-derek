@@ -2471,6 +2471,52 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('but not flagged against the recipe that owns it', !free.taken_by);
 }
 
+/* --- The seed file itself --------------------------------------------------
+   The base set is added to in batches, by hand, and the ways a batch goes
+   wrong are all silent: a slug reused overwrites the recipe it collides with,
+   a `sub` or `parent` naming a recipe that isn't there resolves to nothing and
+   the link simply never appears. None of that throws. These checks read the
+   file directly so a bad batch fails here rather than in a kitchen. */
+{
+  const seed = require('../server/recipe-seed');
+  const slugs = seed.map((r) => r.slug);
+  const dupes = [...new Set(slugs.filter((s, i) => slugs.indexOf(s) !== i))];
+
+  ok('every seeded recipe has a slug', slugs.every(Boolean));
+  check('and no two share one', dupes, []);
+  ok('every one has a name', seed.every((r) => !!r.name));
+  ok('and a category the schema will accept',
+    seed.every((r) => ['preparation', 'component', 'dish'].includes(r.category)),
+    seed.filter((r) => !['preparation', 'component', 'dish'].includes(r.category))
+      .map((r) => r.slug).join(', '));
+  ok('and at least one step, since a recipe with no method is a shopping list',
+    seed.every((r) => (r.steps || []).length > 0),
+    seed.filter((r) => !(r.steps || []).length).map((r) => r.slug).join(', '));
+
+  const danglingParents = [...new Set(seed.map((r) => r.parent).filter(Boolean))]
+    .filter((p) => !slugs.includes(p));
+  check('every parent names a recipe that exists', danglingParents, []);
+
+  const danglingSubs = [...new Set(
+    seed.flatMap((r) => (r.ingredients || []).map((i) => i.sub).filter(Boolean)),
+  )].filter((s) => !slugs.includes(s));
+  check('and so does every sub-recipe', danglingSubs, []);
+
+  /* No recipe may be its own parent, and none may name itself as an
+     ingredient. allergenText walks one level down and would survive either,
+     but both are certainly mistakes rather than intent. */
+  ok('nothing is its own parent', seed.every((r) => r.parent !== r.slug));
+  ok('and nothing lists itself as an ingredient',
+    seed.every((r) => !(r.ingredients || []).some((i) => i.sub === r.slug)));
+
+  /* Provenance. The header explains why this file is written rather than
+     copied; the rule is worth restating where it will be read by whoever
+     adds the next batch. */
+  const src = fs.readFileSync(path.join(__dirname, '..', 'server', 'recipe-seed.js'), 'utf8');
+  ok('the seed says in the file where its recipes come from',
+    /own\s+(\*\s+)?words/.test(src) && /published\s+(\*\s+)?cookbook/.test(src));
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {
