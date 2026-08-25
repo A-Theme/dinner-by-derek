@@ -329,6 +329,121 @@ CREATE TABLE IF NOT EXISTS login_failures (
   ip TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_login_failures_at ON login_failures(at);
+
+/* --- Recipes --------------------------------------------------------------
+ *
+ * How a thing is made, as opposed to how it is sold.
+ *
+ * Everything above this line describes a dish on its way to a customer: what
+ * it is called, what it costs, which day it runs. None of it says what is in
+ * the pot. This is that record, and it is deliberately a separate one, because
+ * the two have different lifetimes. A menu entry dies with its week. A stock
+ * recipe outlives every menu it ever appeared on.
+ *
+ * THERE IS NO ack COLUMN HERE EITHER, and the reason is sharper than it was
+ * for saved_dishes. An ingredient list is the best allergen signal in the
+ * building -- far better than a description, because it names the butter that
+ * "creamy" only implies. That is exactly what makes it dangerous. A list this
+ * good invites the shortcut of tagging an item from its recipe and calling the
+ * item reviewed, and the day that ships is the day an untagged substitution --
+ * the cream swapped for coconut, the stock that was bought rather than made --
+ * reaches a customer under a tick nobody put there. Ingredients feed the
+ * suggester like any other text. The owner still ticks the box.
+ */
+CREATE TABLE IF NOT EXISTS recipes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug        TEXT NOT NULL UNIQUE,
+  name        TEXT NOT NULL,
+  -- preparation: a building block, never sold on its own (stock, mother sauce)
+  -- component:   sold as part of something (a braise, a pastry cream)
+  -- dish:        goes on a menu as written
+  category    TEXT NOT NULL DEFAULT 'preparation'
+                CHECK (category IN ('preparation','component','dish')),
+  summary     TEXT NOT NULL DEFAULT '',
+
+  -- Yield is stored as a quantity and a unit rather than a sentence, because
+  -- scaling is the operation the kitchen actually performs and it needs a
+  -- ratio. "Makes about 2 L" cannot be halved by a computer; 2000 / 'ml' can.
+  yield_qty   REAL,
+  yield_unit  TEXT,
+  portions    INTEGER,
+  portion_qty REAL,
+  portion_unit TEXT,
+
+  -- The base this is a variation of. A veloute is a stock and a blond roux;
+  -- everything after that is a derivative, and saying so in one column keeps
+  -- the repertoire the size of the ideas in it rather than the size of the
+  -- menu. NULL means this recipe stands on its own.
+  parent_id   INTEGER REFERENCES recipes(id) ON DELETE SET NULL,
+
+  -- The menu entry this recipe produces, when there is one. SET NULL, not
+  -- CASCADE: dropping a dish from the saved list is an editorial decision
+  -- about the menu, and it must never take the method down with it.
+  dish_id     INTEGER REFERENCES saved_dishes(id) ON DELETE SET NULL,
+
+  -- Where the text came from. Provenance is a real field here, not bookkeeping:
+  -- 'seed' is the base set shipped with the app, written in-house from the
+  -- common formulas of the trade. Anything typed by the owner is 'house'.
+  -- Nothing is ever copied in from a published cookbook -- the ratios are
+  -- everyone's, the wording is not.
+  source      TEXT NOT NULL DEFAULT 'house'
+                CHECK (source IN ('house','seed','imported')),
+
+  -- Set the first time the owner edits a seeded recipe. The seed is re-applied
+  -- on boot so later releases reach an existing database, and that is only
+  -- safe if an edit is remembered -- same bargain the allergen dictionary
+  -- makes with allergen_terms_removed.
+  edited      INTEGER NOT NULL DEFAULT 0,
+
+  notes       TEXT NOT NULL DEFAULT '',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_recipes_parent ON recipes(parent_id);
+CREATE INDEX IF NOT EXISTS idx_recipes_dish ON recipes(dish_id);
+
+/* One row per ingredient, never one line of prose.
+ *
+ * The prep state gets its own column because it is where the money and the
+ * allergens hide. "Butter, clarified" and "butter" are the same word to a
+ * shopping list and different things to a cook, and a prep state buried in
+ * free text is invisible to both.
+ *
+ * canon_qty/canon_unit hold the same amount in grams, millilitres or each, so
+ * scaling and costing have one number to work with regardless of how the line
+ * was written. The written form is kept as typed: a cook reads "2 tbsp", and
+ * rewriting that as 30 ml on screen is a worse recipe, not a more precise one. */
+CREATE TABLE IF NOT EXISTS recipe_ingredients (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  recipe_id  INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+  sort       INTEGER NOT NULL DEFAULT 0,
+  group_label TEXT NOT NULL DEFAULT '',   -- "For the braise", "To finish"
+  qty        REAL,
+  unit       TEXT NOT NULL DEFAULT '',
+  item       TEXT NOT NULL,
+  prep       TEXT NOT NULL DEFAULT '',    -- diced, clarified, room temperature
+  optional   INTEGER NOT NULL DEFAULT 0,
+  canon_qty  REAL,
+  canon_unit TEXT CHECK (canon_unit IN ('g','ml','ea') OR canon_unit IS NULL),
+  -- When the ingredient is itself something the kitchen makes. This is the
+  -- edge that turns a flat list into a tree: a sauce names its stock, and the
+  -- stock's allergens are reachable from the dish without retyping them.
+  sub_recipe_id INTEGER REFERENCES recipes(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recipe_ing_recipe ON recipe_ingredients(recipe_id, sort);
+CREATE INDEX IF NOT EXISTS idx_recipe_ing_sub ON recipe_ingredients(sub_recipe_id);
+
+/* Method, in order. Steps are rows so a prep list can be rendered from the
+   front of the recipe and a timing from the back; minutes is nullable because
+   most steps are "until it looks right" and pretending otherwise is a lie the
+   schema does not need to tell. */
+CREATE TABLE IF NOT EXISTS recipe_steps (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+  sort      INTEGER NOT NULL DEFAULT 0,
+  text      TEXT NOT NULL,
+  minutes   INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_recipe_steps_recipe ON recipe_steps(recipe_id, sort);
 `);
 
 /* --- Settings ----------------------------------------------------------- */

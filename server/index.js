@@ -20,6 +20,13 @@ const auth = require('./auth');
 const images = require('./images');
 const { db } = require('./db');
 
+/* The base preparations, re-applied on boot so a later release reaches a
+ * database that already exists. Edited recipes are left alone. Seeding lives
+ * here rather than in db.js because recipes.js requires db.js, and doing it
+ * there would close the circle. */
+const recipes = require('./recipes');
+recipes.seedRecipes();
+
 const app = express();
 
 /* Only when TRUST_PROXY says so — see the note in config.js. Behind nginx it
