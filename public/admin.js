@@ -501,4 +501,98 @@
       });
     });
   });
+
+  section("Dish picker filter", function () {
+    /* --- Narrowing a long dish list ----------------------------------------
+     * The picker offers every saved dish, and the saved list is the length of
+     * everything the kitchen has ever cooked -- several hundred rows once a
+     * menu history has been imported. Scrolling that with a thumb to find one
+     * dish is the kind of control that gets abandoned halfway.
+     *
+     * Filtering happens here rather than on the server because the picker sits
+     * inside a half-written recipe. A round trip to search would either lose
+     * the ingredients typed so far or need them carried through the query
+     * string, and neither is worth it to shorten a list already in the page.
+     *
+     * The field is rendered hidden and revealed here. With no JavaScript it
+     * never appears at all, which is better than showing a search box that
+     * does nothing -- the select underneath still works perfectly well.
+     */
+    var boxes = document.querySelectorAll(".dish-filter");
+    for (var i = 0; i < boxes.length; i++) wire(boxes[i]);
+
+    function wire(box) {
+      var select = box.parentNode.querySelector(".dish-picker");
+      if (!select) return;
+
+      /* Snapshot the list before anything is filtered out of it. Rebuilding
+         from this each time means a narrowing search and a widening one cost
+         the same, and a backspace restores exactly what was there before. */
+      var groups = [];
+      var kids = select.children;
+      for (var k = 0; k < kids.length; k++) {
+        var node = kids[k];
+        if (node.tagName === "OPTGROUP") {
+          var opts = [];
+          for (var o = 0; o < node.children.length; o++) opts.push(node.children[o]);
+          groups.push({ label: node.label, options: opts });
+        } else {
+          groups.push({ label: null, options: [node] });
+        }
+      }
+
+      box.hidden = false;
+      box.addEventListener("input", function () { apply(box.value); });
+      /* Enter in a search box inside a form submits the form. Here that would
+         save a half-written recipe because someone finished typing a filter. */
+      box.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); apply(box.value); }
+      });
+
+      function apply(query) {
+        var needle = String(query || "").trim().toLowerCase();
+        /* Whatever is chosen right now always survives the filter. Dropping
+           it from the list would quietly reset the select to its first entry,
+           and the recipe would save pointing at a different dish -- or none --
+           because the owner typed in a search box. */
+        var current = select.value;
+        var matches = 0;
+
+        while (select.firstChild) select.removeChild(select.firstChild);
+
+        for (var g = 0; g < groups.length; g++) {
+          var group = groups[g];
+          var kept = [];
+          for (var i2 = 0; i2 < group.options.length; i2++) {
+            var opt = group.options[i2];
+            var keep = !needle
+              || !opt.value                                   // "not a menu dish"
+              || opt.value === current                        // the standing choice
+              || (opt.textContent || "").toLowerCase().indexOf(needle) !== -1;
+            if (keep) {
+              kept.push(opt);
+              if (opt.value && opt.value !== current) matches++;
+            }
+          }
+          if (!kept.length) continue;
+          if (group.label === null) {
+            for (var a = 0; a < kept.length; a++) select.appendChild(kept[a]);
+          } else {
+            var grp = document.createElement("optgroup");
+            grp.label = group.label;
+            for (var b = 0; b < kept.length; b++) grp.appendChild(kept[b]);
+            select.appendChild(grp);
+          }
+        }
+
+        if (needle && !matches) {
+          var none = document.createElement("option");
+          none.disabled = true;
+          none.textContent = "No dish matches “" + query.trim() + "”";
+          select.appendChild(none);
+        }
+        select.value = current;
+      }
+    }
+  });
 })();

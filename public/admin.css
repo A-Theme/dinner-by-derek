@@ -202,6 +202,18 @@ details.daycard-edit > summary { cursor: pointer; font-family: var(--dbd-display
 .graphic figcaption { margin-top: var(--dbd-sp-2); font-size: var(--dbd-step--1); }
 
 /* Print: kitchen and pickup sheets are a real workflow. */
+/* The dish picker's filter box.
+ *
+ * Its own line rather than trailing the label text: the label reads "What it
+ * makes on the menu", and a search field butted against that scans as part of
+ * the sentence instead of as a control. Full width so it lines up with the
+ * select it narrows, which is the thing it belongs to. */
+.dish-filter {
+  display: block;
+  width: 100%;
+  margin: var(--dbd-sp-2) 0 var(--dbd-sp-2);
+}
+
 @media print {
   .admin-nav, .no-print, #toasts, .btn { display: none !important; }
   body { background: none; font-size: 12pt; }

@@ -212,7 +212,9 @@ function editor({ recipe, error, dishes = [] }) {
       </div>
 
       <label>What it makes on the menu
-        <select name="dish_id">
+        ${dishes.length > 12 ? html`<input type="search" class="dish-filter"
+          placeholder="Type to narrow the list" aria-label="Filter the dish list" hidden>` : ''}
+        <select name="dish_id" class="dish-picker">
           <option value=""${r.dish_id ? '' : ' selected'}>Not a menu dish — a preparation</option>
           ${[...byKind.entries()].map(([kind, items]) => html`<optgroup label="${KIND_LABELS[kind] || kind}">
             ${items.map((d) => html`<option value="${d.id}"${r.dish_id === d.id ? ' selected' : ''}${d.taken_by ? ' disabled' : ''}>${d.name}${d.taken_by ? ` — already ${d.taken_by_name}` : ''}</option>`)}

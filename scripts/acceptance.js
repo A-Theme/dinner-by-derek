@@ -1604,7 +1604,7 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     /toast\(name \+ \" isn/.test(adminJs));
 
   const names = [...adminJs.matchAll(/^  section\(\"([^\"]+)\"/gm)].map((m) => m[1]);
-  check('every part of the dashboard runs inside one', names.length, 8);
+  check('every part of the dashboard runs inside one', names.length, 9);
   ok('including the two that have already broken once',
     names.includes('The confirmation step') && names.includes('Autosave'), names.join(' | '));
   ok('and nothing is left outside them',
