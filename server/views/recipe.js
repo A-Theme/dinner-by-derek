@@ -109,6 +109,8 @@ function detail({ recipe, scaled, factor, kids, suggestions }) {
     <div class="card no-print">
       <div class="dl-row">
         <span><strong>Makes</strong> ${yieldOf(r) || 'unspecified'}${r.portions ? ` · ${r.portions} portions` : ''}</span>
+        ${recipe.dish_name ? html`<span><strong>On the menu as</strong>
+          <a href="/admin/dishes?kind=${recipe.dish_kind || ''}">${recipe.dish_name}</a></span>` : ''}
       </div>
       <div class="dl-row" style="margin-top:var(--dbd-sp-3)">
         ${scaleBtn(0.5, 'Half')}
@@ -167,9 +169,15 @@ function detail({ recipe, scaled, factor, kids, suggestions }) {
  * what it can and keeps the rest verbatim, so nothing typed here is ever lost
  * to a format it did not expect.
  */
-function editor({ recipe, error }) {
+function editor({ recipe, error, dishes = [] }) {
   const r = recipe || {};
   const isNew = !r.id;
+  const KIND_LABELS = { main: 'Mains', soup: 'Soups', salad: 'Salads', dessert: 'Desserts' };
+  const byKind = new Map();
+  for (const d of dishes) {
+    if (!byKind.has(d.kind)) byKind.set(d.kind, []);
+    byKind.get(d.kind).push(d);
+  }
   return html`
     <p class="also"><a href="/admin/recipes${r.slug ? `/${r.slug}` : ''}">← Back</a></p>
     <h1>${isNew ? 'Write a recipe' : `Edit ${r.name}`}</h1>
@@ -202,6 +210,19 @@ function editor({ recipe, error }) {
           <input type="number" name="portions" value="${r.portions == null ? '' : r.portions}">
         </label>
       </div>
+
+      <label>What it makes on the menu
+        <select name="dish_id">
+          <option value=""${r.dish_id ? '' : ' selected'}>Not a menu dish — a preparation</option>
+          ${[...byKind.entries()].map(([kind, items]) => html`<optgroup label="${KIND_LABELS[kind] || kind}">
+            ${items.map((d) => html`<option value="${d.id}"${r.dish_id === d.id ? ' selected' : ''}${d.taken_by ? ' disabled' : ''}>${d.name}${d.taken_by ? ` — already ${d.taken_by_name}` : ''}</option>`)}
+          </optgroup>`)}
+        </select>
+      </label>
+      <p class="variant__label">Linking a recipe to a saved dish is a cross-reference and
+        nothing more. It does not copy allergens onto the dish and it does not tick the
+        review box — the recipe knows what goes in the pot, and the tick says you have
+        checked a dish for the menu it is going on. Those stay separate.</p>
 
       <label>Ingredients — one per line
         <textarea name="ingredients" rows="10" placeholder="500 g onion, peeled

@@ -1851,6 +1851,67 @@ const PAST_DATE = T.addDays(today, -2);
       !/Flow Test Braise|beef shin|Veloute/.test(menu.text));
   }
 
+  /* --- Linking a recipe to a saved dish ----------------------------------
+     Over HTTP, because the link is made by picking from a select and saving a
+     form, and the failure worth catching is the one where the pick does not
+     survive the round trip -- or worse, where saving the link quietly edits
+     the dish it points at. */
+  {
+    const { db: fdb } = require('../server/db');
+    const dishId = fdb.prepare(`INSERT INTO saved_dishes (kind, name, description, allergens)
+      VALUES ('main', 'Flow Linked Dish', 'For the link checks.', '["milk"]')`)
+      .run().lastInsertRowid;
+    const tagsBefore = fdb.prepare('SELECT allergens FROM saved_dishes WHERE id = ?')
+      .get(dishId).allergens;
+
+    const form = await GET('/admin/recipes/new');
+    ok('the editor offers the saved dishes', /Flow Linked Dish/.test(form.text));
+    ok('and says the link copies nothing across',
+      /does not copy allergens onto the dish/.test(form.text));
+
+    const saved = await POST('/admin/recipes', {
+      name: 'Flow Linked Recipe',
+      category: 'dish',
+      dish_id: String(dishId),
+      ingredients: '200 g butter\n3 eggs\n100 g wheat flour',
+      steps: 'Cook it through.',
+    });
+    ok('a recipe saves with a dish attached', saved.status === 302);
+    ok('and does not come back carrying a refusal',
+      !/err=/.test(saved.location || ''));
+
+    const page = await GET('/admin/recipes/flow-linked-recipe');
+    ok('the recipe names the dish it makes', /On the menu as/.test(page.text));
+    ok('and names it correctly', /Flow Linked Dish/.test(page.text));
+
+    /* THE ONE THAT MATTERS. The recipe is full of eggs and wheat; the dish is
+       tagged milk and nothing else. Saving the link must not have touched it. */
+    const tagsAfter = fdb.prepare('SELECT allergens FROM saved_dishes WHERE id = ?')
+      .get(dishId).allergens;
+    check('linking left the dish’s allergen tags exactly as they were',
+      tagsAfter, tagsBefore);
+
+    const dishes = await GET('/admin/dishes');
+    ok('the saved dishes list shows the recipe', /Flow Linked Recipe/.test(dishes.text));
+    ok('and links to it', /\/admin\/recipes\/flow-linked-recipe/.test(dishes.text));
+
+    /* A second recipe claiming the same dish is refused in words. */
+    const clash = await POST('/admin/recipes', {
+      name: 'Second Claimant', category: 'dish', dish_id: String(dishId),
+      ingredients: '1 onion', steps: 'Chop.',
+    });
+    ok('a second claim on the dish is refused', /err=/.test(clash.location || ''));
+    ok('and the refusal names the recipe that already has it',
+      /Flow%20Linked%20Recipe|Flow\+Linked\+Recipe/.test(clash.location || ''));
+    const stillMine = await GET('/admin/recipes/flow-linked-recipe');
+    ok('the original keeps the dish', /Flow Linked Dish/.test(stillMine.text));
+
+    /* And none of it is customer-facing. */
+    const menu = await GET('/', { noCookie: true });
+    ok('no recipe reaches the customer menu',
+      !/Flow Linked Recipe|wheat flour|Second Claimant/.test(menu.text));
+  }
+
   /* --- Report -------------------------------------------------------------- */
   console.log('\nEnd-to-end flow — Dinner By Derek\n');
   if (failures.length) {

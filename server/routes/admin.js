@@ -9,6 +9,7 @@ const A = require('../allergens');
 const O = require('../orders');
 const P = require('../publish');
 const DISH = require('../dishes');
+const R = require('../recipes');
 const S = require('../signin');
 const mail = require('../mailer');
 const images = require('../images');
@@ -361,6 +362,11 @@ router.get('/dishes', (req, res) => {
   const dishes = DISH.all({ sort, kind });
   const counts = DISH.countsByKind();
   const total = DISH.count();
+  /* One query rather than one per row: the recipes that point at a dish, keyed
+     by the dish they point at. Most dishes have none. */
+  const recipeFor = new Map(
+    R.list().filter((r) => r.dish_id).map((r) => [r.dish_id, r]),
+  );
 
   const kindTab = (value, label, n) => html`<a
     class="btn ${kind === value ? 'btn--primary' : 'btn--secondary'}"
@@ -397,7 +403,7 @@ router.get('/dishes', (req, res) => {
     </div>
     ${dishes.length ? html`
       <table class="dtable">
-        <thead><tr><th>Dish</th>${kind ? '' : html`<th>Kind</th>`}<th>Sizes</th><th>Used</th><th></th></tr></thead>
+        <thead><tr><th>Dish</th>${kind ? '' : html`<th>Kind</th>`}<th>Sizes</th><th>Recipe</th><th>Used</th><th></th></tr></thead>
         <tbody>${dishes.map((d) => html`<tr>
           <td data-label="Dish"><strong>${d.name}</strong>
             ${d.description ? html`<br><span class="variant__label">${d.description}</span>` : ''}</td>
@@ -405,6 +411,9 @@ router.get('/dishes', (req, res) => {
           <td data-label="Sizes">
             ${d.full_on && d.full_price != null ? html`${d.full_label} ${money(d.full_price)}` : ''}
             ${d.single_on && d.single_price != null ? html`<br>${d.single_label} ${money(d.single_price)}` : ''}</td>
+          <td data-label="Recipe">${recipeFor.has(d.id)
+            ? html`<a href="/admin/recipes/${recipeFor.get(d.id).slug}">${recipeFor.get(d.id).name}</a>`
+            : html`<a class="variant__label" href="/admin/recipes/new">Write one</a>`}</td>
           <td data-label="Used">${d.used_count === 0 ? 'not yet' : `${d.used_count}×`}</td>
           <td data-label="">${V.confirmForm({
             action: `/admin/dishes/${d.id}/delete`,

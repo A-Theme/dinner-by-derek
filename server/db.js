@@ -633,6 +633,16 @@ db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_saved_dishes_kind_name
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_orders_submission
          ON orders(submission_key) WHERE submission_key IS NOT NULL`);
 
+/* One recipe per saved dish, and only where a link exists at all.
+ *
+ * A partial index, because most recipes are attached to no dish: a stock is
+ * not a menu item and never will be, and a plain UNIQUE column would let
+ * exactly one of them hold NULL. Two recipes claiming the same dish is the
+ * case worth refusing outright -- the question "what is in this dish" has to
+ * have one answer, or the answer is worthless. */
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_recipes_one_per_dish
+         ON recipes(dish_id) WHERE dish_id IS NOT NULL`);
+
 /* One payment per order, enforced by the database rather than by remembering.
  *
  * Nothing stopped two payments pointing at the same order, and the damage did

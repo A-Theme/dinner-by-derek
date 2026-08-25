@@ -142,7 +142,9 @@ function seedRecipes() {
 /** One recipe with its ingredients and steps attached, or null. */
 function get(idOrSlug) {
   const where = Number.isInteger(idOrSlug) || /^\d+$/.test(String(idOrSlug)) ? 'id = ?' : 'slug = ?';
-  const recipe = db.prepare(`SELECT * FROM recipes WHERE ${where}`).get(idOrSlug);
+  const recipe = db.prepare(`SELECT r.*, d.name AS dish_name, d.kind AS dish_kind
+    FROM recipes r LEFT JOIN saved_dishes d ON d.id = r.dish_id
+    WHERE r.${where}`).get(idOrSlug);
   if (!recipe) return null;
   // The sub-recipe's slug comes along so the screen can link to it without a
   // second query per ingredient.
@@ -173,8 +175,11 @@ function list({ category = '', q = '', sort = 'category' } = {}) {
   const args = [];
   if (category) { where.push('r.category = ?'); args.push(category); }
   if (q) { where.push('(r.name LIKE ? OR r.summary LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
-  const sql = `SELECT r.*, p.name AS parent_name, p.slug AS parent_slug
-    FROM recipes r LEFT JOIN recipes p ON p.id = r.parent_id
+  const sql = `SELECT r.*, p.name AS parent_name, p.slug AS parent_slug,
+      d.name AS dish_name, d.kind AS dish_kind
+    FROM recipes r
+    LEFT JOIN recipes p ON p.id = r.parent_id
+    LEFT JOIN saved_dishes d ON d.id = r.dish_id
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY ${SORTS[sort] || SORTS.category}`;
   return db.prepare(sql).all(...args);
@@ -364,18 +369,47 @@ function put(fields, id = null) {
     yield_unit: String(fields.yield_unit || '').trim(),
     portions: fields.portions === '' || fields.portions == null ? null : Number(fields.portions),
     notes: String(fields.notes || '').trim(),
+    /* The link to a saved dish, and nothing else.
+     *
+     * Attaching a recipe to a dish says "this is how that is made". It does
+     * NOT copy the recipe's allergens onto the dish, and it does not tick
+     * anything, because the recipe knows what goes in the pot and the tick is
+     * a statement about a dish on a menu this week. Those are different
+     * claims, and the day the link starts making the second one on the
+     * strength of the first is the day a substitution nobody retyped goes out
+     * under somebody else's signature. The link is a cross-reference. */
+    dish_id: fields.dish_id === '' || fields.dish_id == null ? null : Number(fields.dish_id),
   };
+  if (row.dish_id != null
+      && !db.prepare('SELECT 1 FROM saved_dishes WHERE id = ?').get(row.dish_id)) {
+    row.dish_id = null;
+  }
+
+  /* Somebody else's recipe already claims that dish. Refuse the link and say
+     whose, rather than letting the unique index raise a 500 -- the owner
+     picked a dish from a list and deserves a sentence, not a stack trace. */
+  let warning = null;
+  if (row.dish_id != null) {
+    const taken = db.prepare(
+      'SELECT name FROM recipes WHERE dish_id = ? AND id IS NOT ?',
+    ).get(row.dish_id, id);
+    if (taken) {
+      warning = `That dish is already linked to "${taken.name}", so this recipe was saved without a dish.`;
+      row.dish_id = null;
+    }
+  }
 
   const tx = db.transaction(() => {
     let rid = id;
     if (rid) {
       db.prepare(`UPDATE recipes SET name=@name, category=@category, summary=@summary,
         yield_qty=@yield_qty, yield_unit=@yield_unit, portions=@portions, notes=@notes,
-        slug=@slug, edited=1 WHERE id=@id`).run({ ...row, slug: slugify(name, rid), id: rid });
+        dish_id=@dish_id, slug=@slug, edited=1 WHERE id=@id`)
+        .run({ ...row, slug: slugify(name, rid), id: rid });
     } else {
       rid = db.prepare(`INSERT INTO recipes
-        (slug, name, category, summary, yield_qty, yield_unit, portions, notes, source)
-        VALUES (@slug, @name, @category, @summary, @yield_qty, @yield_unit, @portions, @notes, 'house')`)
+        (slug, name, category, summary, yield_qty, yield_unit, portions, notes, dish_id, source)
+        VALUES (@slug, @name, @category, @summary, @yield_qty, @yield_unit, @portions, @notes, @dish_id, 'house')`)
         .run({ ...row, slug: slugify(name) }).lastInsertRowid;
     }
 
@@ -402,7 +436,28 @@ function put(fields, id = null) {
 
     return rid;
   });
-  return tx();
+  return { id: tx(), warning };
+}
+
+/** The recipe attached to a saved dish, or null. */
+function byDish(dishId) {
+  const row = db.prepare('SELECT slug FROM recipes WHERE dish_id = ?').get(Number(dishId));
+  return row ? get(row.slug) : null;
+}
+
+/**
+ * Every saved dish, flagged with whether a recipe already points at it.
+ *
+ * The editor's dish list, and the reason it is a query rather than two: a
+ * select showing dishes that are already taken, with no sign of which, is a
+ * select that produces the refusal above instead of preventing it.
+ */
+function dishOptions(exceptRecipeId = null) {
+  return db.prepare(`SELECT d.id, d.name, d.kind,
+      r.id AS taken_by, r.name AS taken_by_name
+    FROM saved_dishes d
+    LEFT JOIN recipes r ON r.dish_id = d.id AND r.id IS NOT ?
+    ORDER BY d.kind, d.name COLLATE NOCASE`).all(exceptRecipeId);
 }
 
 function remove(id) {
@@ -420,5 +475,5 @@ function asLines(recipe) {
 
 module.exports = {
   seedRecipes, get, list, variations, scale, allergenText, canon,
-  put, remove, asLines, parseIngredientLine, SORTS,
+  put, remove, asLines, parseIngredientLine, byDish, dishOptions, SORTS,
 };

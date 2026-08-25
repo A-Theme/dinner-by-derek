@@ -38,7 +38,7 @@ router.get('/recipes', (req, res) => {
 /* `new` is matched before `:slug` so a recipe can never shadow the editor.
    Slugs are generated from names, and "New" is a name somebody will use. */
 router.get('/recipes/new', (req, res) => {
-  const body = RV.editor({ recipe: null, error: null });
+  const body = RV.editor({ recipe: null, error: null, dishes: R.dishOptions() });
   res.type('html').send(String(V.shell({ title: 'Write a recipe', body, current: 'recipes' })));
 });
 
@@ -68,30 +68,36 @@ router.get('/recipes/:slug', (req, res, next) => {
 router.get('/recipes/:slug/edit', (req, res, next) => {
   const recipe = R.get(req.params.slug);
   if (!recipe) return next();
-  const body = RV.editor({ recipe, error: null });
+  const body = RV.editor({ recipe, error: null, dishes: R.dishOptions(recipe.id) });
   res.type('html').send(String(V.shell({ title: `Edit ${recipe.name}`, body, current: 'recipes' })));
 });
 
 router.post('/recipes', (req, res) => {
   if (!String(req.body.name || '').trim()) {
-    const body = RV.editor({ recipe: req.body, error: 'A recipe needs a name.' });
+    const body = RV.editor({
+      recipe: req.body, error: 'A recipe needs a name.', dishes: R.dishOptions(),
+    });
     return res.type('html').send(String(V.shell({ title: 'Write a recipe', body, current: 'recipes' })));
   }
-  const id = R.put(req.body);
+  const { id, warning } = R.put(req.body);
   const saved = R.get(String(id));
-  res.redirect(`/admin/recipes/${saved.slug}`);
+  res.redirect(`/admin/recipes/${saved.slug}${warning ? `?err=${encodeURIComponent(warning)}` : ''}`);
 });
 
 router.post('/recipes/:id', (req, res) => {
   const recipe = R.get(req.params.id);
   if (!recipe) return back(res, req, null, 'That recipe is gone.');
   if (!String(req.body.name || '').trim()) {
-    const body = RV.editor({ recipe: { ...recipe, ...req.body }, error: 'A recipe needs a name.' });
+    const body = RV.editor({
+      recipe: { ...recipe, ...req.body },
+      error: 'A recipe needs a name.',
+      dishes: R.dishOptions(recipe.id),
+    });
     return res.type('html').send(String(V.shell({ title: 'Edit recipe', body, current: 'recipes' })));
   }
-  R.put(req.body, recipe.id);
+  const { warning } = R.put(req.body, recipe.id);
   const saved = R.get(String(recipe.id));
-  res.redirect(`/admin/recipes/${saved.slug}`);
+  res.redirect(`/admin/recipes/${saved.slug}${warning ? `?err=${encodeURIComponent(warning)}` : ''}`);
 });
 
 router.post('/recipes/:id/delete', (req, res) => {

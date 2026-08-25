@@ -2411,6 +2411,66 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('with its parent cleared rather than dangling', R.get('bordelaise').parent_id, null);
 }
 
+/* --- A recipe linked to a saved dish --------------------------------------
+   The link answers "how is that made". It is a cross-reference and must stay
+   one: the recipe knows what goes in the pot, the acknowledgement says the
+   owner checked a dish for the menu it is going on, and the moment the first
+   starts standing in for the second a substitution nobody retyped goes out
+   under a tick nobody placed. */
+{
+  const R = require('../server/recipes');
+  R.seedRecipes();
+
+  const dishId = db.prepare(`INSERT INTO saved_dishes (kind, name, description, allergens)
+    VALUES ('main', 'Linked Test Dish', 'A dish for the link checks.', '["milk"]')`)
+    .run().lastInsertRowid;
+  const before = db.prepare('SELECT allergens FROM saved_dishes WHERE id = ?').get(dishId);
+
+  const made = R.put({
+    name: 'Linked Test Recipe', category: 'dish', dish_id: String(dishId),
+    ingredients: '200 g butter\n3 eggs\n100 g wheat flour',
+    steps: 'Cook it.',
+  });
+  ok('a recipe saves with a dish attached', !!made.id && !made.warning);
+  check('and reads back naming the dish', R.get(String(made.id)).dish_name, 'Linked Test Dish');
+
+  /* THE CHECK THIS SECTION EXISTS FOR. The recipe above is full of allergens
+     the dish does not claim -- eggs and wheat on a dish tagged only milk. If
+     linking ever starts copying them across, this fails, and it should. */
+  const after = db.prepare('SELECT allergens, id FROM saved_dishes WHERE id = ?').get(dishId);
+  check('linking does not touch the dish’s allergen tags', after.allergens, before.allergens);
+  const dishCols = db.prepare('PRAGMA table_info(saved_dishes)').all().map((c) => c.name);
+  ok('and the saved dish still has no acknowledgement to tick', !dishCols.includes('ack'));
+
+  /* One recipe per dish, refused with a sentence rather than a stack trace. */
+  const second = R.put({
+    name: 'Second Claim On That Dish', category: 'dish', dish_id: String(dishId),
+    ingredients: '1 onion', steps: 'Chop it.',
+  });
+  ok('a second recipe cannot claim the same dish', !!second.warning);
+  ok('it names the recipe that already has it', /Linked Test Recipe/.test(second.warning));
+  check('and saves unlinked rather than not at all', R.get(String(second.id)).dish_id, null);
+
+  /* The dish is the menu entry and the recipe outlives it. */
+  db.prepare('DELETE FROM saved_dishes WHERE id = ?').run(dishId);
+  const orphan = R.get(String(made.id));
+  ok('deleting the dish leaves the recipe standing', !!orphan);
+  check('with its link cleared rather than dangling', orphan.dish_id, null);
+  ok('and the method intact', (orphan.steps || []).length === 1);
+
+  /* The editor's dish list has to say which dishes are spoken for, or it
+     offers a choice that will be refused on save. */
+  const d2 = db.prepare(`INSERT INTO saved_dishes (kind, name) VALUES ('main', 'Spoken For')`)
+    .run().lastInsertRowid;
+  R.put({ name: 'Owner Of Spoken For', category: 'dish', dish_id: String(d2) });
+  const opts = R.dishOptions();
+  const spoken = opts.find((o) => o.id === d2);
+  ok('a dish already linked is flagged in the picker', !!spoken.taken_by);
+  check('by name', spoken.taken_by_name, 'Owner Of Spoken For');
+  const free = R.dishOptions(spoken.taken_by).find((o) => o.id === d2);
+  ok('but not flagged against the recipe that owns it', !free.taken_by);
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {
