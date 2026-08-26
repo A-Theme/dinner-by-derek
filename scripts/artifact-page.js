@@ -206,7 +206,10 @@ function render(md) {
       const text = inline(h[2], no);
       if (level === 1) out.push(`<h1>${text}</h1>`);
       else if (level === 2) out.push(`<h2 class="section" id="${slug(h[2])}">${text}</h2>`);
-      else out.push(`<h3 class="sub">${text}</h3>`);
+      /* h3 carries an id for the same reason h2 does: these documents link to
+         their own subsections, and a link to a heading that never got an anchor
+         is dead in a way nothing reports. GOING-LIVE.md had two. */
+      else out.push(`<h3 class="sub" id="${slug(h[2])}">${text}</h3>`);
       i++;
       continue;
     }
