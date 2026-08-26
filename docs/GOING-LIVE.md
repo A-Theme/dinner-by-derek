@@ -17,8 +17,13 @@ question that is deliberately left open until there is evidence to settle it.
 
 ## Where things stand today
 
-Read from the live database and `.env` on 2026-08-23.
+Read from the live database and `.env` on 2026-08-26.
 Check it again before starting — this is a snapshot, not a guarantee.
+
+This table is the part of the document that rots fastest, because it reads two
+things that are not versioned with the code. Git can say the file changed; it
+cannot say the file became wrong. It has been wrong three times so far, and once
+within four hours of a commit whose entire purpose was to re-read it.
 
 | | state | matters because |
 |---|---|---|
@@ -28,9 +33,10 @@ Check it again before starting — this is a snapshot, not a guarantee.
 | `NODE_ENV` | `todo: development` | Static caching off, and the boot warnings are tuned for a laptop. |
 | Admin password | `ok: hashed` scrypt | `ADMIN_PASSWORD_HASH` is set and the plaintext `ADMIN_PASSWORD` line is gone. Step 2 is already done; confirm the boot output rather than redo it. |
 | `TRUST_PROXY` | `warn: unset` | Correct until nginx exists. Becomes `1` then. |
-| Weeks | `warn: published` one week, live, starting 2026-08-24 | Five service days on the menu (Aug 24–28), all reviewed. Three further days sit outside the week dates and no longer reach a customer — they are in Menu History. Published by hand, not by the scheduler. |
+| Weeks | `warn: published` one week, live, starting 2026-08-24 | Five service days on the menu (Aug 24–28), all reviewed. Three further days sit outside the week dates and no longer reach a customer — they are in Menu History. Published by hand, not by the scheduler. **Aug 24 and 25 have already passed**, and the rest of it expires on the 28th — so this is not the week a customer will arrive to. See step 3. |
 | Soup / salad | `todo: none` | |
-| Standing items | `todo: 3 unreviewed` of 6; some have no description | Other Options is invisible to customers until these are written and ticked. **This is the one blocking item on the list.** |
+| Standing items | `todo: 3 unreviewed` of 6 | Breaded Chicken Cutlets, Pulled Pork and BBQ Brisket. The two reheat bags have no description to review against, so those get written first. Other Options is invisible to customers until all three are ticked. **This is the one blocking item on the list** — see step 4, which also flags a fourth item worth a look. |
+| Allergen dictionary | `ok: 479 terms` | Was 303 until the seed learned to reach a database that already exists. The extra 176 include caesar salad, oatmeal, tempura, croissant and most of the breads — the working vocabulary of these menus. A bigger dictionary can raise a new suggestion on an item already reviewed, which revokes that review; all fourteen reviewed items were re-checked on 2026-08-26 and none were revoked. |
 | Saved dishes | `ok: 816` | A catalogue was imported. The Load picker is live and long, which is why it now sorts by how often a dish has run. |
 | Orders | `warn: 1` a test order | One order exists (Aug 25, Pork Souvlaki). Delete it before the first real one, so the first real one is unmistakably the first. |
 | Locations | `ok: 1` Waterloo, home kitchen | |
@@ -88,6 +94,23 @@ The week starting 2026-08-24 is published already, with five days on it and
 every one reviewed. What it has none of is a soup, a salad or a dessert. Three
 further days sit outside its own dates — left behind by a change to the week
 start — so they no longer reach a customer and are readable in Menu History.
+
+**That week is not the one to go live on.** It ends on the 28th, and no server
+exists yet to serve it, so by the time one does these dates are behind you. Its
+value is as a worked example of a finished week rather than as the menu anyone
+will read: build the week for the dates actually being cooked once hosting is
+real.
+
+**Duplicate last week**, at the top of This Week, copies the most recent week
+into a fresh draft with the dates moved forward seven days — so it lands on the
+week after whatever it copied, and the week start needs setting by hand if the
+gap is longer than that. Closed days are not copied and standing items are not
+touched.
+
+> [!IMPORTANT] Duplicating resets every allergen review
+> That is deliberate and it is the right behaviour — a review is about a dish on
+> a specific menu — but it means duplicating is not a shortcut past step 4. The
+> typing is saved; the reading is not.
 
 In the dashboard: **This Week** → set the week start → add the service dates →
 fill each day's featured dish with name, description and prices → add soup and
@@ -213,6 +236,46 @@ choosing "E-transfer" on the form has not paid, and the app has never pretended
 otherwise. The Payments screen is what closes that gap.
 
 Full detail in the README, under *Matching e-transfers to orders*.
+
+### Reading the mailbox automatically, if ever
+
+Optional, and nothing here blocks going live — pasting works. But the question
+that used to sit in front of it is now answered, so what remains is worth
+writing down while it is known.
+
+**The format question is settled.** Three real notifications were read on
+2026-08-23, and `fddefc1` taught the parser what they actually contain. Interac
+writes the transfer details as a grid — the label alone on one line, a blank
+line, then the value — which is what its two-column HTML table flattens to, and
+every pattern before that had been written for `Label: value` on one line. The
+message field, which is the sole input to the one rung that settles an order by
+itself, was not being read at all. The app was asking customers for a reference
+it could not then see.
+
+Two things that came out of the same reading are worth knowing even if no poller
+is ever built. The sender name was *worse than unread* — the only pattern
+reaching a real notification ran over the subject, where the name sits inside a
+sentence that continues past it, so whether the mail client wrapped that line
+decided what got stored. And a forwarded notification carries two identities,
+its own and the original's; the original is the one belonging to the money, so
+the same transfer is one payment whether it is forwarded by hand, forwarded
+twice, or later read straight from a mailbox. Without that, switching a poller on
+would have doubled everything already in flight.
+
+**What is left is plumbing**, and it needs somewhere to run — so it waits on
+hosting like everything else:
+
+- A mailbox that receives **only** these notifications, so the parser never
+  reads anything else. A dedicated address, or a filter that forwards to one.
+- An IMAP client dependency, and `IMAP_*` credentials alongside `SMTP_*`.
+- A poller that decodes MIME to the headers and text part the parser expects,
+  hands each message to `P.record()` in `server/payments.js`, and runs on a
+  timer next to the scheduled publish in `server/index.js`.
+
+Nothing else changes. `record()` already accepts `source: 'mailbox'`, the
+Payments screen already labels those rows *from the mailbox*, and duplicate
+protection means re-reading the same message is free — so the poller needs no
+memory of what it has already seen.
 
 ### Facebook, if ever
 
