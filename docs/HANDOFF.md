@@ -1,20 +1,20 @@
 ---
-eyebrow: Handoff · 24 August 2026
+eyebrow: Handoff · 26 August 2026
 figures:
-  6 = commits today
-  1081 = checks passing
+  1109 = checks passing
   230 = recipes seeded
+  16 = recipe buttons
   3 = items unreviewed
 ---
 
-# Handoff — 24 August 2026
+# Handoff — 26 August 2026
 
 Where the project stands at the end of a long day, and what to pick up next.
 
 **This document rots.** The numbers below were read from `data/dinnerbyderek.db`
-and `.env` on the evening of 24 August. Re-read both before acting on any of
+and `.env` on the evening of 26 August. Re-read both before acting on any of
 them — that habit is not decoration, it is what produced half the corrections
-made the day before.
+made across these three days.
 
 **`docs/GOING-LIVE.md` owns the go-live sequence.** This file does not repeat it.
 Where the two disagree, that one is the operational document and this one is a
@@ -24,8 +24,8 @@ snapshot of a moment.
 
 ## Where things are
 
-`main` at `e7c597b`, clean, in sync with `origin/main`.
-Suites green: **708 acceptance, 373 flow** (`npm test`).
+`main` at `7064c6d`, clean, in sync with `origin/main`.
+Suites green: **720 acceptance, 389 flow** (`npm test`).
 
 ### The database
 
@@ -40,8 +40,8 @@ Suites green: **708 acceptance, 373 flow** (`npm test`).
 | Allergen terms | 479 |
 | Orders | 1 (a test: `A16C0962`, Aug 25, Pork Souvlaki) |
 | Payments | 0 |
-| Recipes | **29 in this file, 230 in the seed** — see below |
-| Recipes linked to a dish | 0 |
+| Recipes | 230, all of them tagged onto one of 16 buttons |
+| Recipes linked to a dish | **0** — the column and the picker exist; nothing populates them |
 
 The three unreviewed standing items are **Breaded Chicken Cutlets**, **Pulled
 Pork (Reheat Bag)** and **BBQ Brisket (Reheat Bag)**. Other Options shows
@@ -83,6 +83,56 @@ else can mean it.
    or not at all, because mail with a localhost base is mail whose every button is
    dead. Then `TOKEN_ENCRYPTION_KEY` if Facebook one-tap publishing is wanted; the
    copy-and-paste path works without it. Then the IMAP poller.
+
+---
+
+## What changed on 26 August
+
+Three commits, two of them from another session.
+
+### The recipes got buttons — `7064c6d`
+
+Two hundred and thirty recipes behind one search box is a list you can only use
+if you already know what you are looking for. Every recipe now carries the
+section of the seed file it was written in, and the list renders a button per
+tag with a count: Classical 64, Soups 35, Preserving 18, Modernist 16, Sides 16,
+Desserts 13, Vegan 13, German 8, Mexican 8, Thai 8, Chinese 7, Japanese 7,
+Korean 7, Gluten-free 6, Mongolian 5, Charcuterie 4.
+
+Tags are their own table rather than JSON on the recipe row — the opposite of
+what `saved_dishes` does for allergens, and deliberately. Those are read back
+with the row and never queried across; this exists only to answer "show me the
+German ones", and a `LIKE` against a JSON string matches the wrong thing the
+first time one tag is a substring of another.
+
+A recipe may carry more than one, because tom kha is Thai *and* a soup. The
+filter is an `EXISTS` rather than a join, so two tags do not list a recipe
+twice — asserted, because that is the bug this shape invites.
+
+Two smaller decisions, both about not lying to the reader. Counts are computed
+under the current category tab, since a number counting rows the tab is not
+showing is a number that lies. And an unknown tag in a bookmarked URL falls back
+to the whole list with no button lit, rather than an empty page that reads as
+"the recipes are gone".
+
+### `npm run demo` — `7064c6d`
+
+`npm run dev` opens the live database, and a demo is watched by someone who
+edits while looking. The demo script takes a `VACUUM INTO` snapshot first and
+runs against that. The snapshot came out at 640 KB where a plain file copy of
+the same database gave 438 KB, and the difference is the WAL content — the same
+gap that produced a wrong correction in this repo once before. It also blanks
+`SMTP_*`, because an order placed to show somebody a screen should not reach a
+real address. `.claude/launch.json` points at it, with `autoPort` on so it stops
+colliding with whatever else holds 3000.
+
+### From another session — `db75734`, `0b74789`
+
+The page renderer learned to give subsections their own anchors, and
+`GOING-LIVE.md` had its table re-read and gained a passage on what the week is
+for. Both published pages were rebuilt from those. Worth knowing because the
+renderer change affects *every* markdown-sourced page, not only the one whose
+document changed.
 
 ---
 
@@ -222,11 +272,11 @@ unreviewed and leave them.
 **The recipe seed runs on boot, not on deploy.** `seedRecipes()` is called once
 in `index.js` at startup. A running server keeps serving whatever it loaded when
 it started, so adding recipes to the seed changes nothing anyone can see until
-the process restarts. This wasted time today: a preview was showing 29 recipes
-long after the file held 230, and the file was not the problem. The live
-database is at 29 for exactly this reason — the rest arrive the next time the
-real server starts. An edited recipe is protected from being overwritten when
-they do.
+the process restarts. This wasted time on 24 August: a preview was showing 29
+recipes long after the file held 230, and the file was not the problem. The live
+database has since restarted and holds all 230 — but the trap is the same for
+the next batch, and for the tags, which are rewritten from the seed on every
+boot. An edited recipe is protected from being overwritten when they are.
 
 **The suggester over-fires on recipes about avoiding things.** `gf-veloute`
 raises wheat and gluten because its summary says "instead of a *roux*", and
