@@ -35,17 +35,21 @@ const SOURCE = path.join(root, 'brand', 'logo-lineart.png');
 const MEDALLION_SOURCE = path.join(root, 'brand', 'logo-medallion.jpg');
 const OUT = path.join(root, 'public', 'icons');
 
+/* Paper. Written as a channel triple rather than a hex string because theme.css
+   is the only file here allowed to contain one, and paper is not a brand
+   colour. Used both to resolve the source's transparency and to make up the
+   margin the square crop needs. */
+const PAPER = { r: 255, g: 255, b: 255 };
+
 /**
  * The source as ink on paper: transparency resolved to white, once, in memory.
- * The original file is never modified. White is written as a channel triple
- * rather than a hex string because theme.css is the only file here allowed to
- * contain one, and paper is not a brand colour.
+ * The original file is never modified.
  */
 let paperPromise = null;
 const paper = () => {
   if (!paperPromise) {
     paperPromise = sharp(SOURCE)
-      .flatten({ background: { r: 255, g: 255, b: 255 } })
+      .flatten({ background: PAPER })
       .png()
       .toBuffer();
   }
@@ -87,20 +91,33 @@ async function inkBounds() {
   // Grow the short side to make the crop square. A square crop needs no letter-
   // boxing later, which keeps the mark optically centred and avoids resampling
   // against padding.
-  let w = maxX - minX + 1;
-  let h = maxY - minY + 1;
-  let left = minX;
-  let top = minY;
+  const w = maxX - minX + 1;
+  const h = maxY - minY + 1;
   const side = Math.max(w, h);
-  left = Math.round(minX - (side - w) / 2);
-  top = Math.round(minY - (side - h) / 2);
+  const left = Math.round(minX - (side - w) / 2);
+  const top = Math.round(minY - (side - h) / 2);
 
-  // Stay inside the file.
-  left = Math.max(0, Math.min(left, info.width - side));
-  top = Math.max(0, Math.min(top, info.height - side));
-  const clamped = Math.min(side, info.width, info.height);
-
-  return { left, top, width: clamped, height: clamped };
+  // That square is allowed to fall outside the file, and here it does. The
+  // badge is drawn very slightly tilted and runs to all four edges of the line
+  // art, so the ink is the whole 646x664 file: squaring it asks for 9px of
+  // paper to the left and right that does not exist. Sliding the square back
+  // inside the file instead — which is what this did — buys that margin with
+  // the mark, moving the crop up and shearing 18px off the bottom of the outer
+  // ring. It is small in the file and unmistakable on a home screen, where the
+  // ring is the whole shape. So report the overhang and let the caller add the
+  // missing paper rather than take it out of the logo.
+  return {
+    left,
+    top,
+    width: side,
+    height: side,
+    over: {
+      left: Math.max(0, -left),
+      top: Math.max(0, -top),
+      right: Math.max(0, left + side - info.width),
+      bottom: Math.max(0, top + side - info.height),
+    },
+  };
 }
 
 /**
@@ -108,10 +125,24 @@ async function inkBounds() {
  * The mark keeps its antialiased edges, so it stays smooth when scaled down.
  */
 async function stencil(box, colour, size) {
+  // The missing paper is added in a pass of its own. sharp runs a pipeline in
+  // its own fixed order, and an extract with no resize before it is taken as a
+  // crop of the *input* — so chaining these would test the square against the
+  // 646x664 original and fail rather than against the extended one.
+  const squared = await sharp(await paper())
+    .extend({ ...box.over, background: PAPER })
+    .png()
+    .toBuffer();
+
   // Stays raw the whole way. An intermediate JPEG here would ring at the hard
   // black/white edges and print faint bands into the finished icon.
-  const mask = await sharp(await paper())
-    .extract(box)
+  const mask = await sharp(squared)
+    .extract({
+      left: box.left + box.over.left,
+      top: box.top + box.over.top,
+      width: box.width,
+      height: box.height,
+    })
     .greyscale()
     .negate()                      // ink becomes bright
     .linear(INK_GAIN, INK_BIAS)    // crush the paper to nothing, keep soft edges
