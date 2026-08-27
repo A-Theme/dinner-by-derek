@@ -2517,6 +2517,64 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     /own\s+(\*\s+)?words/.test(src) && /published\s+(\*\s+)?cookbook/.test(src));
 }
 
+/* --- Recipe tags, and the buttons built from them --------------------------
+   The buttons on the recipe list are generated from what is actually in
+   recipe_tags, so the failure worth catching is a recipe that belongs to no
+   button at all -- it is reachable only by search, and nobody searches for a
+   thing they have not thought of yet. */
+{
+  const R = require('../server/recipes');
+  const seed = require('../server/recipe-seed');
+  R.seedRecipes();
+
+  const untagged = seed.filter((r) => !(r.tags || []).length).map((r) => r.slug);
+  check('every seeded recipe belongs to at least one button', untagged, []);
+
+  const counts = R.tagCounts();
+  ok('the tags in the database match the ones in the seed',
+    counts.length === [...new Set(seed.flatMap((r) => r.tags || []))].length);
+
+  /* The example the whole feature was asked for. */
+  const german = R.list({ tag: 'german' }).map((r) => r.slug).sort();
+  check('the German button holds exactly the German recipes', german, [
+    'bratkartoffeln', 'german-potato-salad', 'jaegersauce', 'kartoffelkloesse',
+    'sauerbraten', 'sauerkraut-braised', 'schnitzel', 'spaetzle',
+  ]);
+
+  /* A recipe may sit under more than one button, and has to appear under both.
+     Tom kha is Thai and it is also a soup; made to pick one, it would end up
+     filed where nobody would look for it. */
+  const kha = R.get('tom-kha');
+  check('tom kha carries both its tags', kha.tags.sort(), ['soups', 'thai']);
+  ok('and appears under Thai', R.list({ tag: 'thai' }).some((r) => r.slug === 'tom-kha'));
+  ok('and under Soups', R.list({ tag: 'soups' }).some((r) => r.slug === 'tom-kha'));
+
+  /* Multiple tags must not multiply the row. */
+  const thai = R.list({ tag: 'thai' });
+  check('a recipe with two tags is still listed once',
+    thai.filter((r) => r.slug === 'tom-kha').length, 1);
+
+  /* Counts are per category, because a number that counts rows the current tab
+     is not showing is a number that lies. */
+  const all = R.tagCounts().find((t) => t.tag === 'german').n;
+  const dishes = (R.tagCounts({ category: 'dish' }).find((t) => t.tag === 'german') || { n: 0 }).n;
+  ok('a tag count under a category is no larger than its total', dishes <= all);
+  check('and matches the filtered list it labels',
+    R.list({ tag: 'german', category: 'dish' }).length, dishes);
+
+  /* Deleting a recipe takes its tags with it -- ON DELETE CASCADE, so a count
+     cannot outlive the thing it counted. */
+  const { db: tdb } = require('../server/db');
+  const doomed = R.put({ name: 'Tag Cascade Test', category: 'dish', steps: 'Cook.' });
+  tdb.prepare('INSERT INTO recipe_tags (recipe_id, tag) VALUES (?, ?)').run(doomed.id, 'german');
+  ok('a tag added by hand is counted',
+    R.list({ tag: 'german' }).some((r) => r.id === doomed.id));
+  R.remove(doomed.id);
+  check('and is gone once the recipe is',
+    tdb.prepare('SELECT COUNT(*) n FROM recipe_tags WHERE recipe_id = ?').get(doomed.id).n, 0);
+  check('leaving the German button where it was', R.list({ tag: 'german' }).length, 8);
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {

@@ -30,8 +30,17 @@ const CATEGORIES = ['preparation', 'component', 'dish'];
 router.get('/recipes', (req, res) => {
   const category = CATEGORIES.includes(req.query.category) ? req.query.category : '';
   const q = String(req.query.q || '').trim().slice(0, 80);
-  const recipes = R.list({ category, q });
-  const body = RV.list({ recipes, category, q });
+
+  /* The tag is checked against the tags that exist rather than sanitised and
+     trusted. It reaches a WHERE clause as a bound parameter either way, so this
+     is not about injection -- it is so an invented tag in a bookmarked URL
+     shows the whole list with no button lit, instead of an empty page that
+     looks like the recipes are gone. */
+  const tags = R.tagCounts({ category });
+  const tag = tags.some((t) => t.tag === req.query.tag) ? String(req.query.tag) : '';
+
+  const recipes = R.list({ category, q, tag });
+  const body = RV.list({ recipes, category, q, tag, tags });
   res.type('html').send(String(V.shell({ title: 'Recipes', body, current: 'recipes' })));
 });
 

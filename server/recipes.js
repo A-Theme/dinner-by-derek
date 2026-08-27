@@ -106,6 +106,14 @@ function seedRecipes() {
       // would be more code and more ways to be wrong.
       db.prepare('DELETE FROM recipe_ingredients WHERE recipe_id = ?').run(id);
       db.prepare('DELETE FROM recipe_steps WHERE recipe_id = ?').run(id);
+      db.prepare('DELETE FROM recipe_tags WHERE recipe_id = ?').run(id);
+
+      // Tags come from the seed and are rewritten with it, so a recipe moved
+      // from one section of the file to another moves button with it.
+      for (const tag of r.tags || []) {
+        db.prepare('INSERT OR IGNORE INTO recipe_tags (recipe_id, tag) VALUES (?, ?)')
+          .run(id, String(tag));
+      }
 
       (r.ingredients || []).forEach((ing, i) => {
         const c = canon(ing.qty, ing.unit);
@@ -155,6 +163,9 @@ function get(idOrSlug) {
   recipe.steps = db.prepare(
     'SELECT * FROM recipe_steps WHERE recipe_id = ? ORDER BY sort',
   ).all(recipe.id);
+  recipe.tags = db.prepare(
+    'SELECT tag FROM recipe_tags WHERE recipe_id = ? ORDER BY tag',
+  ).all(recipe.id).map((t) => t.tag);
   return recipe;
 }
 
@@ -170,11 +181,17 @@ const SORTS = {
  * The list. `sort` is a whitelist key, never a string from the caller -- it
  * ends up inside the SQL, same rule as the saved dish list.
  */
-function list({ category = '', q = '', sort = 'category' } = {}) {
+function list({ category = '', q = '', tag = '', sort = 'category' } = {}) {
   const where = [];
   const args = [];
   if (category) { where.push('r.category = ?'); args.push(category); }
   if (q) { where.push('(r.name LIKE ? OR r.summary LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
+  /* EXISTS rather than a join, because a recipe carries more than one tag and
+     joining would return it once per tag it happens to match. */
+  if (tag) {
+    where.push('EXISTS (SELECT 1 FROM recipe_tags t WHERE t.recipe_id = r.id AND t.tag = ?)');
+    args.push(tag);
+  }
   const sql = `SELECT r.*, p.name AS parent_name, p.slug AS parent_slug,
       d.name AS dish_name, d.kind AS dish_kind
     FROM recipes r
@@ -183,6 +200,23 @@ function list({ category = '', q = '', sort = 'category' } = {}) {
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
     ORDER BY ${SORTS[sort] || SORTS.category}`;
   return db.prepare(sql).all(...args);
+}
+
+/**
+ * Every tag in use, with how many recipes carry it.
+ *
+ * The buttons are built from this rather than from a list written in the view,
+ * so a tag that no recipe has any more cannot leave a button that filters to an
+ * empty page. Counted against the same category filter the buttons sit under,
+ * because "German (8)" next to a Preparations tab showing none of them is a
+ * number that lies.
+ */
+function tagCounts({ category = '' } = {}) {
+  const sql = `SELECT t.tag, COUNT(*) AS n
+    FROM recipe_tags t JOIN recipes r ON r.id = t.recipe_id
+    ${category ? 'WHERE r.category = ?' : ''}
+    GROUP BY t.tag ORDER BY n DESC, t.tag`;
+  return category ? db.prepare(sql).all(category) : db.prepare(sql).all();
 }
 
 /** The variations built on a base. */
@@ -475,5 +509,5 @@ function asLines(recipe) {
 
 module.exports = {
   seedRecipes, get, list, variations, scale, allergenText, canon,
-  put, remove, asLines, parseIngredientLine, byDish, dishOptions, SORTS,
+  put, remove, asLines, parseIngredientLine, byDish, dishOptions, tagCounts, SORTS,
 };

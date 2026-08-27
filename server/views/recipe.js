@@ -40,10 +40,44 @@ function ingredientLine(i) {
 
 /* --- List ----------------------------------------------------------------- */
 
-function list({ recipes, category, q }) {
+/* Buttons read as words rather than as slugs. A tag with no entry here falls
+   back to its own name capitalised, so adding one to the seed puts a working
+   button on the screen without needing a second edit here to make it legible. */
+const TAG_LABELS = {
+  classical: 'Classical',
+  sides: 'Sides',
+  charcuterie: 'Charcuterie',
+  desserts: 'Desserts',
+  soups: 'Soups',
+  japanese: 'Japanese',
+  korean: 'Korean',
+  chinese: 'Chinese',
+  mongolian: 'Mongolian',
+  mexican: 'Mexican',
+  german: 'German',
+  thai: 'Thai',
+  vegan: 'Vegan',
+  'gluten-free': 'Gluten-free',
+  modernist: 'Modernist',
+  preserving: 'Preserving',
+};
+const tagLabel = (t) => TAG_LABELS[t] || (t.charAt(0).toUpperCase() + t.slice(1));
+
+function list({ recipes, category, q, tag = '', tags = [] }) {
+  const keep = (extra) => {
+    const p = new URLSearchParams();
+    if (category) p.set('category', category);
+    if (q) p.set('q', q);
+    for (const [k, v] of Object.entries(extra)) {
+      if (v) p.set(k, v); else p.delete(k);
+    }
+    const s = p.toString();
+    return `/admin/recipes${s ? `?${s}` : ''}`;
+  };
+
   const tab = (value, label) => html`<a
     class="btn ${category === value ? 'btn--primary' : 'btn--secondary'}"
-    href="/admin/recipes${value ? `?category=${value}` : ''}">${label}</a>`;
+    href="/admin/recipes${value ? `?category=${value}` : ''}${tag ? `${value ? '&' : '?'}tag=${tag}` : ''}">${label}</a>`;
 
   return html`
     <h1>Recipes</h1>
@@ -56,8 +90,16 @@ function list({ recipes, category, q }) {
         ${tab('', 'All')}
         ${CATEGORIES.map(([v, label]) => tab(v, label))}
       </div>
+      ${tags.length ? html`<div class="dl-row" style="margin-bottom:var(--dbd-sp-3);flex-wrap:wrap">
+        <a class="btn ${tag ? 'btn--secondary' : 'btn--primary'}" href="${raw(keep({ tag: '' }))}">Everything</a>
+        ${tags.map((t) => html`<a
+          class="btn ${tag === t.tag ? 'btn--primary' : 'btn--secondary'}"
+          href="${raw(keep({ tag: t.tag }))}">${tagLabel(t.tag)} <span class="variant__label">${t.n}</span></a>`)}
+      </div>` : ''}
+
       <div class="dl-row">
         <input type="hidden" name="category" value="${category}">
+        <input type="hidden" name="tag" value="${tag}">
         <label style="flex:1 1 220px">Search
           <input type="search" name="q" value="${q}" placeholder="Name or summary">
         </label>
@@ -82,8 +124,10 @@ function list({ recipes, category, q }) {
         </tr>`)}</tbody>
       </table>`
       : html`<div class="card"><p>${q
-        ? `Nothing matches "${q}".`
-        : 'Nothing here yet.'} <a href="/admin/recipes/new">Write one</a>.</p></div>`}`;
+        ? `Nothing matches "${q}"${tag ? ` under ${tagLabel(tag)}` : ''}.`
+        : tag
+          ? `Nothing under ${tagLabel(tag)}${category ? ` in ${category}s` : ''}.`
+          : 'Nothing here yet.'} <a href="/admin/recipes/new">Write one</a>.</p></div>`}`;
 }
 
 /* --- Detail --------------------------------------------------------------- */
@@ -105,6 +149,9 @@ function detail({ recipe, scaled, factor, kids, suggestions }) {
     <p class="also"><a href="/admin/recipes">← All recipes</a></p>
     <h1>${recipe.name}</h1>
     ${recipe.summary ? html`<p class="also">${recipe.summary}</p>` : ''}
+    ${(recipe.tags || []).length ? html`<p class="also no-print">${recipe.tags.map((t) => html`<a
+      class="btn btn--secondary" style="margin-right:var(--dbd-sp-2)"
+      href="/admin/recipes?tag=${t}">${tagLabel(t)}</a>`)}</p>` : ''}
 
     <div class="card no-print">
       <div class="dl-row">

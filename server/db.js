@@ -444,6 +444,29 @@ CREATE TABLE IF NOT EXISTS recipe_steps (
   minutes   INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_recipe_steps_recipe ON recipe_steps(recipe_id, sort);
+/* What a recipe belongs to, for the buttons on the list.
+ *
+ * A table rather than a JSON column on the recipe row, which is what
+ * saved_dishes does for its allergens. The difference is what the two are for: those are
+ * read back with the row and never queried across, while this exists purely to
+ * answer "show me the German ones" -- and a LIKE against a JSON string is a
+ * filter that quietly matches the wrong thing the first time a tag is a
+ * substring of another.
+ *
+ * A recipe may carry more than one. Tom kha is Thai and it is also a soup, and
+ * being made to pick one would put it under a button nobody would look for it
+ * behind.
+ *
+ * Tags are seeded from the recipe file and are not free text: the buttons are
+ * built from what is actually in this table, so a tag nobody uses cannot leave
+ * an empty button on the screen. */
+CREATE TABLE IF NOT EXISTS recipe_tags (
+  recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+  tag       TEXT NOT NULL,
+  PRIMARY KEY (recipe_id, tag)
+);
+CREATE INDEX IF NOT EXISTS idx_recipe_tags_tag ON recipe_tags(tag);
+
 `);
 
 /* --- Settings ----------------------------------------------------------- */

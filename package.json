@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
+    "demo": "node scripts/demo.js",
     "icons": "node scripts/make-icons.js",
     "social": "node scripts/social.js",
     "card": "node scripts/card.js",

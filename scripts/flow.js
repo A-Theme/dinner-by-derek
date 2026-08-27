@@ -1912,6 +1912,51 @@ const PAST_DATE = T.addDays(today, -2);
       !/Flow Linked Recipe|wheat flour|Second Claimant/.test(menu.text));
   }
 
+  /* --- The buttons on the recipe list ------------------------------------
+     Over HTTP, because a filter is a thing you click: the query string, the
+     lit button and the rows shown all have to agree, and a unit test on the
+     model cannot see any of that. */
+  {
+    const page = await GET('/admin/recipes');
+    ok('the list carries a row of buttons', /href="\/admin\/recipes\?tag=german"/.test(page.text));
+    ok('with a readable label rather than a slug', />German /.test(page.text));
+    ok('and a count beside it', /German <span class="variant__label">8<\/span>/.test(page.text));
+    ok('plus a way back to everything', />Everything</.test(page.text));
+
+    const german = await GET('/admin/recipes?tag=german');
+    ok('the German button filters the list', german.status === 200);
+    ok('to the German recipes', /Sauerbraten/.test(german.text) && /Spaetzle/.test(german.text));
+    ok('and nothing else', !/Veloute|Mirepoix|Tom Kha/.test(german.text));
+    ok('with the button lit',
+      /btn--primary"[^>]*href="\/admin\/recipes\?tag=german"/.test(german.text));
+
+    /* A tag survives switching tab, or the buttons and the tabs fight. */
+    ok('the category tabs carry the tag with them',
+      /href="\/admin\/recipes\?category=dish&amp;tag=german"/.test(german.text));
+    const narrowed = await GET('/admin/recipes?category=dish&tag=german');
+    ok('and narrowing to Dishes keeps the German filter on',
+      narrowed.status === 200 && /Schnitzel/.test(narrowed.text) && !/Spaetzle/.test(narrowed.text));
+
+    /* Two tags, one row. */
+    const thai = await GET('/admin/recipes?tag=thai');
+    ok('a recipe with two tags appears under both',
+      /Tom Kha/.test(thai.text) && /Tom Kha/.test((await GET('/admin/recipes?tag=soups')).text));
+    ok('and is listed once, not twice',
+      (thai.text.match(/>Tom Kha</g) || []).length === 1);
+
+    /* A tag nobody has shows the whole list rather than an empty page. A
+       bookmarked URL for a tag since renamed should look like the recipes are
+       still there, because they are. */
+    const bogus = await GET('/admin/recipes?tag=klingon');
+    ok('an unknown tag falls back to everything', /Veloute/.test(bogus.text));
+    ok('with no button lit for it', !/tag=klingon/.test(bogus.text));
+
+    /* The detail page says which buttons its recipe sits under. */
+    const detail = await GET('/admin/recipes/tom-kha');
+    ok('a recipe page shows its tags', /href="\/admin\/recipes\?tag=thai"/.test(detail.text));
+    ok('including the second one', /href="\/admin\/recipes\?tag=soups"/.test(detail.text));
+  }
+
   /* --- Report -------------------------------------------------------------- */
   console.log('\nEnd-to-end flow — Dinner By Derek\n');
   if (failures.length) {
