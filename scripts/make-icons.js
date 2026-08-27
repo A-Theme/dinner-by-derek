@@ -220,20 +220,28 @@ const headerMark = async (size) => sharp(await brandmark.circle(size, MEDALLION_
   // Maskable: Android crops to a circle, so the mark stays well inside it and
   // the background runs full bleed.
   //
-  // The inset is 0.52, not the 0.8 the maskable safe zone would allow, because
+  // The inset is 0.62, not the 0.8 the maskable safe zone would allow, because
   // the safe zone is not the tightest crop this art meets. Android 12+ draws
-  // the launch icon inside a circle two thirds of the canvas — 0.667 — and a
-  // circular badge is measured radially, not by its bounding box, so an inset
-  // of 0.62 put the outer ring 3.8px inside that circle at 512. Anything that
-  // rounds or rescales — a density bucket, a launcher's own treatment — spent
-  // that margin and shaved the wordmark off the bottom of the splash. 0.52
-  // leaves about 30px instead, which is slack rather than luck.
+  // the launch icon inside a circle two thirds of the canvas — 0.667, a radius
+  // of 170px at 512 — and a circular badge is measured radially, not by its
+  // bounding box, so the inset IS the badge's diameter. 0.62 puts the outer
+  // ring 12.7px inside that circle, and the same 2.5% of the canvas at every
+  // size, which is enough for a density bucket or a launcher's own treatment
+  // to round against.
+  //
+  // It was 0.52 for a while, on a measurement of 3.8px of margin taken while
+  // inkBounds() was still cutting the square out of the file rather than
+  // extending it. That bug cost the margin twice over: the mark was 3% larger
+  // than the inset asked for, because the crop was shorter than the badge, and
+  // it sat 4px low, because the crop had been slid up off the bottom of it.
+  // Both are fixed above, and this reads its own slack now instead of paying
+  // for a shave that was happening earlier in the pipeline.
   //
   // Both sizes are emitted. With only the 512 maskable declared, a client that
   // wants a smaller one falls back to an `any` icon, whose art runs to 90% of
   // the canvas and loses 60px to the same circle.
-  await icon('icon-maskable-192.png', 192, 0.52, palette.parchment, palette.espresso);
-  await icon('icon-maskable-512.png', 512, 0.52, palette.parchment, palette.espresso);
+  await icon('icon-maskable-192.png', 192, 0.62, palette.parchment, palette.espresso);
+  await icon('icon-maskable-512.png', 512, 0.62, palette.parchment, palette.espresso);
 
   // iOS applies its own rounding and refuses transparency, so this is flat.
   await icon('apple-touch-icon.png', 180, 0.86, palette.parchment, palette.espresso);
