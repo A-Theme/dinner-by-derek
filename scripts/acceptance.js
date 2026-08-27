@@ -2185,6 +2185,79 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   db.prepare('DELETE FROM weeks WHERE id=?').run(wid);
 }
 
+/* --- The post quotes a price once ------------------------------------------
+   Every dish, every weekly item and every standing item printed the whole
+   price list under it — "Full size $50.00 · Meal for one $12.50" repeated down
+   the length of the post, between the reader and the only part that changes.
+   It is said once at the top now.
+
+   What is checked here is mostly the other half: that "once" never becomes
+   "wrongly". A dish that is not at the standard price still prints its own,
+   because the alternative is a post quoting $50 over a $45 dish. */
+{
+  const FB = require('../server/facebook');
+  const { settings } = require('../server/db');
+  settings.set('delivery_enabled', 1);
+  settings.set('delivery_fee', 1000);
+
+  const wid = db.prepare("INSERT INTO weeks (slug,title,week_start,status) VALUES (?,?,?,'published')")
+    .run('week-one-price', 'One price week', '2026-09-14').lastInsertRowid;
+  const week = () => db.prepare('SELECT * FROM weeks WHERE id=?').get(wid);
+  const day = db.prepare(`INSERT INTO service_days
+    (week_id, service_date, dish_name, description, ack, ack_of,
+     full_on, full_label, full_price, single_on, single_label, single_price)
+    VALUES (?,?,?,'',1,?,1,'Full size',?,1,'Meal for one',1250)`);
+  const reviewed = (name) => A.reviewedText({ name, description: '' });
+
+  // Two dishes at the standard price and one below it, which is the live shape:
+  // a week is mostly one price with an exception or two in it.
+  day.run(wid, '2026-09-14', 'Standard Monday', reviewed('Standard Monday'), 5000);
+  day.run(wid, '2026-09-15', 'Standard Tuesday', reviewed('Standard Tuesday'), 5000);
+  day.run(wid, '2026-09-16', 'Cheaper Wednesday', reviewed('Cheaper Wednesday'), 4500);
+
+  const text = FB.buildPostText(week());
+  const count = (hay, needle) => hay.split(needle).length - 1;
+
+  ok('the post has a price block', /\nPRICES\n/.test(text));
+  ok('which quotes the standard', /Full size \$50\.00 · Meal for one \$12\.50/.test(text));
+  check('once, and only once', count(text, 'Full size $50.00'), 1);
+  check('and the delivery fee once', count(text, '$10.00'), 1);
+
+  /* The dish at the standard price says nothing about money at all — that is
+     the point — and the one below it says only the part that differs. Its
+     meal-for-one is the standard, so that half stays quiet too. */
+  const section = (name) => text.split(`\n${name}\n`)[1].split('\n\n')[0];
+  ok('a dish at the standard price carries no price', !/\$/.test(section('Standard Monday')));
+  ok('a dish priced differently carries its own', /Full size \$45\.00/.test(section('Cheaper Wednesday')));
+  ok('but not the half of it that matches', !/Meal for one/.test(section('Cheaper Wednesday')));
+  ok('and the reader is told exceptions exist', /priced differently/.test(text));
+
+  /* With the exception gone the caveat goes too. A note explaining that some
+     prices differ, in a week where none do, is the kind of boilerplate that
+     teaches people to stop reading the top of the post. */
+  db.prepare('UPDATE service_days SET full_price = 5000 WHERE week_id = ?').run(wid);
+  db.prepare('UPDATE standing_items SET active = 0').run();
+  const uniform = FB.buildPostText(week());
+  ok('a week that is all one price says so once',
+    /Full size \$50\.00 · Meal for one \$12\.50/.test(uniform));
+  check('and nowhere else', count(uniform, 'Full size'), 1);
+  ok('with no caveat about exceptions', !/priced differently/.test(uniform));
+
+  /* A different label is not covered by the standard even at the same number:
+     "1 L $50.00" is not the "Full size $50.00" quoted at the top. */
+  const litre = db.prepare(`INSERT INTO standing_items
+    (name, subcategory, description, availability, sort, full_on, full_label, full_price, ack, ack_of, active)
+    VALUES ('Test Soup','Soups','','every_service_day',98,1,'1 L',5000,1,?,1)`)
+    .run(reviewed('Test Soup')).lastInsertRowid;
+  ok('a different label prints its price even at the standard number',
+    /Test Soup — 1 L \$50\.00/.test(FB.buildPostText(week())));
+
+  db.prepare('DELETE FROM standing_items WHERE id=?').run(litre);
+  db.prepare('UPDATE standing_items SET active = 1').run();
+  db.prepare('DELETE FROM service_days WHERE week_id=?').run(wid);
+  db.prepare('DELETE FROM weeks WHERE id=?').run(wid);
+}
+
 /* --- The handoff page is generated, not written twice ----------------------
    It existed as markdown in the repo and as hand-written HTML in a published
    artifact, and the two had already disagreed — the HTML carried a table of

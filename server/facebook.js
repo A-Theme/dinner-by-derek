@@ -208,6 +208,71 @@ async function completeAuth(code) {
 const money = (c) => `$${(Number(c || 0) / 100).toFixed(2)}`;
 
 /**
+ * The variants of a raw item row. Routed through the menu's own render shape so
+ * the label defaults — an item with a blank full_label showing the setting's
+ * "Full size" — are resolved in one place rather than two that can disagree.
+ */
+const variantsOf = (row, refTable) => M.toRenderItem(row, {
+  level: 'price', refTable, subcategory: '', name: row.name || '',
+}).variants;
+
+/**
+ * THE STANDARD PRICE, said once at the top instead of on every line.
+ *
+ * The post used to repeat the full price list under every dish, every weekly
+ * item and every standing item — "Full size $50.00 · Meal for one $12.50",
+ * eighteen times in a week — which is the same sentence over and over between
+ * the reader and the only thing that changes, which is the food.
+ *
+ * So the most common (label, price) pair for each variant becomes the standard,
+ * printed once, and an item only carries a price where it does not match. This
+ * is NOT an assertion that everything costs the same. It is not true today: the
+ * published week runs three dishes at $50, one at $45 and one at $40, and the
+ * standing catalogue prices a 1 L soup and a pack of four differently again.
+ * All of those still print their own price. What is dropped is only the
+ * repetition of a number the reader has already been given.
+ *
+ * The standard is taken from the featured dishes when there are any, because
+ * those are what "the price" means to someone reading a weekly menu. Letting
+ * the standing catalogue vote would let a shelf of $16 sides outnumber the
+ * dishes and make every dish an exception to a price nobody quoted.
+ */
+function priceStandard(featured, fallback) {
+  const tally = new Map();
+  for (const v of (featured.length ? featured : fallback).flat()) {
+    // Keyed as JSON so a label carrying punctuation cannot collide with
+    // another label plus a price.
+    const key = JSON.stringify([v.id, v.label, v.price]);
+    const seen = tally.get(key) || { ...v, n: 0 };
+    seen.n += 1;
+    tally.set(key, seen);
+  }
+  const best = new Map();
+  for (const e of tally.values()) {
+    const held = best.get(e.id);
+    // Ties break towards the cheaper price, so the number said once at the top
+    // is never one an item quietly undercuts.
+    if (!held || e.n > held.n || (e.n === held.n && e.price < held.price)) best.set(e.id, e);
+  }
+  /** Is this variant the one already quoted at the top? Label as well as price:
+      a "1 L" at $14 is not the "Full size" the top is talking about. */
+  const covers = (v) => {
+    const e = best.get(v.id);
+    return !!e && e.label === v.label && e.price === v.price;
+  };
+
+  return {
+    covers,
+    /** An item's price list, reduced to what the top has not already said. */
+    line: (variants) => variants.filter((v) => !covers(v))
+      .map((v) => `${v.label} ${money(v.price)}`).join(' · '),
+    /** The standard itself, full size first, for the block at the top. */
+    quoted: () => ['full', 'single'].filter((id) => best.has(id))
+      .map((id) => `${best.get(id).label} ${money(best.get(id).price)}`),
+  };
+}
+
+/**
  * Builds the post body. Same text for both adapters, so the manual copy the
  * owner pastes into a Group is byte-identical to what the Page would receive.
  */
@@ -232,9 +297,42 @@ function buildPostText(week) {
 
   if (week.description) L.push('', week.description);
 
+  /* Everything the post will list, gathered before any of it is written, because
+     the price block at the top is derived from it. The day menus are built once
+     here and re-read in the loop below rather than built twice. */
+  const dayMenus = days.map((d) => ({ d, menu: M.menuForDay(week, d) }));
+  const featured = dayMenus.filter((x) => !x.menu.closed && x.menu.featured).map((x) => x.menu.featured);
+  const weeklyRows = [[soup, 'Soup'], [salad, 'Salad'], [dessert, 'Dessert']]
+    .filter(([item]) => item && item.name.trim());
+  const { reviewState } = require('./allergens');
+  const standing = M.standingItems().filter((s) => reviewState(s).ok);
+
+  const price = priceStandard(
+    featured.map((f) => f.variants),
+    [...weeklyRows.map(([item]) => variantsOf(item, 'week_items')),
+      ...standing.map((s) => variantsOf(s, 'standing_items'))],
+  );
+  const quoted = price.quoted();
+  // The caveat is earned, not boilerplate: it appears only in a week that
+  // actually prices something differently, so a week where the standard holds
+  // throughout says the price once and nothing else.
+  const exceptions = [...featured.map((f) => f.variants),
+    ...weeklyRows.map(([item]) => variantsOf(item, 'week_items')),
+    ...standing.map((s) => variantsOf(s, 'standing_items'))]
+    .some((vs) => vs.some((v) => !price.covers(v)));
+  if (quoted.length || settings.getInt('delivery_enabled', 1)) {
+    L.push('', 'PRICES');
+    if (quoted.length) L.push(quoted.join(' · '));
+    // The delivery fee is quoted here and nowhere else. The DELIVERY section
+    // below keeps the window and the area, which is what is wanted down there.
+    if (settings.getInt('delivery_enabled', 1)) {
+      L.push(`Delivery ${money(settings.getInt('delivery_fee'))}`);
+    }
+    if (exceptions) L.push('Anything priced differently says so where it is listed.');
+  }
+
   // Day-by-day featured section
-  for (const d of days) {
-    const menu = M.menuForDay(week, d);
+  for (const { d, menu } of dayMenus) {
     // Closed days are named rather than skipped: a gap in the list reads as
     // an oversight, and the whole point of closing a day is to say so.
     if (menu.closed) {
@@ -249,22 +347,24 @@ function buildPostText(week) {
     if (f.description) L.push(f.description);
     if (f.halal) L.push('Prepared halal as declared by the kitchen');
     if (f.allergens.length) L.push(`Contains: ${f.allergens.join(', ')}`);
-    L.push(f.variants.map((v) => `${v.label} ${money(v.price)}`).join(' · '));
+    const dayPrice = price.line(f.variants);
+    if (dayPrice) L.push(dayPrice);
     L.push(`Order by ${T.fmtLocal(menu.cutoff, tz, { weekday: 'long' })}`);
   }
 
   // Week-level soup and salad
   const weekly = [];
-  for (const [item, label] of [[soup, 'Soup'], [salad, 'Salad'], [dessert, 'Dessert']]) {
-    if (!item || !item.name.trim()) continue;
+  for (const [item, label] of weeklyRows) {
     const wd = JSON.parse(item.weekdays || '[]').map((w) => T.WEEKDAY_LABELS[w]).join(', ');
-    const prices = [];
-    if (item.full_on && item.full_price != null) prices.push(`${item.full_label} ${money(item.full_price)}`);
-    if (item.single_on && item.single_price != null) prices.push(`${item.single_label} ${money(item.single_price)}`);
     const tags = JSON.parse(item.allergens || '[]');
-    weekly.push(`${label}: ${item.name} — ${wd || 'this week'} — ${prices.join(' · ')}`
-      + (item.halal ? ' — halal as declared by the kitchen' : '')
-      + (tags.length ? ` — contains ${tags.join(', ')}` : ''));
+    // Built as parts and joined, so an item at the standard price loses its
+    // price rather than leaving a dangling dash where one used to be.
+    const parts = [`${label}: ${item.name}`, wd || 'this week'];
+    const prices = price.line(variantsOf(item, 'week_items'));
+    if (prices) parts.push(prices);
+    if (item.halal) parts.push('halal as declared by the kitchen');
+    if (tags.length) parts.push(`contains ${tags.join(', ')}`);
+    weekly.push(parts.join(' — '));
   }
   if (weekly.length) {
     L.push('', 'SOUP, SALAD & DESSERT THIS WEEK');
@@ -272,20 +372,16 @@ function buildPostText(week) {
   }
 
   // Standing catalogue
-  const standing = M.standingItems().filter((s) => {
-    const { reviewState } = require('./allergens');
-    return reviewState(s).ok;
-  });
   if (standing.length) {
     L.push('', 'ALWAYS AVAILABLE');
     for (const s of standing) {
-      const prices = [];
-      if (s.full_on && s.full_price != null) prices.push(`${s.full_label} ${money(s.full_price)}`);
-      if (s.single_on && s.single_price != null) prices.push(`${s.single_label} ${money(s.single_price)}`);
       const tags = JSON.parse(s.allergens || '[]');
-      L.push(`${s.name} — ${prices.join(' · ')}`
-        + (s.halal ? ' — halal as declared by the kitchen' : '')
-        + (tags.length ? ` — contains ${tags.join(', ')}` : ''));
+      const parts = [s.name];
+      const prices = price.line(variantsOf(s, 'standing_items'));
+      if (prices) parts.push(prices);
+      if (s.halal) parts.push('halal as declared by the kitchen');
+      if (tags.length) parts.push(`contains ${tags.join(', ')}`);
+      L.push(parts.join(' — '));
     }
   }
 
@@ -294,7 +390,7 @@ function buildPostText(week) {
   L.push('', `PICKUP ${win}`);
   for (const l of M.activeLocations()) L.push(`${l.name} — ${l.address}`);
   if (settings.getInt('delivery_enabled', 1)) {
-    L.push('', `DELIVERY ${settings.get('delivery_window')} — ${money(settings.getInt('delivery_fee'))}`);
+    L.push('', `DELIVERY ${settings.get('delivery_window')}`);
     /* Named in plain English rather than as the FSA list. Fifteen postal
      * prefixes is a wall of text in a Facebook post and answers a question
      * nobody reading a menu is asking; the order form still checks the real
