@@ -58,10 +58,20 @@ optional; the optional things live in Part 2.
 
 ### 1. Get the server up
 
-Follow [docs/DEPLOY.md](DEPLOY.md) end to end. **OVHcloud VPS-1** — 2 vCores,
-4 GB RAM, 40 GB NVMe, around **CAD $6.20/month** — in **Beauharnois, Quebec**,
-running **Ubuntu 24.04 LTS with no control panel**. Roughly an hour, most of it
-waiting on DNS.
+Follow [docs/DEPLOY.md](DEPLOY.md) end to end. **OVHcloud VPS-1** (2027
+range) — 2 vCores, 4 GB RAM, 40 GB NVMe, **CAD $6.20/month** — in
+**Beauharnois, Quebec**, running **Ubuntu 24.04 LTS with no control panel**.
+Roughly an hour, most of it waiting on DNS.
+
+**[Order it here](https://www.ovhcloud.com/en-ca/vps/configurator/?planCode=vps-2027-model1&pricing=upfront12)**
+— the configurator, opened on VPS-1 with the twelve-month term already
+selected.
+
+Two things on that page will not be what you expect. Beauharnois sits under
+the **North America** tab and is the only entry there — Toronto is not sold
+for VPS. And the image list **opens on Ubuntu 26.04**: open the version
+selector and pick **24.04 LTS**, which is what every command in DEPLOY.md was
+written against. Take none of the paid options; daily backup is included.
 
 Quebec rather than the cheapest box anywhere, and not for speed: a US
 datacentre costs perhaps fifteen milliseconds, which nobody notices. It is that
@@ -69,8 +79,11 @@ every order holds a customer's name, phone, email and sometimes their home
 address, and keeping those in Canada means that question never has to be
 answered. Billing in CAD also drops the currency spread.
 
-Check two lines on the order page before paying: whether that price assumes a
-longer commitment than month-to-month, and what it renews at.
+Both questions this step used to leave open are now answered, from the
+configurator on 2026-08-29. The $6.20 is the **twelve-month price, paid
+upfront** — $74.40 for the year ex. taxes, about $84 with HST; month-to-month
+is $7.30. And it **renews at the same rate**, so there is no second-year step
+to meet on a statement.
 
 Stop at the end of step 11 and come back here. Do not publish anything yet.
 
@@ -285,11 +298,12 @@ becomes required.
 
 ### Backups on a schedule
 
-Turn on your provider's automatic snapshots — OVH sells them as an add-on,
-Hostinger includes them weekly on most plans. They cover the whole machine after
-you break something. That is a different job from the JSON export, which
-covers the menu after you delete the wrong week. Have both. Run the `rsync`
-before every deploy.
+**On OVH this is already done** — daily automatic backup of the previous 24
+hours comes with the VPS, and there is nothing to switch on. (Hetzner sells
+snapshots as an add-on; Hostinger includes weekly ones on most plans.) They
+cover the whole machine after you break something. That is a different job
+from the JSON export, which covers the menu after you delete the wrong week.
+Have both. Run the `rsync` before every deploy.
 
 ### The orange cloud, if you want it
 

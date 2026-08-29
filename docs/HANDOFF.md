@@ -67,9 +67,10 @@ else can mean it.
 1. **Hosting.** Nothing that can run a Node process exists yet, and everything
    below waits on it. The guide recommends OVHcloud VPS-1 in Beauharnois, Quebec —
    chosen so customer names, phones and delivery addresses stay in Canada, not for
-   latency. Hostinger is the documented runner-up. Two OVH figures are flagged
-   unverified in `DEPLOY.md`: whether the headline price assumes a longer
-   commitment, and the renewal rate.
+   latency. Hostinger is the documented runner-up. Both figures `DEPLOY.md` used to
+   flag unverified were read off the configurator on 2026-08-29: the CAD $6.20 is
+   the twelve-month price paid upfront (≈$74.40/year ex. taxes, against $7.30
+   month-to-month), and it renews at the same rate rather than stepping up.
 2. **`BASE_URL` on the real domain.** More hangs off this than it looks: secure
    cookies, every link in every email, the QR codes on the card and stickers, and
    Facebook's ability to fetch a post image at all. Set it, then **regenerate the
@@ -304,7 +305,6 @@ see into a constraint error rather than a skip.
 - **The IMAP poller.** `P.record()` in `server/payments.js` is the whole entry
   point. Now that the grid format is understood, this is plumbing rather than
   guesswork. Point it at a mailbox that receives only the bank's notifications.
-- **Two OVH figures** unverified — commitment length and renewal rate.
 - **The installed PWA is an untested surface.** Every camera test ran in a
   browser tab; an installed home-screen app has its own Android permission
   grants.

@@ -216,7 +216,7 @@ Whatever you pick, it must have:
 | **2 GB RAM minimum** | 4 GB is comfortable | The app resizes phone photos with `sharp`, holding the whole image in memory. [server/index.js](../server/index.js) caps an upload at 26 MB, and the comment there measures concurrent uploads moving the process 232 MB. A 512 MB box is the cheapest plan on most hosts and the kernel will kill it the first time Derek uploads three photos in a row. |
 | **20 GB disk minimum** | 40 GB is plenty | Photos accumulate. Nothing else here is large. |
 | **Ubuntu 24.04** | no control panel | LTS, supported to 2029. Every command below assumes it. |
-| **A Canadian location**, or failing that North American | Beauharnois or Toronto on OVH; Boston on Hostinger; Ashburn on Hetzner | Orders hold customers' names, phones and home addresses, and keeping those in Canada avoids the cross-border question entirely. European datacentres are cheaper and add roughly 100ms to every page load. |
+| **A Canadian location**, or failing that North American | Beauharnois on OVH, the only North American one it offers for VPS; Boston on Hostinger; Ashburn on Hetzner | Orders hold customers' names, phones and home addresses, and keeping those in Canada avoids the cross-border question entirely. European datacentres are cheaper and add roughly 100ms to every page load. |
 | **Root access over SSH** | | Any real VPS has this. Shared hosting does not, which is why shared hosting cannot run this app. |
 
 > **Do not pick an OS template that bundles a control panel** — hPanel,
@@ -226,16 +226,31 @@ Whatever you pick, it must have:
 
 ### On OVHcloud — the recommendation
 
-**VPS → VPS-1** — 2 vCores, 4 GB RAM, 40 GB NVMe. Around **CAD $6.20/month**,
-billed in Canadian dollars.
+**VPS → VPS-1**, in the 2027 range — 2 vCores, 4 GB RAM, 40 GB NVMe,
+500 Mbps unlimited traffic. **CAD $6.20/month**, billed in Canadian dollars.
+This link opens the configurator on it with the twelve-month term already
+selected:
 
-Choose **Beauharnois, Quebec** as the location. OVH has a Toronto datacentre
-too; if the region list offers it for VPS, take Toronto, it is closer again.
+<https://www.ovhcloud.com/en-ca/vps/configurator/?planCode=vps-2027-model1&pricing=upfront12>
+
+Choose **Beauharnois, Quebec** (`BHS`) as the location — under the **North
+America** tab, where it is the only entry. OVH has a Toronto datacentre, but
+not for VPS, so there is no closer option to hold out for.
 
 For the operating system pick **Ubuntu 24.04 LTS**, plain, with no panel and
 no preinstalled stack. Anything bundling a control panel brings its own web
 server, and it will fight nginx for port 80 in
 [step 9](#9-nginx-and-the-certificate).
+
+> **The version dropdown does not default to 24.04.** It opens on Ubuntu
+> 26.04, which is newer and fine in itself — but every command below was
+> written and run against 24.04 LTS, supported to 2029. Open the selector and
+> pick it, rather than taking what is already showing.
+
+Leave the options alone. **Daily automatic backup is included free** with the
+VPS and needs nothing selected; Snapshot ($0.50/month) and Premium automatic
+backup ($1.80/month) are both extras you do not need — see
+[Backups](#backups) for what is already covered.
 
 Paste your **public** SSH key (`id_ed25519.pub` — never the private one) when
 it offers.
@@ -249,10 +264,16 @@ has to be answered about it, and "where do you keep my address" is a thing a
 customer might genuinely ask. Being billed in CAD also removes the currency
 spread that quietly sits on top of a USD price.
 
-Two things to check on the order page before paying, because neither could be
-confirmed from outside: whether **CAD $6.20 assumes a longer commitment** than
-month-to-month, and what the **renewal** price is. Read both lines rather than
-the headline.
+**What the $6.20 assumes**, read off the configurator on 2026-08-29. It is
+the twelve-month price, paid **upfront: $74.40 for the year, ex. taxes** —
+about $84 once Ontario HST is on it. Month-to-month is **$7.30/month ex.
+taxes**, and six months is 5% off, which is not worth the middle ground.
+
+**There is no renewal cliff.** It renews for a further twelve months at the
+same discounted rate, so the second year costs what the first did — unlike
+[Hostinger](#on-hostinger) below, where the second term is roughly double the
+first. Nothing to diarise except the renewal date itself, if you ever want to
+stop.
 
 ### On Hostinger
 
@@ -723,9 +744,11 @@ rsync -av derek@SERVER_IP:/var/lib/dinnerbyderek/ ~/dinnerbyderek-backup/
 ```
 
 Worth running before every deploy, and worth a calendar reminder monthly
-otherwise. Both providers also sell whole-machine snapshots — Hetzner as a
-paid add-on at 20% of the server price, Hostinger with weekly snapshots
-included on most VPS plans. Turn that on. It is a coarser and different thing
+otherwise. Whole-machine snapshots are separate again, and on **OVH there is
+nothing to turn on: daily automatic backup of the previous 24 hours is
+included** with the VPS. Hetzner sells them as a paid add-on at 20% of the
+server price and Hostinger includes weekly ones on most VPS plans — on either
+of those, turn it on. It is a coarser and different thing
 from the JSON export: the snapshot restores the whole server after you break
 it, the JSON restores the menu after Derek deletes the wrong week. Have both.
 
