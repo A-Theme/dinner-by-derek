@@ -60,6 +60,7 @@ const TAG_LABELS = {
   'gluten-free': 'Gluten-free',
   modernist: 'Modernist',
   preserving: 'Preserving',
+  'rubs-and-marinades': 'Rubs and marinades',
 };
 const tagLabel = (t) => TAG_LABELS[t] || (t.charAt(0).toUpperCase() + t.slice(1));
 

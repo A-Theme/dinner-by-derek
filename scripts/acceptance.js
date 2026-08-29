@@ -2607,12 +2607,18 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('the tags in the database match the ones in the seed',
     counts.length === [...new Set(seed.flatMap((r) => r.tags || []))].length);
 
-  /* The example the whole feature was asked for. */
+  /* The example the whole feature was asked for. Written out by hand rather
+     than derived from the seed, so that a recipe losing its tag in a later
+     batch fails here instead of quietly agreeing with itself. */
+  const GERMAN = [
+    'apfelstrudel', 'bratkartoffeln', 'currywurst-sauce', 'erbsensuppe',
+    'frikadellen', 'german-potato-salad', 'jaegersauce', 'kaesespaetzle',
+    'kaiserschmarrn', 'kartoffelkloesse', 'koenigsberger-klopse', 'laugenbrezel',
+    'linsensuppe', 'maultaschen', 'rouladen', 'sauerbraten', 'sauerkraut-braised',
+    'schnitzel', 'semmelknoedel', 'spaetzle',
+  ];
   const german = R.list({ tag: 'german' }).map((r) => r.slug).sort();
-  check('the German button holds exactly the German recipes', german, [
-    'bratkartoffeln', 'german-potato-salad', 'jaegersauce', 'kartoffelkloesse',
-    'sauerbraten', 'sauerkraut-braised', 'schnitzel', 'spaetzle',
-  ]);
+  check('the German button holds exactly the German recipes', german, GERMAN);
 
   /* A recipe may sit under more than one button, and has to appear under both.
      Tom kha is Thai and it is also a soup; made to pick one, it would end up
@@ -2645,7 +2651,8 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   R.remove(doomed.id);
   check('and is gone once the recipe is',
     tdb.prepare('SELECT COUNT(*) n FROM recipe_tags WHERE recipe_id = ?').get(doomed.id).n, 0);
-  check('leaving the German button where it was', R.list({ tag: 'german' }).length, 8);
+  check('leaving the German button where it was',
+    R.list({ tag: 'german' }).length, GERMAN.length);
 }
 
 /* --- Report ---------------------------------------------------------------- */
