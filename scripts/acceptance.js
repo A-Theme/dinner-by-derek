@@ -1539,6 +1539,46 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('which is not tonight either', !r.tonight);
 }
 
+/* --- The poster covers the same dates the site does -------------------------
+   Moving "Week starts" never touches a day already filled in, so a week ends
+   up holding rows outside the dates it covers. menu.js drops those from the
+   customer week view; the poster used to draw them, advertising dishes for
+   dates from the week before — already past by the time anyone read the post.
+
+   The two must agree, so this checks the poster against serviceDaysOf itself
+   rather than against a hand-written list. */
+{
+  const { loadWeek } = require('../scripts/social');
+  const M = require('../server/menu');
+
+  const weekId = db.prepare(`INSERT INTO weeks (slug, title, status, week_start)
+    VALUES ('poster-drift','Poster drift','published','2026-08-24')`).run().lastInsertRowid;
+  const addDay = db.prepare(`INSERT INTO service_days
+    (week_id, service_date, dish_name, full_on, full_price) VALUES (?,?,?,1,5000)`);
+  addDay.run(weekId, '2026-08-18', 'Straggler From Last Week');  // before week_start
+  addDay.run(weekId, '2026-08-24', 'Monday Dish');               // first day of the week
+  addDay.run(weekId, '2026-08-27', 'Thursday Dish');
+  addDay.run(weekId, '2026-08-31', 'Next Monday');               // one past the end
+
+  const posterDates = loadWeek().days.map((d) => d.service_date);
+  check('the poster draws only the dates the week covers',
+    posterDates, ['2026-08-24', '2026-08-27']);
+  check('which is exactly what the customer week view shows',
+    posterDates, M.serviceDaysOf(weekId).map((d) => d.service_date));
+  ok('so a day from the week before is not advertised',
+    !posterDates.includes('2026-08-18'));
+  ok('and nor is one from the week after', !posterDates.includes('2026-08-31'));
+
+  // A week predating the column is not filtered — the same escape serviceDaysOf
+  // makes, so old weeks keep drawing rather than drawing nothing.
+  db.prepare('UPDATE weeks SET week_start = NULL WHERE id = ?').run(weekId);
+  check('a week with no start date is left alone rather than emptied',
+    loadWeek().days.length, 4);
+
+  db.prepare('DELETE FROM service_days WHERE week_id = ?').run(weekId);
+  db.prepare('DELETE FROM weeks WHERE id = ?').run(weekId);
+}
+
 /* --- The shell cache carries its own version --------------------------------
    The rule used to be "bump CACHE_VERSION when you change a shell file", kept
    by memory alone — and a missed bump is silent: returning visitors keep the

@@ -116,6 +116,28 @@ function loadWeek() {
     const hasClosed = db.prepare('PRAGMA table_info(service_days)').all()
       .some((c) => c.name === 'closed');
 
+    /* Days adrift of the week they hang off are not on the poster.
+     *
+     * Moving "Week starts" re-labels the boxes and deliberately never touches a
+     * day already filled in, so rows routinely stay attached to a week by
+     * week_id while sitting outside the dates that week covers. menu.js filters
+     * those out of the customer week view; this did not, and a poster drawn
+     * from a week carrying stragglers advertised dishes for three dates from
+     * the week before — dates already in the past by the time anyone read it.
+     *
+     * The same range menu.js uses, so the poster and the site cannot disagree
+     * about which dates a week covers.
+     *
+     * A week with no week_start is not filtered, matching serviceDaysOf: those
+     * predate the column. No PRAGMA is needed to tell that from a file too old
+     * to have the column at all — `SELECT *` above simply yields no such key,
+     * and both cases arrive here as a falsy week_start.
+     */
+    const inWeek = week.week_start
+      ? " AND service_date >= ? AND service_date < date(?, '+7 days')"
+      : '';
+    const bounds = week.week_start ? [week.week_start, week.week_start] : [];
+
     // A closed day is ON the poster, not missing from it. Leaving it out
     // produces a week with a hole in the middle, which reads as an oversight —
     // and the whole reason for closing a day rather than leaving it blank is
@@ -124,8 +146,8 @@ function loadWeek() {
       SELECT service_date, dish_name, full_price
              ${hasClosed ? ', closed, closed_note' : ', 0 AS closed, \'\' AS closed_note'}
       FROM service_days
-      WHERE week_id = ? AND (TRIM(dish_name) != ''${hasClosed ? ' OR closed = 1' : ''})
-      ORDER BY service_date`).all(week.id);
+      WHERE week_id = ? AND (TRIM(dish_name) != ''${hasClosed ? ' OR closed = 1' : ''})${inWeek}
+      ORDER BY service_date`).all(week.id, ...bounds);
     if (!days.length) return null;
     if (days.every((d) => d.closed)) return null;   // nothing to advertise
 
@@ -469,4 +491,7 @@ if (require.main === module) {
   });
 }
 
-module.exports = { generate, OUT, lastCallDay };
+// loadWeek is exported for the checks: what the poster believes a week covers
+// is exactly the thing that drifted from what the site believes, so it is
+// worth being able to ask it directly.
+module.exports = { generate, OUT, lastCallDay, loadWeek };
