@@ -88,6 +88,44 @@ else can mean it.
 
 ---
 
+## What changed on 29 August
+
+### Monday got a meatless main — `65a3d83`
+
+The one thing the model had no room for. A service day holds exactly one
+featured dish, deliberately, so Monday could not offer the vegetarian plate
+that 110 of the 130 posts read back from the Facebook page carry.
+
+It went in at level 2, as a fourth `week_items` kind alongside soup, salad and
+dessert: one per week, `UNIQUE(week_id, kind)` refusing a second, defaulting to
+Monday via the `weekdays` column that level already had. Stored as a weekly
+item, billed as a main — the day page draws it beside the featured dish under
+its own eyebrow, not under Other Options.
+
+Two decisions worth knowing, because both were close calls and both are now
+load-bearing:
+
+- **It holds its own daily ceiling**, rather than sharing Monday's. Twenty-five
+  of each, not twenty-five between them. Selling out of the featured dish
+  leaves the meatless one orderable.
+- **It is picked from the saved Mains** and files itself back there. There is
+  no meatless catalogue, so the same dish cannot end up filed twice with two
+  prices.
+
+Blank name means it is not running that week — nothing shows, nothing blocks
+publishing. That is how *"Meatless Monday will return in September"* is said.
+
+The `CHECK` constraint was widened by rebuilding the table, the same way the
+dessert kind was added, guarded on the stored DDL so it runs once. **Verified
+against a `VACUUM INTO` copy of the live database** — the constraint widened
+and no rows were lost — but it has not yet run against the live file itself.
+
+Checks are at 1161 (757 acceptance, 404 flow), up from 1109. The frontmatter
+figures at the top of this file were read on 26 August and were not re-read
+for this entry.
+
+---
+
 ## What changed on 26 August
 
 Three commits, two of them from another session.
