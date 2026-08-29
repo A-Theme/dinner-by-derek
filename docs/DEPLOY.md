@@ -999,13 +999,72 @@ Nothing above turns email on, and the app is fully functional without it —
 orders are saved and appear in the dashboard either way. See **Turning email
 on later** in [the README](../README.md) for the whole picture.
 
-The short version: sending needs a real SMTP provider (Resend, Postmark and
-Fastmail all have small or free tiers). Fill in the `SMTP_*` block in `.env`
-and restart. Put `SMTP_FROM` on the domain — `orders@dinnerbyderek.ca` — not
-on a personal Gmail, or the mail lands in spam.
+Receiving and sending are two separate things with two separate answers, and
+only the first one is free. Do them in that order.
 
-Receiving is separate, and free: Cloudflare → **Email** → **Email Routing**
-forwards `derek@dinnerbyderek.ca` to whatever inbox is already being read.
+### Receiving — free, and it is Cloudflare
+
+Not OVH. The VPS comes with no mailboxes, and OVH's free MX Plan comes with a
+domain **registered at OVH** — `dinnerbyderek.ca` is at Cloudflare, which is
+also where its DNS is answered from. Pointing the domain's mail at OVH would
+mean moving the records away from the only place they currently live, for a
+mailbox that is not better than the free one already sitting in the account.
+
+The third free option is running a mail server on the VPS itself, and it is
+the one that costs the most. Providers distrust mail from a lone VPS address
+by default, outbound port 25 is commonly blocked, and the failure mode is not
+an error — it is mail that leaves and never arrives.
+
+In Cloudflare, for `dinnerbyderek.ca` → **Email** → **Email Routing**:
+
+1. **Add a destination address** — the inbox already being read. Cloudflare
+   sends it a verification link, and nothing forwards until that is clicked.
+2. **Create the address**, e.g. `payments@dinnerbyderek.ca`, pointed at it.
+3. **Accept the DNS records it offers.** Cloudflare writes three `MX` records
+   and one SPF `TXT` itself. Take the button; the MX hostnames are assigned per
+   zone, so a set copied from a blog post or another domain is the wrong set.
+
+**What this is not is a mailbox.** It forwards and nothing else: there is no
+webmail, no IMAP, and no sending. A reply typed in the inbox it forwards to
+goes out from *that* address, not from the one on the domain.
+
+### Sending — separate, and Cloudflare does not do it
+
+Sending needs an SMTP provider (Resend, Postmark and Brevo all have free
+tiers; Fastmail and Migadu are the cheap paid ones, and those also give a real
+mailbox with IMAP). Fill in the `SMTP_*` block in `.env` and restart. Put
+`SMTP_FROM` on the domain — `orders@dinnerbyderek.ca` — not on a personal
+Gmail or Hotmail, or the mail lands in spam.
+
+**The trap is SPF.** A domain may have exactly one SPF record. Cloudflare
+already wrote one for Email Routing, and the sending provider will tell you to
+add another; two of them is not stricter than one, it is invalid, and the
+result is mail that silently goes to spam. Merge the includes into a single
+`TXT` on `@` instead:
+
+```
+v=spf1 include:_spf.mx.cloudflare.net include:<the provider's> ~all
+```
+
+The provider's DKIM records are separate and can simply be added as given.
+
+### Then prove it works
+
+```bash
+npm run mailtest
+```
+
+Sends one real message to `notify_email` from Settings — the exact address the
+owner alerts use — and says which half failed if one did, since a connection
+problem and a rejected From address need different fixes. Pass an address to
+send somewhere else instead:
+
+```bash
+npm run mailtest -- someone@example.com
+```
+
+Then go and look at the inbox. Accepted for delivery is not the same as
+arrived, and the folder it lands in is the whole question.
 
 ---
 

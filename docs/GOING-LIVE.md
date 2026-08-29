@@ -279,7 +279,17 @@ would have doubled everything already in flight.
 hosting like everything else:
 
 - A mailbox that receives **only** these notifications, so the parser never
-  reads anything else. A dedicated address, or a filter that forwards to one.
+  reads anything else. `payments@dinnerbyderek.ca` is the address for it, and
+  the free way to have one is Cloudflare Email Routing — see
+  [DEPLOY → Optional: email](DEPLOY.md#optional-email). Two things follow from
+  it being *forwarding* rather than a mailbox. It has no IMAP of its own, so
+  the poller would read whichever inbox it forwards into, which puts the filter
+  back in the picture; and everything arriving that way is a forwarded copy,
+  which is already handled — the original identity is the one kept, so a
+  transfer is one payment however many times it was forwarded.
+- Getting the notifications there at all is a change at the bank, not here:
+  they go to the address RBC has on file, so that is the one that has to become
+  `payments@dinnerbyderek.ca`.
 - An IMAP client dependency, and `IMAP_*` credentials alongside `SMTP_*`.
 - A poller that decodes MIME to the headers and text part the parser expects,
   hands each message to `P.record()` in `server/payments.js`, and runs on a

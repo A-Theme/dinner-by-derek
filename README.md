@@ -140,6 +140,15 @@ When there is a domain and a mailbox, four things switch on together:
 Turning SMTP on **without** `BASE_URL` is the one combination worth avoiding:
 the mail arrives, looks right, and every button in it is broken.
 
+Once those are set, `npm run mailtest` sends one real message to `notify_email`
+and reports what happened — worth doing before an order depends on it, because
+a send that fails during a real order is silent by design: `server/mailer.js`
+swallows the error rather than lose an order that is already stored.
+
+Receiving is a different job from sending, it is free, and it is done in
+Cloudflare rather than on the server. Both halves, in order, are in
+[docs/DEPLOY.md → Optional: email](docs/DEPLOY.md#optional-email).
+
 A note on the sending account. Receiving alerts at a consumer mailbox is fine.
 Sending *through* one is a fight — Microsoft and Google have both tightened
 SMTP auth for consumer accounts, and mail sent from a personal address on
