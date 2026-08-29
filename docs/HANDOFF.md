@@ -24,8 +24,9 @@ snapshot of a moment.
 
 ## Where things are
 
-`main` at `7064c6d`, clean, in sync with `origin/main`.
-Suites green: **720 acceptance, 389 flow** (`npm test`).
+`main` was at `7064c6d` when this was written, clean and in sync with
+`origin/main`, suites green at **720 acceptance, 389 flow**. Re-read on
+29 August, five commits later: **732 acceptance, 389 flow** (`npm test`).
 
 ### The database
 
@@ -96,9 +97,17 @@ Three commits, two of them from another session.
 Two hundred and thirty recipes behind one search box is a list you can only use
 if you already know what you are looking for. Every recipe now carries the
 section of the seed file it was written in, and the list renders a button per
-tag with a count: Classical 64, Soups 35, Preserving 18, Modernist 16, Sides 16,
-Desserts 13, Vegan 13, German 8, Mexican 8, Thai 8, Chinese 7, Japanese 7,
-Korean 7, Gluten-free 6, Mongolian 5, Charcuterie 4.
+tag with a count. At `7064c6d` those read: Classical 64, Soups 35, Preserving
+18, Modernist 16, Sides 16, Desserts 13, Vegan 13, German 8, Mexican 8, Thai 8,
+Chinese 7, Japanese 7, Korean 7, Gluten-free 6, Mongolian 5, Charcuterie 4.
+
+They do not any more. `28c706c` levelled the uneven sections and added a
+fifteenth button, taking the seed to 415 recipes: Classical 64, Rubs and
+marinades 50, Soups 46, and twenty each under Charcuterie, Chinese, Desserts,
+German, Gluten-free, Japanese, Korean, Mexican, Modernist, Mongolian,
+Preserving, Sides, Thai and Vegan. Read them back off the seed rather than off
+this paragraph — `28c706c` moved the German count from 8 to 20 and left a flow
+assertion still pinned to 8, which is how that number gets found to be wrong.
 
 Tags are their own table rather than JSON on the recipe row — the opposite of
 what `saved_dishes` does for allergens, and deliberately. Those are read back

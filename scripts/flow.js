@@ -1917,10 +1917,26 @@ const PAST_DATE = T.addDays(today, -2);
      lit button and the rows shown all have to agree, and a unit test on the
      model cannot see any of that. */
   {
+    /* The seed is the authority on how many German recipes there are, and the
+       number on the button has to agree with it. Pinned as a literal, it said 8
+       and went stale the first time the section grew -- acceptance.js already
+       derives its copy for the same reason. Which recipes carry the tag is
+       guarded there, by a hand-written list; this only asks whether the page
+       renders the true count. */
+    const seedRecipes = require('../server/recipe-seed');
+    const GERMAN_N = seedRecipes.filter((r) => (r.tags || []).includes('german')).length;
+
+    /* A row, identified by the link the Recipe column puts its name in. The
+       Based-on column links to slugs too, so a bare href test would match a
+       recipe that merely names another as its parent. */
+    const rowFor = (text, slug) =>
+      new RegExp(`<strong><a href="/admin/recipes/${slug}">`).test(text);
+
     const page = await GET('/admin/recipes');
     ok('the list carries a row of buttons', /href="\/admin\/recipes\?tag=german"/.test(page.text));
     ok('with a readable label rather than a slug', />German /.test(page.text));
-    ok('and a count beside it', /German <span class="variant__label">8<\/span>/.test(page.text));
+    ok('and a count beside it',
+      new RegExp(`German <span class="variant__label">${GERMAN_N}</span>`).test(page.text));
     ok('plus a way back to everything', />Everything</.test(page.text));
 
     const german = await GET('/admin/recipes?tag=german');
@@ -1935,7 +1951,9 @@ const PAST_DATE = T.addDays(today, -2);
       /href="\/admin\/recipes\?category=dish&amp;tag=german"/.test(german.text));
     const narrowed = await GET('/admin/recipes?category=dish&tag=german');
     ok('and narrowing to Dishes keeps the German filter on',
-      narrowed.status === 200 && /Schnitzel/.test(narrowed.text) && !/Spaetzle/.test(narrowed.text));
+      narrowed.status === 200
+      && rowFor(narrowed.text, 'schnitzel')
+      && !rowFor(narrowed.text, 'spaetzle'));
 
     /* Two tags, one row. */
     const thai = await GET('/admin/recipes?tag=thai');
