@@ -1065,6 +1065,49 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   db.prepare(`DELETE FROM orders WHERE id=?`).run(oid);
 }
 
+/* --- Deleting an order -----------------------------------------------------
+   The lines go with it; the payment does not. That asymmetry is the whole
+   reason this has its own checks: a cascade that took the payment row with it
+   would quietly destroy the record of money that actually arrived. */
+{
+  const O = require('../server/orders');
+  const mk = (ref, withPayment) => {
+    db.prepare(`INSERT INTO orders (ref,service_date,status,name,phone,email,allergy_notes,
+      method,subtotal,delivery_fee,total,payment_method)
+      VALUES (?,'2026-08-21','confirmed','Deleter','5195550000','d@e.f','','pickup',2200,0,2200,'etransfer')`)
+      .run(ref);
+    const id = db.prepare('SELECT id FROM orders WHERE ref=?').get(ref).id;
+    db.prepare(`INSERT INTO order_lines (order_id,source_level,ref_table,ref_id,item_name,
+      subcategory,variant,variant_label,unit_price,qty)
+      VALUES (?,'Featured','service_days',1,'Beef','Featured','full','Full size',2200,1)`).run(id);
+    if (withPayment) {
+      db.prepare(`INSERT INTO payments (external_id,received_at,amount,sender_name,memo,
+        source,order_id,matched_by)
+        VALUES (?,datetime('now'),2200,'A Sender','ref','paste',?,'auto')`).run(`ext-${ref}`, id);
+    }
+    return id;
+  };
+
+  const plain = mk('DELTEST1', false);
+  const gone = O.remove(plain);
+  check('it reports the order it deleted', gone.order.ref, 'DELTEST1');
+  check('and how many lines went with it', gone.lines, 1);
+  check('the order is gone', db.prepare('SELECT COUNT(*) n FROM orders WHERE id=?').get(plain).n, 0);
+  check('and so are its lines',
+    db.prepare('SELECT COUNT(*) n FROM order_lines WHERE order_id=?').get(plain).n, 0);
+
+  const paid = mk('DELTEST2', true);
+  const gone2 = O.remove(paid);
+  check('a linked payment is counted before deleting', gone2.payments, 1);
+  check('the payment row itself survives',
+    db.prepare("SELECT COUNT(*) n FROM payments WHERE sender_name='A Sender'").get().n, 1);
+  check('unlinked rather than deleted',
+    db.prepare("SELECT order_id FROM payments WHERE sender_name='A Sender'").get().order_id, null);
+  db.prepare("DELETE FROM payments WHERE sender_name='A Sender'").run();
+
+  check('deleting something already gone is null, not a throw', O.remove(plain), null);
+}
+
 /* --- How the password is stored -------------------------------------------
    Stored hashed when ADMIN_PASSWORD_HASH is set, so the file that survives a
    backup, a screen share or a stray copy doesn't hand over the dashboard. */

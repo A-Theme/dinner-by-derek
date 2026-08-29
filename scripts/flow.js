@@ -1912,6 +1912,64 @@ const PAST_DATE = T.addDays(today, -2);
       !/Flow Linked Recipe|wheat flour|Second Claimant/.test(menu.text));
   }
 
+  /* --- Deleting an order from the dashboard -------------------------------
+     Over HTTP, because the point of this feature is that it stops being a SQL
+     job. The button has to be on the card, the route has to be behind the
+     sign-in, and the payment has to survive. */
+  {
+    const { db } = require('../server/db');
+    const mk = (ref, withPayment) => {
+      db.prepare(`INSERT INTO orders (ref,service_date,status,name,phone,email,allergy_notes,
+        method,subtotal,delivery_fee,total,payment_method)
+        VALUES (?,?,'confirmed','Delete Me','5195550123','x@y.z','','pickup',2200,0,2200,'etransfer')`)
+        .run(ref, SERVICE_DATE);
+      const id = db.prepare('SELECT id FROM orders WHERE ref=?').get(ref).id;
+      db.prepare(`INSERT INTO order_lines (order_id,source_level,ref_table,ref_id,item_name,
+        subcategory,variant,variant_label,unit_price,qty)
+        VALUES (?,'Featured','service_days',1,'Beef','Featured','full','Full size',2200,1)`).run(id);
+      if (withPayment) {
+        db.prepare(`INSERT INTO payments (external_id,received_at,amount,sender_name,memo,
+          source,order_id,matched_by) VALUES (?,datetime('now'),2200,'Payer','m','paste',?,'auto')`)
+          .run(`ext-${ref}`, id);
+      }
+      return id;
+    };
+
+    const id = mk('FLOWDEL1', false);
+    const page = await GET('/admin/orders');
+    ok('the order card carries a Delete button',
+      new RegExp(`action="/admin/orders/${id}/delete"`).test(page.text));
+    ok('and it asks before doing it',
+      /data-confirm="Delete the order from Delete Me[^"]*cannot be undone/.test(page.text));
+
+    /* Signed out, it must do nothing at all. */
+    const out = await POST(`/admin/orders/${id}/delete`, {}, { noCookie: true });
+    ok('a signed-out delete is bounced to the sign-in page',
+      /\/admin\/login/.test(String(out.location)), `${out.status} ${out.location}`);
+    check('and the order is still there',
+      db.prepare('SELECT COUNT(*) n FROM orders WHERE id=?').get(id).n, 1);
+
+    const gone = await POST(`/admin/orders/${id}/delete`, {});
+    check('deleting redirects back', gone.status, 303);
+    check('the order is gone', db.prepare('SELECT COUNT(*) n FROM orders WHERE id=?').get(id).n, 0);
+    check('and its lines went with it',
+      db.prepare('SELECT COUNT(*) n FROM order_lines WHERE order_id=?').get(id).n, 0);
+
+    /* The money is not ours to delete. */
+    const paidId = mk('FLOWDEL2', true);
+    const gone2 = await POST(`/admin/orders/${paidId}/delete`, {});
+    ok('the message says the transfer was left behind',
+      /still\+in\+Payments/i.test(String(gone2.location)), String(gone2.location));
+    check('the payment survives the order',
+      db.prepare("SELECT COUNT(*) n FROM payments WHERE sender_name='Payer'").get().n, 1);
+    check('unlinked, not deleted',
+      db.prepare("SELECT order_id FROM payments WHERE sender_name='Payer'").get().order_id, null);
+
+    const again = await POST(`/admin/orders/${paidId}/delete`, {});
+    ok('deleting the same order twice says so rather than erroring',
+      /no\+longer\+exists/i.test(String(again.location)), String(again.location));
+  }
+
   /* --- The buttons on the recipe list ------------------------------------
      Over HTTP, because a filter is a thing you click: the query string, the
      lit button and the rows shown all have to agree, and a unit test on the

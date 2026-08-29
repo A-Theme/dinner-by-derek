@@ -333,6 +333,9 @@ router.get('/orders', (req, res) => {
             <input type="hidden" name="field" value="fulfilled">
             <button class="btn btn--secondary" type="submit">
               ${o.fulfilled ? 'Undo' : (o.method === 'pickup' ? 'Mark as picked up' : 'Mark as delivered')}</button></form>
+          <form method="post" action="/admin/orders/${o.id}/delete" style="display:inline"
+            data-confirm="Delete the order from ${o.name} for ${T.fmtDayShort(o.service_date, tz())} — ${money(o.total)}? This cannot be undone.${paidBy.get(o.id) ? ' The e-transfer that paid for it stays in Payments, unlinked.' : ''}">
+            <button class="btn btn--secondary" type="submit">Delete</button></form>
         </div>
       </div>`;
     }) : html`<div class="card"><p>No orders match those filters.</p></div>`}`;
@@ -348,6 +351,19 @@ router.post('/orders/:id/flag', (req, res) => {
   back(res, req, field === 'paid'
     ? (o.paid ? 'Marked as paid.' : 'Marked as unpaid again.')
     : (o.fulfilled ? 'Marked as handed over.' : 'Undone.'));
+});
+
+router.post('/orders/:id/delete', (req, res) => {
+  const id = Number(req.params.id);
+  const gone = O.remove(id);
+  if (!gone) return back(res, req, null, 'That order no longer exists.');
+  /* Name the customer and the day back, because the confirmation the browser
+     showed is gone by the time this renders and "Order deleted." would leave
+     you wondering which one. */
+  const who = `${gone.order.name}, ${T.fmtDayShort(gone.order.service_date, tz())}`;
+  back(res, req, gone.payments
+    ? `Deleted the order from ${who}. The e-transfer that paid for it is still in Payments, now unlinked.`
+    : `Deleted the order from ${who}.`);
 });
 
 router.post('/orders/:id/decide', (req, res) => {

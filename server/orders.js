@@ -362,7 +362,39 @@ function kitchenTotals(serviceDate) {
   };
 }
 
+/**
+ * Delete an order, and say what went with it.
+ *
+ * There was no way to do this for a long time, which was survivable only
+ * because the instruction that needed it -- "place a test order, then delete
+ * it before the real ones arrive" -- was written against a button that did not
+ * exist. Deleting by hand meant SQL against the live database, which is a
+ * worse thing to ask of somebody than a button with a confirmation on it.
+ *
+ * The lines go with the order: ON DELETE CASCADE, and db.js has foreign keys
+ * on, so this is the database's job rather than ours. A payment does NOT go
+ * with it -- ON DELETE SET NULL -- and that asymmetry is deliberate. A line is
+ * part of the order and means nothing without it; a transfer is a thing that
+ * happened at a bank, and deleting our record of what it paid for does not
+ * unmake it. It stays in Payments, unlinked, ready to be matched again.
+ *
+ * Returns what was destroyed so the page can say it rather than guess.
+ */
+function remove(id) {
+  const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+  if (!order) return null;
+
+  const lines = db.prepare('SELECT COUNT(*) n FROM order_lines WHERE order_id = ?').get(id).n;
+  const payments = db.prepare('SELECT COUNT(*) n FROM payments WHERE order_id = ?').get(id).n;
+
+  db.transaction(() => {
+    db.prepare('DELETE FROM orders WHERE id = ?').run(id);
+  })();
+
+  return { order, lines, payments };
+}
+
 module.exports = {
-  create, quote, linesOf, byRef, kitchenTotals, OrderError,
+  create, quote, remove, linesOf, byRef, kitchenTotals, OrderError,
   PAYMENT_METHODS, PAYMENT_LABEL,
 };
