@@ -1753,6 +1753,27 @@ const PAST_DATE = T.addDays(today, -2);
     check('the soup lands on the week', wi && wi.name, 'Aardvark Bisque');
     check('unreviewed, as everything copied forward is', wi && wi.ack, 0);
 
+    /* The meatless slot is the one that does not take its own kind. It takes a
+       main, because that is what a meatless dish is filed as, and it must
+       still refuse everything else. */
+    const meatlessRow = () => require('../server/db').db.prepare(
+      "SELECT name, ack, weekdays FROM week_items WHERE week_id = ? AND kind = 'meatless'")
+      .get(weekId);
+
+    r = await POST(`/admin/week/${weekId}/meatless/use`, { dish_id: String(soup.id) });
+    ok('a saved soup is refused as the meatless main', !meatlessRow());
+
+    const zuluForMeatless = DISH.all({ kind: 'main' }).find((d) => d.name === 'Zulu Beef');
+    r = await POST(`/admin/week/${weekId}/meatless/use`, { dish_id: String(zuluForMeatless.id) });
+    check('a saved main fills the meatless slot', meatlessRow() && meatlessRow().name, 'Zulu Beef');
+    check('unreviewed on arrival, like everything else', meatlessRow() && meatlessRow().ack, 0);
+    check('and it starts on Monday without being asked',
+      meatlessRow() && meatlessRow().weekdays, '["mon"]');
+
+    // Cleared again, so the rest of the week's checks see the menu they expect.
+    require('../server/db').db.prepare(
+      "DELETE FROM week_items WHERE week_id = ? AND kind = 'meatless'").run(weekId);
+
     // The single picker: one dish, one day, both from the body.
     const zuluRow = DISH.all({ kind: 'main' }).find((d) => d.name === 'Zulu Beef');
     r = await POST(`/admin/week/${weekId}/dish/use`, { wd: 'fri', dish_id: String(zuluRow.id) });

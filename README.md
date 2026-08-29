@@ -163,7 +163,7 @@ separately, and they are only combined when a customer looks at a day.
 %%{init: {'theme':'base','themeVariables':{'fontFamily':'Georgia, serif','lineColor':'#BE8146'}}}%%
 flowchart LR
   L1["<b>1 · Featured dish</b><br/>one per service day<br/><i>This Week</i>"]
-  L2["<b>2 · Soup &amp; salad</b><br/>one each, whole week<br/><i>This Week</i>"]
+  L2["<b>2 · Weekly items</b><br/>soup, salad, dessert,<br/>meatless main<br/><i>This Week</i>"]
   L3["<b>3 · Standing items</b><br/>carry across weeks<br/><i>Other Options</i>"]
   GATE{"Allergen review<br/>ticked?"}
   DAY["<b>Wednesday's menu</b><br/>grouped as Soups,<br/>Salads, Mains"]
@@ -224,16 +224,37 @@ five, and a sold-out badge at zero.
 rather than orders, and a request holds nothing until you confirm it — so it
 cannot sell out a dish ahead of a real order.
 
-### Level 2 — soup and salad of the week
+### Level 2 — chosen once, for the whole week
 
-**One soup and one salad, for the whole week.** Not per day. By default they
-appear Tuesday, Wednesday and Thursday, and you can change that per week. Either
-one can be left blank.
+**One soup, one salad, one dessert and one meatless main.** Not per day. Soup,
+salad and dessert default to Tuesday, Wednesday and Thursday; the meatless main
+defaults to Monday. You can change that per week, and any of them can be left
+blank.
 
-Authored in **This Week**, in the two editors below the weekday boxes.
+Authored in **This Week**, in the editors below the weekday boxes.
 
 The database enforces the "one each" rule directly, so no amount of clicking can
 produce two soups in a week.
+
+#### Meatless Monday
+
+The meatless main is stored at this level but it is **not a side**. It is a
+second main, and the day page bills it beside Monday's featured dish rather
+than filing it under Other Options. Three things follow from that:
+
+- **It has its own price.** On the Facebook page it has run consistently below
+  the other mains, and the post composer treats it as an exception to the
+  quoted price rather than letting it set one.
+- **It has its own daily ceiling.** Monday's limit is *per dish*, not shared —
+  twenty-five of each, not twenty-five between them. Selling out of the
+  featured dish leaves the meatless one orderable, which is the whole point of
+  offering it.
+- **It is picked from your saved Mains.** There is no separate meatless
+  catalogue. The same aloo gobi is a main whether it ran under a Meatless
+  heading or not, and one entry means its price cannot drift between copies.
+
+To skip a week, leave the name blank. Nothing is shown, and nothing blocks
+publishing — that is how *"Meatless Monday will return in September"* is said.
 
 ### Level 3 — standing items
 

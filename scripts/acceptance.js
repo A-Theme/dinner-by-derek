@@ -368,16 +368,100 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   try { ins.run(week, 'dessert', 'Key lime pie'); } catch (e) { secondDessertRejected = true; }
   ok('a week cannot hold two desserts', secondDessertRejected);
 
+  // The meatless main is the fourth kind. Stored like the others — one per
+  // week, refused a second time — although it is billed as a main.
+  ins.run(week, 'meatless', 'Chana Masala');
+  check('the meatless main joins them',
+    db.prepare('SELECT COUNT(*) n FROM week_items WHERE week_id = ?').get(week).n, 4);
+  let secondMeatlessRejected = false;
+  try { ins.run(week, 'meatless', 'Aloo Gobi'); } catch (e) { secondMeatlessRejected = true; }
+  ok('a week cannot hold two meatless mains', secondMeatlessRejected);
+
   let junkKindRejected = false;
   try { ins.run(week, 'pudding', 'Not a kind'); } catch (e) { junkKindRejected = true; }
-  ok('and no fourth kind can be invented', junkKindRejected);
+  ok('and no fifth kind can be invented', junkKindRejected);
 
-  check('weekItemsOf hands back all three',
+  check('weekItemsOf hands back all four',
     Object.keys(require('../server/menu').weekItemsOf(week)).sort(),
-    ['dessert', 'salad', 'soup']);
+    ['dessert', 'meatless', 'salad', 'soup']);
 
   db.prepare('DELETE FROM week_items WHERE week_id = ?').run(week);
   db.prepare('DELETE FROM weeks WHERE id = ?').run(week);
+}
+
+/* --- Meatless Monday ------------------------------------------------------
+   A second main on Monday: stored at level 2 like the soup, billed at the top
+   like the featured dish, and holding a ceiling of its own. The three things
+   worth proving are that it is not a side, that it is not sharing Monday's
+   ceiling, and that a week without one is a normal week. */
+{
+  const M = require('../server/menu');
+  const P = require('../server/publish');
+
+  const weekId = db.prepare(`INSERT INTO weeks (slug, title, status, week_start)
+    VALUES ('meatless-test','Meatless test','draft','2026-08-24')`).run().lastInsertRowid;
+  const insDay = db.prepare(`INSERT INTO service_days
+    (week_id, service_date, dish_name, description, ack, ack_of, full_on, full_price, daily_cap)
+    VALUES (?,?,?,'',1,?,1,5000,3)`);
+  insDay.run(weekId, '2026-08-24', 'Roast Chicken', A.reviewedText({ name: 'Roast Chicken', description: '' }));
+  insDay.run(weekId, '2026-08-25', 'Pork Souvlaki', A.reviewedText({ name: 'Pork Souvlaki', description: '' }));
+
+  const week = () => db.prepare('SELECT * FROM weeks WHERE id = ?').get(weekId);
+  const dayOn = (date) => db.prepare('SELECT * FROM service_days WHERE week_id=? AND service_date=?')
+    .get(weekId, date);
+
+  const mId = db.prepare(`INSERT INTO week_items
+    (week_id, kind, name, description, weekdays, ack, ack_of, full_on, full_price)
+    VALUES (?,'meatless','Chana Masala','Chickpeas and rice','["mon"]',1,?,1,4500)`)
+    .run(weekId, A.reviewedText({ name: 'Chana Masala', description: 'Chickpeas and rice' }))
+    .lastInsertRowid;
+
+  const mon = M.menuForDay(week(), dayOn('2026-08-24'));
+  check('Monday carries the meatless dish beside the featured one', mon.meatless.name, 'Chana Masala');
+  check('and the featured dish is untouched', mon.featured.name, 'Roast Chicken');
+  check('it is billed by the name the posts have always used', mon.meatless.level, 'Meatless Monday');
+  ok('it is orderable — findItem resolves its key',
+    M.findItem(mon, mon.meatless.key) !== null);
+
+  // The distinction the whole design rests on: level 2 by storage, headline by
+  // billing. If it ever turns up in `grouped` it has become a side.
+  ok('it is NOT an Other Option',
+    !mon.grouped.some((g) => g.items.some((i) => i.name === 'Chana Masala')));
+
+  // Two ceilings of three, not one ceiling of three shared between them.
+  check("Monday's featured ceiling is its own", mon.featuredCap.remaining, 3);
+  check('and the meatless dish holds a separate one', mon.meatlessCap.remaining, 3);
+
+  const tue = M.menuForDay(week(), dayOn('2026-08-25'));
+  check('Tuesday has no meatless dish', tue.meatless, null);
+
+  // Moved off Monday it keeps working and stops claiming to be Monday's.
+  db.prepare('UPDATE week_items SET weekdays = ? WHERE id = ?').run('["tue"]', mId);
+  check('moved to Tuesday it is simply Meatless',
+    M.menuForDay(week(), dayOn('2026-08-25')).meatless.level, 'Meatless');
+  check('and Monday no longer has one', M.menuForDay(week(), dayOn('2026-08-24')).meatless, null);
+  db.prepare('UPDATE week_items SET weekdays = ? WHERE id = ?').run('["mon"]', mId);
+
+  // The gate treats it as the main it is.
+  db.prepare('UPDATE week_items SET ack = 0, ack_of = NULL WHERE id = ?').run(mId);
+  ok('an unreviewed meatless dish blocks publishing',
+    P.blockers(weekId).some((b) => /Chana Masala/.test(b)));
+  ok('and is off the menu until it is reviewed',
+    M.menuForDay(week(), dayOn('2026-08-24')).meatless === null);
+
+  // "Meatless Monday will return in September" is said by leaving it blank.
+  db.prepare("UPDATE week_items SET name = '' WHERE id = ?").run(mId);
+  check('a blank meatless dish blocks nothing', P.blockers(weekId), []);
+  check('and simply is not there', M.menuForDay(week(), dayOn('2026-08-24')).meatless, null);
+
+  // A week that is nothing but a meatless dish is still a week with something
+  // on it — the same rule the soup has always had.
+  db.prepare('DELETE FROM service_days WHERE week_id = ?').run(weekId);
+  db.prepare("UPDATE week_items SET name = 'Chana Masala' WHERE id = ?").run(mId);
+  check('a week holding only a meatless dish is not empty', P.isEmpty(weekId), false);
+
+  db.prepare('DELETE FROM week_items WHERE week_id = ?').run(weekId);
+  db.prepare('DELETE FROM weeks WHERE id = ?').run(weekId);
 }
 
 /* --- Standing items are seeded and persist -------------------------------- */

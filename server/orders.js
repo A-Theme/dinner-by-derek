@@ -112,6 +112,7 @@ function quote(payload) {
   const lines = [];
   let subtotal = 0;
   let featuredQty = 0;
+  let meatlessQty = 0;
 
   for (const r of requested) {
     if (!Number.isFinite(r.qty) || r.qty < 1 || r.qty > 40) {
@@ -132,7 +133,10 @@ function quote(payload) {
         ? `${item.name} (${variant.label}) has just sold out for that day.`
         : `Only ${variant.remaining} of ${item.name} (${variant.label}) left for that day.`);
     }
+    // Matched on the key rather than the level: the meatless dish's level is
+    // the words a customer reads, and those change with the day it runs on.
     if (item.level === 'Featured') featuredQty += r.qty;
+    else if (menu.meatless && item.key === menu.meatless.key) meatlessQty += r.qty;
     lines.push({
       source_level: item.level,
       ref_table: item.refTable,
@@ -148,17 +152,29 @@ function quote(payload) {
     subtotal += variant.price * r.qty;
   }
 
-  /* --- The featured dish's ceiling for the day -------------------------- */
-  // Checked on the total rather than per size: two sizes can each sit under
-  // what is left while together they go over it. Like the per-variant check
-  // above, a late request reserves nothing and so is not measured against it.
-  if (status === 'confirmed' && featuredQty > 0 && menu.featuredCap) {
-    const left = menu.featuredCap.remaining;
-    if (featuredQty > left) {
-      const name = menu.featured ? menu.featured.name : 'The featured dish';
-      throw new OrderError(left === 0
-        ? `${name} has sold out for that day.`
-        : `Only ${left} of ${name} left for that day, across both sizes.`);
+  /* --- The headline dishes' ceilings for the day ------------------------ */
+  // Checked on each dish's total rather than per size: two sizes can each sit
+  // under what is left while together they go over it. Like the per-variant
+  // check above, a late request reserves nothing and so is not measured
+  // against it.
+  //
+  // The two are counted apart because each holds its own ceiling. A Monday
+  // that has sold its last short rib still has the tofu on, and telling that
+  // customer the day is full would turn away the order the meatless dish
+  // exists to take.
+  if (status === 'confirmed') {
+    for (const [qty, cap, item, fallback] of [
+      [featuredQty, menu.featuredCap, menu.featured, 'The featured dish'],
+      [meatlessQty, menu.meatlessCap, menu.meatless, 'The meatless dish'],
+    ]) {
+      if (qty === 0 || !cap) continue;
+      const left = cap.remaining;
+      if (qty > left) {
+        const name = item ? item.name : fallback;
+        throw new OrderError(left === 0
+          ? `${name} has sold out for that day.`
+          : `Only ${left} of ${name} left for that day, across both sizes.`);
+      }
     }
   }
 

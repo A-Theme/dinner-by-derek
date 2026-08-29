@@ -48,8 +48,11 @@ function blockers(weekId) {
     const st = A.reviewState(d);
     if (!st.ok) out.push(A.reviewMessage(`${T.fmtDayShort(d.service_date, tz())} — ${d.dish_name}`, st));
   }
-  const { soup, salad, dessert } = M.weekItemsOf(weekId);
+  const { soup, salad, dessert, meatless } = M.weekItemsOf(weekId);
   for (const [item, label] of [
+    // First, because it is a main. An unreviewed meatless dish is the same
+    // kind of problem as an unreviewed Monday dish, not a lesser one.
+    [meatless, 'The meatless dish'],
     [soup, 'The soup of the week'],
     [salad, 'The salad of the week'],
     [dessert, 'The dessert of the week'],
@@ -79,9 +82,9 @@ function isEmpty(weekId) {
   if (week && week.closed) return false;
   const days = M.serviceDaysOf(weekId);
   if (days.some((d) => d.closed || d.dish_name.trim())) return false;
-  const { soup, salad, dessert } = M.weekItemsOf(weekId);
+  const { soup, salad, dessert, meatless } = M.weekItemsOf(weekId);
   return !(soup && soup.name.trim()) && !(salad && salad.name.trim())
-    && !(dessert && dessert.name.trim());
+    && !(dessert && dessert.name.trim()) && !(meatless && meatless.name.trim());
 }
 
 /**

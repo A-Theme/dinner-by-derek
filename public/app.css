@@ -155,6 +155,18 @@ a { color: var(--dbd-olive-deep); }
   letter-spacing: 0.09em; color: var(--dbd-ink-muted); font-weight: 700;
 }
 .daycard__dish { font-family: var(--dbd-display); font-size: var(--dbd-step-2); color: var(--dbd-heading); }
+/* The second main on a day that has one. A step down from the featured dish,
+   because it is the alternative rather than the headline — but in the heading
+   face and the heading colour, because it is a main and not a footnote. */
+.daycard__alt {
+  font-family: var(--dbd-display); font-size: var(--dbd-step-0);
+  color: var(--dbd-heading); margin-top: var(--dbd-sp-1);
+}
+.daycard__alt span {
+  font-family: var(--dbd-body); font-size: var(--dbd-step--1);
+  text-transform: uppercase; letter-spacing: 0.09em; font-weight: 700;
+  color: var(--dbd-ink-muted); margin-right: var(--dbd-sp-2);
+}
 .daycard__meta { font-size: var(--dbd-step--1); color: var(--dbd-ink-muted); }
 
 /* A day the kitchen is shut. Rendered as a plain block, never a link: there

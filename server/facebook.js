@@ -302,6 +302,13 @@ function buildPostText(week) {
      here and re-read in the loop below rather than built twice. */
   const dayMenus = days.map((d) => ({ d, menu: M.menuForDay(week, d) }));
   const featured = dayMenus.filter((x) => !x.menu.closed && x.menu.featured).map((x) => x.menu.featured);
+  /* The meatless dish is listed with its day but does NOT vote for the price
+     standard. It has run five dollars under the other mains for years, and a
+     week with one Monday dish and one meatless dish would otherwise tie —
+     ties break towards the cheaper price, which would quote the meatless
+     price at the top and make every meat dish an exception to it. */
+  const meatlessItems = dayMenus.filter((x) => !x.menu.closed && x.menu.meatless)
+    .map((x) => x.menu.meatless);
   const weeklyRows = [[soup, 'Soup'], [salad, 'Salad'], [dessert, 'Dessert']]
     .filter(([item]) => item && item.name.trim());
   const { reviewState } = require('./allergens');
@@ -317,6 +324,7 @@ function buildPostText(week) {
   // actually prices something differently, so a week where the standard holds
   // throughout says the price once and nothing else.
   const exceptions = [...featured.map((f) => f.variants),
+    ...meatlessItems.map((f) => f.variants),
     ...weeklyRows.map(([item]) => variantsOf(item, 'week_items')),
     ...standing.map((s) => variantsOf(s, 'standing_items'))]
     .some((vs) => vs.some((v) => !price.covers(v)));
@@ -340,15 +348,28 @@ function buildPostText(week) {
       L.push(menu.closedNote ? `Closed — ${menu.closedNote}` : 'Closed');
       continue;
     }
-    if (!menu.featured) continue;
-    const f = menu.featured;
+    // A day with only the meatless dish set still gets its heading. Skipping
+    // it because the featured box is empty would drop Monday's one main.
+    if (!menu.featured && !menu.meatless) continue;
     L.push('', `— ${T.fmtDayLong(d.service_date, tz)} —`);
-    L.push(f.name);
-    if (f.description) L.push(f.description);
-    if (f.halal) L.push('Prepared halal as declared by the kitchen');
-    if (f.allergens.length) L.push(`Contains: ${f.allergens.join(', ')}`);
-    const dayPrice = price.line(f.variants);
-    if (dayPrice) L.push(dayPrice);
+
+    /* Both mains are written the same way, the meatless one under the heading
+       it has carried in these posts for years. */
+    const dish = (f, heading) => {
+      L.push(heading ? `${heading} — ${f.name}` : f.name);
+      if (f.description) L.push(f.description);
+      if (f.halal) L.push('Prepared halal as declared by the kitchen');
+      if (f.allergens.length) L.push(`Contains: ${f.allergens.join(', ')}`);
+      const dishPrice = price.line(f.variants);
+      if (dishPrice) L.push(dishPrice);
+    };
+    if (menu.featured) dish(menu.featured, null);
+    if (menu.meatless) {
+      if (menu.featured) L.push('');
+      dish(menu.meatless, menu.meatless.level);
+    }
+    // One cutoff for the day, said once after both dishes — it is a property
+    // of the date, not of the plate.
     L.push(`Order by ${T.fmtLocal(menu.cutoff, tz, { weekday: 'long' })}`);
   }
 

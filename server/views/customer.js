@@ -70,6 +70,7 @@ function weekView({ week, days }) {
           <a class="daycard" href="/w/${week.slug}/${d.service_date}">
             <div class="daycard__date">${T.fmtDayLong(d.service_date, tz())}</div>
             <div class="daycard__dish">${menu.featured ? menu.featured.name : 'Menu coming soon'}</div>
+            ${menu.meatless ? html`<div class="daycard__alt"><span>${menu.meatless.level}</span>${menu.meatless.name}</div>` : ''}
             <div class="daycard__meta">
               <span class="state state--${menu.state}">${STATE_LABEL[menu.state]}</span>
               · ${stateLine(menu.state, menu.cutoff, menu.lateCutoff)}
@@ -115,7 +116,13 @@ function variantRows(item, disabled) {
     </div>`)}`;
 }
 
-function featuredBlock(item, cap, readOnly) {
+/**
+ * A headline dish. Monday draws this twice — the featured dish, then the
+ * meatless one — so the eyebrow is a parameter rather than a constant. The
+ * meatless dish passes its own level, which is "Meatless Monday" on the day
+ * it is named after and plain "Meatless" anywhere else.
+ */
+function featuredBlock(item, cap, readOnly, eyebrow = 'Featured tonight') {
   // The day's ceiling across both sizes. Only worth saying out loud once it is
   // close enough to change what someone does.
   const capNote = cap && cap.remaining === 0
@@ -128,7 +135,7 @@ function featuredBlock(item, cap, readOnly) {
   <section class="featured">
     ${item.photo ? html`<img class="featured__photo" src="/uploads/${item.photo}" alt="${item.name}">` : ''}
     <div class="featured__body">
-      <p class="featured__eyebrow">Featured tonight</p>
+      <p class="featured__eyebrow">${eyebrow}</p>
       <h2 class="featured__name">${item.name}</h2>
       ${item.halal ? html`<p>${L.halalBadge(true)}</p>` : ''}
       ${capNote}
@@ -215,6 +222,7 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
     ${L.allergenDisclaimer()}
 
     ${menu.featured ? featuredBlock(menu.featured, menu.featuredCap, past || shut) : html`<div class="notice">No featured dish is set for this day yet.</div>`}
+    ${menu.meatless ? featuredBlock(menu.meatless, menu.meatlessCap, past || shut, menu.meatless.level) : ''}
 
     ${menu.grouped.length ? html`
       <div class="section-rule"><h2>Other Options</h2></div>

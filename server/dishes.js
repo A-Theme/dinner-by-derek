@@ -26,6 +26,26 @@ const { db } = require('./db');
 /** 'main' goes on a day; the rest go on the week. */
 const KINDS = ['main', 'soup', 'salad', 'dessert'];
 const WEEK_KINDS = new Set(['soup', 'salad', 'dessert']);
+
+/**
+ * The level-2 slots on a week, and which saved kind fills each.
+ *
+ * Three of them are named after the kind that fills them and the fourth is
+ * not: the meatless slot takes a main, because that is what it is. There is no
+ * "meatless" kind on the saved list and there should not be — the same aloo
+ * gobi is a main whether it ran on a Monday under its own heading or not, and
+ * splitting the catalogue in two would file it twice and let the price drift
+ * apart between the copies.
+ */
+const WEEK_SLOTS = { soup: 'soup', salad: 'salad', dessert: 'dessert', meatless: 'main' };
+
+/** The days a slot starts on when the week has not said otherwise. */
+const SLOT_DEFAULT_WEEKDAYS = {
+  soup: '["tue","wed","thu"]',
+  salad: '["tue","wed","thu"]',
+  dessert: '["tue","wed","thu"]',
+  meatless: '["mon"]',
+};
 const KIND_LABELS = { main: 'Mains', soup: 'Soups', salad: 'Salads', dessert: 'Desserts' };
 
 const FIELDS = [
@@ -217,28 +237,37 @@ function asWeekColumns(dish) {
 }
 
 /**
- * Copy a saved soup, salad or dessert onto a week. The review is not copied.
+ * Copy a saved dish into one of a week's level-2 slots. The review is not
+ * copied.
+ *
+ * `slot` names where it lands and defaults to the dish's own kind, which is
+ * the answer for soup, salad and dessert. The meatless slot has to be asked
+ * for by name, because the dish filling it is an ordinary main and there is
+ * nothing in the row to say Derek meant Monday's vegetarian plate rather than
+ * Tuesday's featured dish.
  *
  * The days it runs on are NOT taken from the saved item. If the owner has
  * already said this week's soup runs Tuesday and Wednesday, swapping which
  * soup it is should not quietly put it back to Tuesday/Wednesday/Thursday —
  * the choice of days belongs to the week, not to the recipe.
  */
-function applyToWeek(dishId, weekId) {
+function applyToWeek(dishId, weekId, slot = null) {
   const dish = byId(dishId);
-  if (!dish || !WEEK_KINDS.has(dish.kind)) return null;
+  if (!dish) return null;
+  const target = slot || dish.kind;
+  if (WEEK_SLOTS[target] !== dish.kind) return null;
 
   const existing = db.prepare('SELECT weekdays FROM week_items WHERE week_id = ? AND kind = ?')
-    .get(Number(weekId), dish.kind);
+    .get(Number(weekId), target);
   const cols = asWeekColumns(dish);
-  const weekdays = existing ? existing.weekdays : '["tue","wed","thu"]';
+  const weekdays = existing ? existing.weekdays : SLOT_DEFAULT_WEEKDAYS[target];
   const names = Object.keys(cols);
 
   db.prepare(`INSERT INTO week_items (week_id, kind, weekdays, ${names.join(', ')})
       VALUES (@week_id, @kind, @weekdays, ${names.map((n) => '@' + n).join(', ')})
       ON CONFLICT(week_id, kind) DO UPDATE SET
         ${names.map((n) => `${n}=excluded.${n}`).join(', ')}`)
-    .run({ ...cols, week_id: Number(weekId), kind: dish.kind, weekdays });
+    .run({ ...cols, week_id: Number(weekId), kind: target, weekdays });
 
   db.prepare('UPDATE saved_dishes SET used_count = used_count + 1 WHERE id = ?').run(dish.id);
   return dish;
@@ -246,9 +275,14 @@ function applyToWeek(dishId, weekId) {
 
 /**
  * Everything a week put in front of customers, kept. Used when a week goes
- * live: the featured dish of each open day, and the week's soup, salad and
- * dessert. A menu that has been published is one worth being able to cook
- * again, whichever level the item sat on.
+ * live: the featured dish of each open day, and the week's meatless main,
+ * soup, salad and dessert. A menu that has been published is one worth being
+ * able to cook again, whichever level the item sat on.
+ *
+ * The meatless row files itself as a main, because `save` keeps only the four
+ * kinds the catalogue has and falls back to 'main' for anything else. That is
+ * the wanted answer rather than a lucky one: the slot is a billing decision
+ * about one week, and the dish outlives it.
  */
 function saveFromWeek(weekId) {
   const days = db.prepare(
@@ -269,5 +303,5 @@ function saveFromWeek(weekId) {
 module.exports = {
   all, byId, count, countsByKind, save, remove,
   applyToDay, applyToWeek, saveFromWeek, asDayColumns, asWeekColumns,
-  KINDS, WEEK_KINDS, KIND_LABELS, SORTS, SORT_LABELS,
+  KINDS, WEEK_KINDS, WEEK_SLOTS, SLOT_DEFAULT_WEEKDAYS, KIND_LABELS, SORTS, SORT_LABELS,
 };

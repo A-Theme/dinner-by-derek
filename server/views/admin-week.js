@@ -45,6 +45,10 @@ function weekPage({ week, days, items, hasPrevious }) {
   const soup = items.soup || { kind: 'soup', weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1 };
   const salad = items.salad || { kind: 'salad', weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1 };
   const dessert = items.dessert || { kind: 'dessert', weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1 };
+  // Monday, because that is what it is called. It is a row of checkboxes like
+  // any other level-2 item and can be moved, but nothing should have to be
+  // ticked for the ordinary week.
+  const meatless = items.meatless || { kind: 'meatless', weekdays: '["mon"]', allergens: '[]', dismissed: '[]', full_on: 1 };
 
   const body = html`
     <h1>This Week</h1>
@@ -204,7 +208,44 @@ function weekPage({ week, days, items, hasPrevious }) {
       </form>
     </details>
 
-    <!-- 3. Soup & salad of the week -->
+    <!-- 3. Meatless Monday — a second main, entered once for the week -->
+    <div class="card">
+      <h2>Meatless Monday ${V.reviewFlag(meatless, 'The meatless dish')}</h2>
+      <p class="also">A second main, entered once for the whole week and shown beside Monday's
+        featured dish rather than under Other Options. It keeps its own price and its own daily
+        ceiling — selling out of one does not close the other.</p>
+      <p class="also">Leave the name blank for a week it isn't running. Nothing is shown, and
+        nothing blocks publishing.</p>
+
+      <!-- Picked from the mains, because that is what it is. The same dish is
+           filed once whether it ran under a Meatless heading or not. -->
+      <div class="dl-row" style="margin-bottom:var(--dbd-sp-3)">
+        <label style="flex:1 1 200px">Put a saved main here
+          <select name="dish_id" form="use-meatless"${savedMains.length ? '' : ' disabled'}>
+            ${savedMains.length
+              ? html`<option value="">Choose a saved main…</option>
+                  ${savedMains.map((d) => html`<option value="${d.id}">${d.name}${d.used_count ? ` — ${d.used_count}×` : ''}</option>`)}`
+              : html`<option>No saved mains yet</option>`}
+          </select>
+        </label>
+        <button class="btn btn--secondary" type="submit" form="use-meatless"${savedMains.length ? '' : ' disabled'}>Use it</button>
+      </div>
+
+      <form method="post" action="/admin/week/${week.id}/meatless" data-autosave>
+        ${V.itemEditor({ prefix: 'meatless', item: meatless, nameLabel: 'Meatless dish name', showWeekdays: true })}
+        <button class="btn btn--secondary" type="submit">Save meatless dish</button>
+        <span class="saveflag" data-saveflag></span>
+      </form>
+
+      ${meatless && meatless.name && meatless.name.trim() ? html`
+        <p style="margin-top:var(--dbd-sp-3)"><button class="btn btn--secondary" type="submit" form="keep-meatless">
+          Keep "${meatless.name}" on the saved list</button></p>` : ''}
+
+      <form method="post" action="/admin/week/${week.id}/meatless/use" id="use-meatless"></form>
+      <form method="post" action="/admin/week/${week.id}/meatless/save" id="keep-meatless"></form>
+    </div>
+
+    <!-- 4. Soup & salad of the week -->
     <div class="card">
       <h2>Soup &amp; salad of the week</h2>
       <p class="also">Entered once for the whole week. One soup, one salad, one dessert — any of them
@@ -251,7 +292,7 @@ function weekPage({ week, days, items, hasPrevious }) {
       </div>
     </div>
 
-    <!-- 4. Service day details: pickup override, and removing a day -->
+    <!-- 5. Service day details: pickup override, and removing a day -->
     <h2>Day details</h2>
     <p class="also" style="margin-bottom:var(--dbd-sp-4)">A pickup-window override for just this day, and
       removing a day, for whichever days have a name above. Name, description, photo, halal and price are
@@ -302,7 +343,7 @@ function weekPage({ week, days, items, hasPrevious }) {
       </details>`;
     }) : html`<div class="card"><p>No service days yet. Add one above.</p></div>`}
 
-    <!-- 5. Closing the whole week -->
+    <!-- 6. Closing the whole week -->
     <div class="card">
       <h2>Closing the whole week</h2>
       <p class="also">For a week you're away, or not cooking at all. Customers see one clear message

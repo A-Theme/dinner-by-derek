@@ -79,9 +79,14 @@ function soldOnAll(refTable, refId, serviceDate) {
 }
 
 /**
- * The featured dish's ceiling for one day, counted across both sizes.
+ * A headline dish's ceiling for one day, counted across both sizes.
  * The day's own number wins; otherwise the global setting. Null means no
  * ceiling — either the setting is 0, or it is missing.
+ *
+ * Monday has two headline dishes, and each is measured against this number on
+ * its own rather than sharing one pot: the ceiling says how many of a dish the
+ * kitchen will make, and the meatless dish is cooked beside the featured one,
+ * not instead of it. Twenty-five of each, not twenty-five between them.
  */
 function featuredCapFor(day) {
   if (day && day.daily_cap != null) return day.daily_cap;
@@ -150,7 +155,21 @@ function weekItemsOf(weekId) {
     soup: rows.find((r) => r.kind === 'soup') || null,
     salad: rows.find((r) => r.kind === 'salad') || null,
     dessert: rows.find((r) => r.kind === 'dessert') || null,
+    meatless: rows.find((r) => r.kind === 'meatless') || null,
   };
+}
+
+/**
+ * What the meatless dish is called where a customer reads it.
+ *
+ * "Meatless Monday" is the name the thing has had for years of posts, and it
+ * is the name on the day it runs. It defaults to Monday and almost always
+ * stays there — but the weekdays are a row of checkboxes like every other
+ * level-2 item, and a Meatless Monday sitting on a Wednesday page is a small
+ * lie told confidently. On any other day it is simply "Meatless".
+ */
+function meatlessLabel(weekday) {
+  return weekday === 'mon' ? 'Meatless Monday' : 'Meatless';
 }
 
 function standingItems({ activeOnly = true } = {}) {
@@ -230,15 +249,17 @@ function menuForDay(week, day) {
       closed: true,
       closedNote: closure.note,
       featured: null,
+      meatless: null,
       grouped: [],
       allItems: [],
       featuredCap: null,
+      meatlessCap: null,
       window: pickupWindowFor(day),
       deliveryOn: false,
       ...T.dayState(day.service_date, clock()),
     };
   }
-  const { soup, salad, dessert } = weekItemsOf(week.id);
+  const { soup, salad, dessert, meatless } = weekItemsOf(week.id);
 
   const featured = reviewState(day).ok && day.dish_name.trim()
     ? toRenderItem(day, {
@@ -257,12 +278,38 @@ function menuForDay(week, day) {
   const capSold = capLimit == null ? 0 : soldOnAll('service_days', day.id, day.service_date);
   const capLeft = capLimit == null ? null : Math.max(0, capLimit - capSold);
 
-  if (featured && capLeft !== null) {
-    for (const v of featured.variants) {
-      v.remaining = v.remaining === null ? capLeft : Math.min(v.remaining, capLeft);
+  /* The same clamp serves both headline dishes, so it is written once. */
+  const clampToCap = (item, left) => {
+    if (!item || left === null) return;
+    for (const v of item.variants) {
+      v.remaining = v.remaining === null ? left : Math.min(v.remaining, left);
       v.soldOut = v.remaining === 0;
     }
-  }
+  };
+  clampToCap(featured, capLeft);
+
+  /* The meatless main.
+   *
+   * Level 2 by storage and a headline by billing, so it is built here beside
+   * the featured dish rather than pushed into `others` — nothing downstream
+   * should mistake it for a side, least of all the kitchen sheet.
+   *
+   * A blank name, an unticked Monday or a failed review and it is simply
+   * absent. That absence is also how a pause is said: for years the post read
+   * "Meatless Monday — will return in September", and the way to say that here
+   * is to leave the box empty.
+   */
+  const meatlessItem = weekItemRunsOn(meatless, weekday) && reviewState(meatless).ok
+    ? toRenderItem(meatless, {
+        level: meatlessLabel(weekday), refTable: 'week_items',
+        subcategory: 'Featured', name: meatless.name,
+        serviceDate: day.service_date,
+      })
+    : null;
+  const mCapLimit = meatlessItem ? featuredCapFor(day) : null;
+  const mCapSold = mCapLimit == null ? 0 : soldOnAll('week_items', meatless.id, day.service_date);
+  const mCapLeft = mCapLimit == null ? null : Math.max(0, mCapLimit - mCapSold);
+  clampToCap(meatlessItem, mCapLeft);
 
   const others = [];
 
@@ -307,9 +354,11 @@ function menuForDay(week, day) {
     closed: false,
     closedNote: '',
     featured,
+    meatless: meatlessItem,
     grouped,
-    allItems: featured ? [featured, ...others] : others,
+    allItems: [featured, meatlessItem].filter(Boolean).concat(others),
     featuredCap: capLimit == null ? null : { cap: capLimit, sold: capSold, remaining: capLeft },
+    meatlessCap: mCapLimit == null ? null : { cap: mCapLimit, sold: mCapSold, remaining: mCapLeft },
     window: pickupWindowFor(day),
     deliveryOn: deliveryOnFor(day),
     ...state,
@@ -325,7 +374,11 @@ function findItem(menu, key) {
 function alsoAvailableLine(week, day) {
   const menu = menuForDay(week, day);
   if (menu.closed) return 'Nothing — the kitchen is closed this day';
+  // The meatless dish leads the line and says what it is. It is not in
+  // `grouped` — it is a headline, not a side — and a Monday summary that
+  // listed only the soup would be the one place the second main went unsaid.
   const names = menu.grouped.flatMap((g) => g.items.map((i) => i.name));
+  if (menu.meatless) names.unshift(`${menu.meatless.level}: ${menu.meatless.name}`);
   return names.length ? names.join(', ') : 'Nothing else runs on this day yet';
 }
 
@@ -335,7 +388,7 @@ function activeLocations() {
 
 module.exports = {
   SUBCATEGORY_ORDER, activeWeek, weekBySlug, serviceDaysOf, weekItemsOf,
-  everyServiceDayOf,
+  everyServiceDayOf, meatlessLabel,
   standingItems, standingRunsOn, weekItemRunsOn, pickupWindowFor, clock,
   deliveryOnFor, closureFor, menuForDay, findItem, alsoAvailableLine, activeLocations,
   soldOn, soldOnAll, featuredCapFor, toRenderItem,

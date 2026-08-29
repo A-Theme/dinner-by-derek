@@ -129,9 +129,43 @@ function loadWeek() {
     if (!days.length) return null;
     if (days.every((d) => d.closed)) return null;   // nothing to advertise
 
+    /* The meatless main gets its own row, under the day it runs on and named
+     * the way the posts have always named it. It is a second main, so a poster
+     * that showed Monday's short ribs and not the vegetarian plate beside them
+     * would advertise half of what is on.
+     *
+     * Matched against the days already read rather than by working dates out
+     * of week_start, so there is one idea of which dates this week covers.
+     * A file predating the column simply returns nothing here.
+     */
+    const meatless = db.prepare(
+      `SELECT name, full_price, weekdays FROM week_items
+       WHERE week_id = ? AND kind = 'meatless' AND TRIM(name) != ''`).get(week.id);
+    let runsOn = [];
+    if (meatless) {
+      try { runsOn = JSON.parse(meatless.weekdays || '[]'); } catch { runsOn = []; }
+    }
+    const rows = [];
+    for (const d of days) {
+      rows.push(d);
+      const wd = T.weekdayOf(d.service_date);
+      if (!d.closed && runsOn.includes(wd)) {
+        rows.push({
+          service_date: d.service_date,
+          dish_name: meatless.name,
+          full_price: meatless.full_price,
+          closed: 0,
+          closed_note: '',
+          // Overrides the date label for this row only. Two rows carrying the
+          // same date is the point: they are the same evening.
+          label: wd === 'mon' ? 'Meatless Monday' : 'Meatless',
+        });
+      }
+    }
+
     return {
       title: week.title,
-      days,
+      days: rows,
       tz: setting('timezone', 'America/Toronto'),
       pickup: [setting('pickup_start', '16:00'), setting('pickup_end', '19:00')],
       cutoffHour: Number(setting('cutoff_hour', '22')),
@@ -151,6 +185,11 @@ function loadWeek() {
 const SAMPLE = {
   title: 'Sample week',
   days: [
+    // A Monday and its meatless main, for the same reason the closed day is
+    // here: the two-rows-one-evening case is the one worth being able to look
+    // at before a real week goes out.
+    { service_date: '2026-08-17', dish_name: 'Swedish Meatballs', full_price: 2200 },
+    { service_date: '2026-08-17', dish_name: 'Chana Masala', full_price: 1800, label: 'Meatless Monday' },
     { service_date: '2026-08-18', dish_name: 'Braised Beef Short Rib', full_price: 2200 },
     // A closed day in the sample too, so the template can be judged with one
     // in it rather than only discovering how it looks on a real post.
@@ -215,7 +254,9 @@ async function menu(w) {
   // a full week still fits without the rows touching.
   const panelX = 64, panelW = W - 128;
   const bandTop = 470, bandBottom = 1120, pad = 52;
-  const rows = w.days.slice(0, 7);
+  // Eight, not seven: a full week plus the meatless main is eight rows, and
+  // the one that used to fall off the end was the last day of the week.
+  const rows = w.days.slice(0, 8);
   const rowH = Math.min(150, (bandBottom - bandTop - pad * 2) / rows.length);
   const panelH = rows.length * rowH + pad * 2;
   const panelY = Math.round((bandTop + bandBottom) / 2 - panelH / 2);
@@ -249,7 +290,7 @@ async function menu(w) {
       const line = shut ? (note ? `Closed · ${note}` : 'Closed') : d.dish_name;
       const price = shut ? '' : money(d.full_price);
       return [
-        label(T.fmtDayLong(d.service_date, w.tz),
+        label(d.label || T.fmtDayLong(d.service_date, w.tz),
           { x: panelX + 40, y: dayY, size: dayySize, fill: palette['tan-deep'], track: 4 }),
         text(fit(line, dishSize, shut ? panelW - 80 : dishMax), {
           x: panelX + 40, y: dishY, size: dishSize, font: DISPLAY,

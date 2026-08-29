@@ -475,25 +475,35 @@ router.post('/week/:id/day/:dayId/delete', (req, res) => {
   back(res, req, 'Service day removed.');
 });
 
-const WEEK_ITEM_LABELS = { soup: 'Soup', salad: 'Salad', dessert: 'Dessert' };
+/* The four level-2 slots, each with the two names it needs: the noun a
+ * sentence uses, and the line confirming a save. Two names rather than one
+ * because the fourth slot will not decline like the others — "Meatless Monday
+ * of the week saved" is neither English nor true. */
+const WEEK_ITEM_SLOTS = {
+  soup: { noun: 'soup', saved: 'Soup of the week saved.' },
+  salad: { noun: 'salad', saved: 'Salad of the week saved.' },
+  dessert: { noun: 'dessert', saved: 'Dessert of the week saved.' },
+  meatless: { noun: 'meatless dish', saved: 'Meatless Monday saved.' },
+};
 
 /* One copy, because there are three routes asking it, and because
- * `WEEK_ITEM_LABELS[kind]` answered for inherited names: POSTing to
+ * `WEEK_ITEM_SLOTS[kind]` answered for inherited names: POSTing to
  * /admin/week/1/constructor walked past the guard and reached the INSERT, where
  * the table's CHECK constraint refused it and the owner got a 500. The database
  * was doing the guard's job, which is a fine backstop and a poor front door. */
-const isWeekItemKind = (k) => Object.prototype.hasOwnProperty.call(WEEK_ITEM_LABELS, k);
+const isWeekItemKind = (k) => Object.prototype.hasOwnProperty.call(WEEK_ITEM_SLOTS, k);
 
-/* Keep this week's soup, salad or dessert on the saved list — the same button
-   the featured dish of a day has, at the level above it. */
+/* Keep this week's meatless dish, soup, salad or dessert on the saved list —
+   the same button the featured dish of a day has, at the level above it. */
 router.post('/week/:id/:kind/save', (req, res, next) => {
   const kind = req.params.kind;
   if (!isWeekItemKind(kind)) return next();
   const item = db.prepare('SELECT * FROM week_items WHERE week_id = ? AND kind = ?')
     .get(Number(req.params.id), kind);
+  const noun = WEEK_ITEM_SLOTS[kind].noun;
   if (!item || !item.name.trim()) {
-    return back(res, req, null, `There is no ${kind} on this week yet. `
-      + `Fill it in, save it, then save the ${kind}.`);
+    return back(res, req, null, `There is no ${noun} on this week yet. `
+      + `Fill it in, save it, then save the ${noun}.`);
   }
   const what = DISH.save(item);
   back(res, req, what === 'updated'
@@ -501,19 +511,23 @@ router.post('/week/:id/:kind/save', (req, res, next) => {
     : `"${item.name}" saved. You can put it on any week from now on.`);
 });
 
-/* Put a saved soup, salad or dessert on this week. */
+/* Put a saved dish into one of the week's slots. Three of them take their own
+   kind; the meatless slot takes a main, which is what the list it is picked
+   from holds. */
 router.post('/week/:id/:kind/use', (req, res, next) => {
   const kind = req.params.kind;
   if (!isWeekItemKind(kind)) return next();
   const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(Number(req.params.id));
   if (!week) return back(res, req, null, 'That week no longer exists.');
 
+  const wants = DISH.WEEK_SLOTS[kind];
   const dish = DISH.byId(req.body.dish_id);
-  if (!dish || dish.kind !== kind) {
-    return back(res, req, null, `Pick one of your saved ${kind}s first.`);
+  if (!dish || dish.kind !== wants) {
+    return back(res, req, null,
+      `Pick one of your saved ${DISH.KIND_LABELS[wants].toLowerCase()} first.`);
   }
-  DISH.applyToWeek(dish.id, week.id);
-  back(res, req, `"${dish.name}" is this week's ${kind}. `
+  DISH.applyToWeek(dish.id, week.id, kind);
+  back(res, req, `"${dish.name}" is this week's ${WEEK_ITEM_SLOTS[kind].noun}. `
     + 'The review box is unticked — tick it before you publish.');
 });
 
@@ -524,7 +538,8 @@ router.post('/week/:id/:kind', (req, res, next) => {
   const item = IF.parse(req.body, kind, { withWeekdays: true });
 
   // UNIQUE(week_id, kind) means this upsert can only ever produce one soup,
-  // one salad and one dessert per week, no matter what arrives in the body.
+  // one salad, one dessert and one meatless dish per week, no matter what
+  // arrives in the body.
   db.prepare(`INSERT INTO week_items
       (week_id, kind, name, description, photo, halal, allergens, dismissed, ack, ack_of,
        weekdays, full_on, full_label, full_price, full_cap, single_on, single_label,
@@ -543,7 +558,7 @@ router.post('/week/:id/:kind', (req, res, next) => {
       item.single_on, item.single_label, item.single_price, item.single_cap);
 
   if (req.get('X-Draft')) return res.json({ ok: true });
-  back(res, req, `${WEEK_ITEM_LABELS[kind]} of the week saved.`);
+  back(res, req, WEEK_ITEM_SLOTS[kind].saved);
 });
 
 /* Duplicate last week — the biggest time saver, so it is built first and

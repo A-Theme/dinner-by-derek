@@ -17,9 +17,10 @@ db.pragma('foreign_keys = ON');
    The domain model is deliberately NOT a single generic dish table:
      Level 1  service_days   — one row per date, featured dish inline.
                                A service day IS a date plus its featured dish.
-     Level 2  week_items     — soup, salad and dessert, owned by the week.
-                               UNIQUE(week_id, kind) makes a second soup, salad
-                               or dessert impossible at the storage layer.
+     Level 2  week_items     — soup, salad, dessert and the meatless main,
+                               owned by the week. UNIQUE(week_id, kind) makes a
+                               second one of any of them impossible at the
+                               storage layer.
      Level 3  standing_items — the persistent catalogue. Belongs to no week.
 
    They are merged only by menu.js at render time.
@@ -88,7 +89,7 @@ CREATE TABLE IF NOT EXISTS service_days (
 CREATE TABLE IF NOT EXISTS week_items (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   week_id       INTEGER NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
-  kind          TEXT NOT NULL CHECK (kind IN ('soup','salad','dessert')),
+  kind          TEXT NOT NULL CHECK (kind IN ('soup','salad','dessert','meatless')),
   name          TEXT NOT NULL DEFAULT '',
   description   TEXT NOT NULL DEFAULT '',
   photo         TEXT,
@@ -762,6 +763,57 @@ for (const [table, nameCol] of [
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         week_id       INTEGER NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
         kind          TEXT NOT NULL CHECK (kind IN ('soup','salad','dessert')),
+        name          TEXT NOT NULL DEFAULT '',
+        description   TEXT NOT NULL DEFAULT '',
+        photo         TEXT,
+        halal         INTEGER NOT NULL DEFAULT 0,
+        allergens     TEXT NOT NULL DEFAULT '[]',
+        dismissed     TEXT NOT NULL DEFAULT '[]',
+        ack           INTEGER NOT NULL DEFAULT 0,
+        ack_of        TEXT,
+        weekdays      TEXT NOT NULL DEFAULT '["tue","wed","thu"]',
+        full_on       INTEGER NOT NULL DEFAULT 1,
+        full_label    TEXT NOT NULL DEFAULT 'Full size',
+        full_price    INTEGER,
+        full_cap      INTEGER,
+        single_on     INTEGER NOT NULL DEFAULT 0,
+        single_label  TEXT NOT NULL DEFAULT 'Meal for one',
+        single_price  INTEGER,
+        single_cap    INTEGER,
+        UNIQUE(week_id, kind)
+      )`);
+      db.exec(`INSERT INTO week_items_rebuild (${cols}) SELECT ${cols} FROM week_items`);
+      db.exec('DROP TABLE week_items');
+      db.exec('ALTER TABLE week_items_rebuild RENAME TO week_items');
+    })();
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+/**
+ * The meatless main joins level 2, and the CHECK constraint has to be widened
+ * the same way again — SQLite still cannot alter one in place.
+ *
+ * It sits here rather than on service_days because of what it is: one dish per
+ * week, chosen once, running on Monday. That is the shape week_items already
+ * has, down to UNIQUE(week_id, kind) refusing a second one and the `weekdays`
+ * column deciding which days it runs. Putting it inline on the day would have
+ * meant a second set of dish columns on all seven days to serve one of them.
+ *
+ * What it is NOT is a side. It is billed on the day page beside the featured
+ * dish and it carries its own ceiling; the level it is stored at is an
+ * authoring fact, not a claim about where it appears.
+ */
+{
+  const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='week_items'").get();
+  if (ddl && !ddl.sql.includes("'meatless'")) {
+    const cols = db.prepare('PRAGMA table_info(week_items)').all().map((c) => c.name).join(', ');
+    db.pragma('foreign_keys = OFF');
+    db.transaction(() => {
+      db.exec(`CREATE TABLE week_items_rebuild (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        week_id       INTEGER NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
+        kind          TEXT NOT NULL CHECK (kind IN ('soup','salad','dessert','meatless')),
         name          TEXT NOT NULL DEFAULT '',
         description   TEXT NOT NULL DEFAULT '',
         photo         TEXT,
