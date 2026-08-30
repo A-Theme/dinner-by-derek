@@ -75,7 +75,7 @@ boot output on the 30th say so; the rest are as they were.
 | `TOKEN_ENCRYPTION_KEY` | empty; needed only for Facebook one-tap publishing |
 | `SMTP_*` | still empty as of 30 Aug — orders are recorded, nothing is sent. Cyberimpact is chosen and signed up for; the domain validation there is the outstanding step |
 | `FB_APP_ID` / `FB_APP_SECRET` | empty; copy-and-paste publishing works without them |
-| `NODE_ENV` / `TRUST_PROXY` | was `development` and unset; **not re-read since the move**, and `TRUST_PROXY` must be `1` behind nginx |
+| `NODE_ENV` / `TRUST_PROXY` | **both correct, established 2026-08-30** — production cache headers prove `NODE_ENV=production`, and the boot output's silence then proves `TRUST_PROXY` is on |
 
 ---
 
