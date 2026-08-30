@@ -912,7 +912,7 @@ PNGs.
 ## Sticker
 
 A 54 × 70 mm label — the line-art mark and a QR — for a thermal printer, in
-both orientations.
+both orientations plus a code-only variant.
 
 ```bash
 npm run sticker
@@ -926,19 +926,32 @@ npm run sticker
 > printed dead with nothing on it to give that away. Check a sticker by
 > scanning it, never by looking at it.
 
-| File | Shape | Pixels | For |
-|---|---|---|---|
-| `sticker-portrait-203dpi.png` | 54 × 70 | 432 × 559 | Zebra, Rollo, most direct-thermal printers |
-| `sticker-portrait-300dpi.png` | 54 × 70 | 638 × 827 | Brother QL and other higher-resolution units |
-| `sticker-landscape-203dpi.png` | 70 × 54 | 559 × 432 | as above |
-| `sticker-landscape-300dpi.png` | 70 × 54 | 827 × 638 | as above |
+| File | Shape | at 203 dpi | at 300 dpi | What is on it |
+|---|---|---|---|---|
+| `sticker-portrait.png` | 54 × 70 | 432 × 559 | 638 × 827 | the mark stacked over the code |
+| `sticker-landscape.png` | 70 × 54 | 559 × 432 | 827 × 638 | the mark and the code side by side |
+| `sticker-scan.png` | 54 × 70 | 432 × 559 | 638 × 827 | the code at full width under "SCAN ME" |
+
+> [!IMPORTANT] One resolution per run, and the dpi is not in the filename
+> A run writes these three names at **one** resolution — 203 by default, which
+> suits Zebra, Rollo and most direct-thermal units. Generating 300 for a Brother
+> QL **overwrites** the same three files rather than adding new ones, so the only
+> way to know which resolution is on disk is the pixel dimensions above. A custom
+> size takes the other path and writes `sticker-WxHmm-DPIdpi.png`, which does
+> carry both in the name.
+>
+> Older builds wrote `sticker-portrait-203dpi.png` and friends. Nothing produces
+> those names now, so any that survive are stale and cannot be refreshed — delete
+> them rather than print them.
 
 Portrait stacks the mark over the code. Landscape sets them side by side,
 which is the only arrangement that uses the extra width rather than leaving a
-band of blank stock down each side.
+band of blank stock down each side. The scan variant drops the mark to a line
+of type and gives everything else to the code, for when the sticker's whole job
+is to be scanned.
 
 **Print the one that matches your printer and your stock, and do not scale**
-**it.** All four are black and transparent only: every pixel is fully opaque
+**it.** All three are black and transparent only: every pixel is fully opaque
 black or fully transparent, with no antialiasing. A thermal head has no greys
 — it burns a dot or it does not — so a soft edge gets dithered into a scatter,
 which on a small QR is the difference between scanning and not. Resampling one
