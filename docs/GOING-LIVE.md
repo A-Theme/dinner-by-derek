@@ -44,7 +44,7 @@ within four hours of a commit whose entire purpose was to re-read it.
 | Admin password | `ok: hashed` scrypt | `ADMIN_PASSWORD_HASH` is set and the plaintext `ADMIN_PASSWORD` line is gone. Step 2 is already done; confirm the boot output rather than redo it. |
 | Weeks | `ok: published` starting 2026-08-31 | The week of **Aug 31 – Sep 6 went live on its own** at 20:27 UTC on 2026-08-29 — the first time the scheduler has published rather than the owner. It had been refused as empty three hours earlier and published itself once it had content, which is the design working. It replaces the Aug 24 week described in the rest of this document. What is on it has `warn: not re-read`. |
 | Soup / salad | `warn: not re-read` was none | |
-| Standing items | `warn: not re-read` was 3 unreviewed of 6 | Breaded Chicken Cutlets, Pulled Pork and BBQ Brisket. The two reheat bags have no description to review against, so those get written first. Other Options is invisible to customers until all three are ticked. **This is the one blocking item on the list** — see step 4, which also flags a fourth item worth a look. |
+| Standing items | `ok: all reviewed` | **Done, reported 2026-08-30.** Breaded Chicken Cutlets, Pulled Pork and BBQ Brisket were the three outstanding, and they were the one blocking item on this list. **Other Options is therefore visible to customers now**, which it had never been — the section stays hidden while any item in it is unticked. |
 | Allergen dictionary | `warn: not re-read` was 479 terms | Was 303 until the seed learned to reach a database that already exists. The extra 176 include caesar salad, oatmeal, tempura, croissant and most of the breads — the working vocabulary of these menus. A bigger dictionary can raise a new suggestion on an item already reviewed, which revokes that review; all fourteen reviewed items were re-checked on 2026-08-26 and none were revoked. |
 | Saved dishes | `warn: not re-read` was 816 | A catalogue was imported. The Load picker is live and long, which is why it now sorts by how often a dish has run. |
 | Orders | `warn: not re-read` was 1 test order | One order exists (Aug 25, Pork Souvlaki). Delete it before the first real one, so the first real one is unmistakably the first. |
@@ -154,16 +154,21 @@ dish has run, which is empty ordering today and useful ordering in a month.
 
 ### 4. Do the allergen reviews
 
-Three standing items are still at `ack = 0`: **Breaded Chicken Cutlets**,
-**Pulled Pork (Reheat Bag)** and **BBQ Brisket (Reheat Bag)**. Breaded Chicken
-Cutlets already has a description and suggested allergens, so it needs only the
-read and the tick. The two reheat bags have no description at all, and an item
-with no description shows nothing useful and cannot be reviewed meaningfully —
-so **write those two first, then review all three**.
+**Done — reported 2026-08-30.** The three that were outstanding — **Breaded
+Chicken Cutlets**, **Pulled Pork (Reheat Bag)** and **BBQ Brisket (Reheat
+Bag)** — have been reviewed.
 
-One to look at while you are in here: **Pulled Chicken (Reheat Bag)** is ticked
-but still has no description. The tick is yours and stays yours; it is only
-worth knowing that it went on an item with nothing written under it.
+**What follows from that is worth a look:** Other Options was invisible to
+customers for as long as any of the three was unticked, and it is not any more.
+The customer menu shows more than it did the day before, so it is worth reading
+the live site once as a customer to see the standing items the way they now
+appear.
+
+The method is kept below because it is the same every week, for every new dish.
+
+**Pulled Chicken (Reheat Bag)** was raised here as ticked-with-no-description
+and consciously left. It is not an open action; it is recorded so nobody
+rediscovers it and files it as a bug.
 
 For every item and every day's dish: read what the dictionary suggests, accept
 what is true, dismiss what is not, and tick the box. The app will refuse to
@@ -187,12 +192,14 @@ arrive, so the first real order is unmistakably the first.
 
 ### 6. Regenerate the printed graphics
 
-**Settings → Graphics → regenerate**, now that `BASE_URL` is the real domain.
+**Done — reported 2026-08-30.** Regenerated after `BASE_URL` became the real
+domain, so **the QR codes now lead somewhere and printing is safe.** That was
+the last thing standing between the business card and a printer.
 
-Anything generated before this points at a placeholder. Do this before
-anything goes to a printer — the business card and sticker QR codes are the
-expensive mistake, because they are wrong on paper rather than wrong on a
-screen.
+The reason it was a step of its own: anything generated before `BASE_URL` was
+set points at a placeholder, and that is the expensive version of the mistake —
+wrong on paper rather than wrong on a screen. Regenerate again if `BASE_URL`
+ever changes.
 
 ### 7. Reinstall the PWA on the phone
 

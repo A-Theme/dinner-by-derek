@@ -87,14 +87,15 @@ boot output on the 30th say so; the rest are as they were.
 
 ~~2. **`BASE_URL` on the real domain.**~~ **Done.** The app boots naming
    `https://dinnerbyderek.ca`, which is also what turns the secure cookie and HSTS
-   on — the app reads the scheme rather than `NODE_ENV`. **One thing this leaves
-   open:** the graphics have not been regenerated since, so any QR code made
-   before the move still points at a placeholder. Regenerate before anything
-   reaches a printer.
+   on — the app reads the scheme rather than `NODE_ENV`. The graphics were
+   regenerated afterwards (reported 30 Aug), so **the QR codes lead somewhere and
+   printing is safe** — that was the last thing between the business card and a
+   printer.
 
-3. **The three standing-item reviews.** The only work here nobody but Derek can
-   do. The tick means he checked that dish, as written, for the menu it is going
-   on. Not re-read since the move — check the dashboard rather than this line.
+~~3. **The three standing-item reviews.**~~ **Done, reported 30 August.** The
+   only work in this list nobody but Derek could do. **Other Options is now
+   visible to customers** for the first time — the section stays hidden while any
+   item in it is unticked, and all three were the ones holding it shut.
 
 4. **Email, and then the payments poller.** These are now the two real pieces of
    unbuilt work and they are in that order for a reason: the poller reads a
