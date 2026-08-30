@@ -53,6 +53,10 @@
     var el = document.createElement('div');
     el.className = 'installbar';
     el.innerHTML = inner;
+    // beforeinstallprompt can fire more than once for a single page load, so
+    // a second bar has to replace the first rather than stack under it.
+    var open = slot.querySelector('.installbar');
+    if (open) open.remove();
     slot.appendChild(el);
     var close = el.querySelector('[data-dismiss]');
     if (close) {
