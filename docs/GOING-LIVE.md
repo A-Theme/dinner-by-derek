@@ -302,18 +302,50 @@ would have doubled everything already in flight.
 **What is left is plumbing**, and it needs somewhere to run — so it waits on
 hosting like everything else:
 
-- A mailbox that receives **only** these notifications, so the parser never
-  reads anything else. `payments@dinnerbyderek.ca` is the address for it, and
-  the free way to have one is Cloudflare Email Routing — see
-  [DEPLOY → Optional: email](DEPLOY.md#optional-email). Two things follow from
-  it being *forwarding* rather than a mailbox. It has no IMAP of its own, so
-  the poller would read whichever inbox it forwards into, which puts the filter
-  back in the picture; and everything arriving that way is a forwarded copy,
-  which is already handled — the original identity is the one kept, so a
-  transfer is one payment however many times it was forwarded.
-- Getting the notifications there at all is a change at the bank, not here:
-  they go to the address RBC has on file, so that is the one that has to become
-  `payments@dinnerbyderek.ca`.
+The domain runs **one address**, `orders@dinnerbyderek.ca`. It is what
+customers see, what the app sends from, and what transfers are addressed to. It
+is not a mailbox: Cloudflare Email Routing forwards it to Derek's own inbox, and
+that inbox is where a person reads it — see
+[DEPLOY → Optional: email](DEPLOY.md#optional-email).
+
+- **An e-transfer is not an email, and the forward is invisible to Interac.**
+  The customer types the address into their own bank; Interac looks it up in its
+  **Autodeposit registry**, which is a lookup keyed on the exact address, not a
+  delivery. Registering the personal inbox that `orders@` forwards *into* does
+  nothing for transfers addressed to `orders@`. The address itself has to be
+  registered, at the bank, by Derek. The confirmation link Interac sends to it
+  arrives down the forward like anything else, and a bank account can hold
+  several autodeposit addresses, so a personal one already registered is
+  undisturbed.
+- **Only one of the two notifications is proof of money.** Unregistered, a
+  transfer produces *"X sent you money"* with a claim link, and the money has
+  **not** moved — it moves when a person clicks it and answers a security
+  question. Registered, it produces *"…has been automatically deposited"*, which
+  is the transfer landing. `record()` may only be trusted with the second, or
+  `paid` stops meaning money arrived and starts meaning someone intends to
+  send it — which is the exact confusion this whole module exists to prevent.
+  It is also the notification the parser was built and tested against.
+- **The parser no longer gets a mailbox of its own**, and that is the cost of
+  one address: `orders@` carries customer replies as well as bank mail. The
+  poller reads a **separate inbox that receives nothing else**, fed by a rule on
+  Derek's inbox that forwards only mail from `payments.interac.ca`. That keeps
+  the exclusive mailbox the parser wants without a second address on the domain,
+  and Derek keeps seeing the notifications himself.
+- **Not Derek's own inbox, read directly.** Personal Outlook/Hotmail accounts no
+  longer accept a password over IMAP — basic auth was withdrawn — so reading one
+  means OAuth2: an app registration, a refresh token, and renewal running on the
+  VPS. A plain-password inbox that exists only for this is smaller in every
+  direction, and it is not somebody's personal mail.
+- Everything the poller reads is therefore a **forwarded copy**, which is
+  already handled: the original identity is the one kept, so a transfer is one
+  payment however many times it was forwarded.
+- **A `From:` line is not evidence.** The address is printed on the site, so
+  anyone can send it a message shaped like a notification, and the forward strips
+  the original's DMARC verdict on the way through. What stands between that and a
+  wrong `paid` is the existing rule: auto-marking requires the order reference
+  *and* the exact total to agree. That is a high bar for a stranger and a low one
+  for the customer who was shown both, so a forged notification is worth
+  remembering as a thing a customer could do, not a thing a passer-by could.
 - An IMAP client dependency, and `IMAP_*` credentials alongside `SMTP_*`.
 - A poller that decodes MIME to the headers and text part the parser expects,
   hands each message to `P.record()` in `server/payments.js`, and runs on a

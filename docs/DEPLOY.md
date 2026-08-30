@@ -1019,7 +1019,7 @@ In Cloudflare, for `dinnerbyderek.ca` → **Email** → **Email Routing**:
 
 1. **Add a destination address** — the inbox already being read. Cloudflare
    sends it a verification link, and nothing forwards until that is clicked.
-2. **Create the address**, e.g. `payments@dinnerbyderek.ca`, pointed at it.
+2. **Create the address**, e.g. `orders@dinnerbyderek.ca`, pointed at it.
 3. **Accept the DNS records it offers.** Cloudflare writes three `MX` records
    and one SPF `TXT` itself. Take the button; the MX hostnames are assigned per
    zone, so a set copied from a blog post or another domain is the wrong set.
