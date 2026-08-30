@@ -1,7 +1,7 @@
 ---
 eyebrow: Handoff · 26 August 2026
 figures:
-  1109 = checks passing
+  1180 = checks passing
   230 = recipes seeded
   16 = recipe buttons
   3 = items unreviewed
@@ -28,6 +28,19 @@ snapshot of a moment.
 `origin/main`, suites green at **720 acceptance, 389 flow**. Re-read on
 29 August, five commits later: **732 acceptance, 389 flow** (`npm test`).
 
+Re-read again on **30 August** at `c4e484f`: **764 acceptance, 416 flow**. The
+biggest change since the 29th is not in the code — **the app is deployed.** It
+runs on an OVH VPS in Beauharnois, answering `https://dinnerbyderek.ca` under
+systemd, and the week of Aug 31 – Sep 6 published itself on schedule at 20:27
+UTC on the 29th. The two items that headed the next-steps list below — hosting,
+and `BASE_URL` on the real domain — are done.
+
+Everything in the table below that reads the *database* was last read on the
+26th and has **not** been re-read since the move: the file that matters now is
+`/var/lib/dinnerbyderek/dinnerbyderek.db` on the server, and the only copy the
+laptop can reach is a development one that has already diverged from it. Treat
+those rows as history rather than as state.
+
 ### The database
 
 | | |
@@ -51,40 +64,97 @@ else can mean it.
 
 ### `.env`
 
+Read on the 26th. The three rows that could be checked from the server's own
+boot output on the 30th say so; the rest are as they were.
+
 | In .env | State |
 |---|---|
 | Admin password | **hashed**, and the plaintext line is gone |
 | Session secret | set |
-| `BASE_URL` | still `http://localhost:3000` — everything downstream waits on this |
+| `BASE_URL` | `https://dinnerbyderek.ca` since 29 Aug — secure cookies and HSTS follow from the scheme |
 | `TOKEN_ENCRYPTION_KEY` | empty; needed only for Facebook one-tap publishing |
-| `SMTP_*` | empty; orders are still recorded, nothing is sent |
+| `SMTP_*` | still empty as of 30 Aug — orders are recorded, nothing is sent |
 | `FB_APP_ID` / `FB_APP_SECRET` | empty; copy-and-paste publishing works without them |
-| `NODE_ENV` / `TRUST_PROXY` | `development`, and unset |
+| `NODE_ENV` / `TRUST_PROXY` | was `development` and unset; **not re-read since the move**, and `TRUST_PROXY` must be `1` behind nginx |
 
 ---
 
 ## Next steps
 
-1. **Hosting.** Nothing that can run a Node process exists yet, and everything
-   below waits on it. The guide recommends OVHcloud VPS-1 in Beauharnois, Quebec —
+~~1. **Hosting.**~~ **Done, 29 August.** OVHcloud VPS-1 in Beauharnois, Quebec —
    chosen so customer names, phones and delivery addresses stay in Canada, not for
-   latency. Hostinger is the documented runner-up. Both figures `DEPLOY.md` used to
-   flag unverified were read off the configurator on 2026-08-29: the CAD $6.20 is
-   the twelve-month price paid upfront (≈$74.40/year ex. taxes, against $7.30
-   month-to-month), and it renews at the same rate rather than stepping up.
-2. **`BASE_URL` on the real domain.** More hangs off this than it looks: secure
-   cookies, every link in every email, the QR codes on the card and stickers, and
-   Facebook's ability to fetch a post image at all. Set it, then **regenerate the
-   graphics before anything reaches a printer** — a wrong QR on paper is the
-   expensive version of this mistake.
+   latency. Ubuntu 24.04, nginx, systemd unit `dinnerbyderek`.
+
+~~2. **`BASE_URL` on the real domain.**~~ **Done.** The app boots naming
+   `https://dinnerbyderek.ca`, which is also what turns the secure cookie and HSTS
+   on — the app reads the scheme rather than `NODE_ENV`. **One thing this leaves
+   open:** the graphics have not been regenerated since, so any QR code made
+   before the move still points at a placeholder. Regenerate before anything
+   reaches a printer.
+
 3. **The three standing-item reviews.** The only work here nobody but Derek can
    do. The tick means he checked that dish, as written, for the menu it is going
-   on.
-4. **Then, optionally, in this order.** SMTP, so an order arriving is something
-   you learn without opening the dashboard — set `SMTP_*` and `BASE_URL` together
-   or not at all, because mail with a localhost base is mail whose every button is
-   dead. Then `TOKEN_ENCRYPTION_KEY` if Facebook one-tap publishing is wanted; the
-   copy-and-paste path works without it. Then the IMAP poller.
+   on. Not re-read since the move — check the dashboard rather than this line.
+
+4. **Email, and then the payments poller.** These are now the two real pieces of
+   unbuilt work and they are in that order for a reason: the poller reads a
+   mailbox, so it cannot exist before there is one. Neither is started.
+   See [Known and unbuilt](#known-and-unbuilt).
+
+5. **`TOKEN_ENCRYPTION_KEY`**, if Facebook one-tap publishing is wanted. The
+   copy-and-paste path works without it and always will.
+
+---
+
+## What changed on 30 August
+
+### It went live, and then it was audited — `c4e484f`
+
+The app is deployed. It runs on the VPS, on the real domain, and on the night
+of the 29th the scheduler published a week by itself for the first time —
+refused as empty at 17:40, live at 20:27 once it had content, which is exactly
+the behaviour that branch was written for.
+
+Then a line-by-line audit of every source file, with sixteen findings and every
+one of them fixed. Two were worth the exercise on their own:
+
+- **An order counted an item once per line, not once per item.** The browser
+  cannot produce a duplicate line — it keys its lines by item and size — but the
+  lines are a JSON string in a form field, and three lines of five each sat under
+  a remaining count of five and sold fifteen. Reproduced before fixing: fifteen
+  portions against a cap of five, and nine of a featured dish against a cap of
+  three. Nothing had ever been ordered through it; the hole was open and unused.
+- **The backup carried neither the payments, nor the recipe book, nor the record
+  of allergen terms deliberately removed.** Restoring onto a fresh machine lost
+  the ledger and every house recipe; restoring on the same machine unlinked every
+  payment from the order it paid for; and removed terms came back by themselves
+  on the next boot, undoing an allergen decision days later and in silence.
+  Format version 3. Older files still restore and leave what they do not carry
+  alone.
+
+The rest, briefly: a service day outside its own week's dates was still
+orderable by URL; the per-day pickup window skipped the clock guard the Settings
+form uses and froze `NaN:undefined AM` onto orders; the allergen matcher read
+`breaded` but not `breading`, and `gravy` but not `gravies`; a percent sign in
+any dashboard message threw out of the toast, so the one time the owner was told
+the dashboard was broken was the moment a write had succeeded; and opening This
+Week **created a week**, which made a GET the only request in the app that
+writes.
+
+**What the suite could not tell us.** All 1,161 checks passed before the audit
+and after every one of these bugs was found — which was the premise it started
+from. Three fixtures in the flow suite turned out to be built on the
+adrift-day hole, and one check asserted the This Week write by name. That is a
+better argument that both were real than anything in the report.
+
+Checks are at **1,180** (764 acceptance, 416 flow), and four of them that used
+to read the source for a string now ask the running server the question instead.
+
+**Deployed and verified**: `git pull` fast-forwarded `e1a6f06..c4e484f` on the
+box and the service restarted. Before deploying, the three changes that could
+touch live records were measured against a copy of the database — no reviewed
+item lost its tick, no per-day pickup override existed to be refused, and no
+order had ever held the same item twice.
 
 ---
 
@@ -349,9 +419,20 @@ see into a constraint error rather than a skip.
 
 ## Known and unbuilt
 
+- **Email is not sending.** Confirmed on the server on 30 August: every send
+  logs `[mail] not sent (SMTP not configured or no recipient)`. Orders are
+  recorded and shown in the dashboard regardless — that is deliberate, mailer.js
+  swallows send failures so a broken mailbox can never lose a stored order — but
+  it also means **nobody is told an order arrived** unless they open the
+  dashboard, and the customer's confirmation, with the reference they are asked
+  to put in the transfer, is shown once on screen and never again. `npm run
+  mailtest` sends one real message through whatever `.env` holds and separates
+  connecting from being allowed to send as that From address.
 - **The IMAP poller.** `P.record()` in `server/payments.js` is the whole entry
   point. Now that the grid format is understood, this is plumbing rather than
   guesswork. Point it at a mailbox that receives only the bank's notifications.
+  It cannot be started before the mailbox above exists, which is the whole of
+  why these two are in this order.
 - **The installed PWA is an untested surface.** Every camera test ran in a
   browser tab; an installed home-screen app has its own Android permission
   grants.
@@ -375,7 +456,15 @@ Both are documented in comments where they matter rather than covered:
   synchronous and no `await` sits between the read and the write. A second
   worker, or an `await` added inside `create()`, and the day oversells.
 
-One habit worth keeping: several checks now read source files to assert a fix is
+One habit worth keeping: several checks read source files to assert a fix is
 still in place. They are useful and they have one failure mode — matching a
 *mention* of the thing rather than the thing. One did exactly that during this
 work, by matching a comment that quoted the old code.
+
+Four of them were converted on 30 August to ask the running server instead: the
+mail escaper and the e-transfer instruction are now called rather than grepped
+for, signing out is a real POST expecting the login page, and all three print
+sheets are handed a date that is not one. Three remain, each with a comment
+saying why — the token-expiry condition cannot be reached without `index.js`
+exporting its job, and the other two sit beside stronger behavioural checks of
+the same thing.
