@@ -299,8 +299,11 @@ the same transfer is one payment whether it is forwarded by hand, forwarded
 twice, or later read straight from a mailbox. Without that, switching a poller on
 would have doubled everything already in flight.
 
-**What is left is plumbing**, and it needs somewhere to run — so it waits on
-hosting like everything else:
+**The plumbing is now built.** `server/mailbox.js` reads the mailbox every five
+minutes, off entirely unless `IMAP_HOST` is set, with `npm run poll -- --dry` to
+try it against a live mailbox without writing anything. What is left is not
+code — it is four arrangements outside this repository, and they are the
+substance of the thing rather than an afterthought:
 
 The domain runs **one address**, `orders@dinnerbyderek.ca`. It is what
 customers see, what the app sends from, and what transfers are addressed to. It
@@ -346,10 +349,11 @@ that inbox is where a person reads it — see
   *and* the exact total to agree. That is a high bar for a stranger and a low one
   for the customer who was shown both, so a forged notification is worth
   remembering as a thing a customer could do, not a thing a passer-by could.
-- An IMAP client dependency, and `IMAP_*` credentials alongside `SMTP_*`.
-- A poller that decodes MIME to the headers and text part the parser expects,
-  hands each message to `P.record()` in `server/payments.js`, and runs on a
-  timer next to the scheduled publish in `server/index.js`.
+- The mailbox has to allow **a password over IMAP**, which is the step that
+  catches people out. Gmail does, with an app password and 2-Step Verification
+  switched on first; the account's own password fails and does not say why.
+  Step-by-step in [DEPLOY → Optional: reading the bank's
+  notifications](DEPLOY.md#optional-reading-the-banks-notifications).
 
 Nothing else changes. `record()` already accepts `source: 'mailbox'`, the
 Payments screen already labels those rows *from the mailbox*, and duplicate

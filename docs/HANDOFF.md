@@ -97,10 +97,12 @@ boot output on the 30th say so; the rest are as they were.
    visible to customers** for the first time — the section stays hidden while any
    item in it is unticked, and all three were the ones holding it shut.
 
-4. **Email, and then the payments poller.** These are now the two real pieces of
-   unbuilt work and they are in that order for a reason: the poller reads a
-   mailbox, so it cannot exist before there is one. Neither is started.
-   See [Known and unbuilt](#known-and-unbuilt).
+4. **Email, and the accounts the poller needs.** The poller itself is now built;
+   what is unfinished is everything around it that is not code — a sending
+   provider so confirmations go out, an inbox for the poller to read, the
+   forward rule that feeds it, and `orders@dinnerbyderek.ca` registered for
+   Autodeposit at the bank, so the notification means money arrived rather than
+   money offered. See [Known and unbuilt](#known-and-unbuilt).
 
 5. **`TOKEN_ENCRYPTION_KEY`**, if Facebook one-tap publishing is wanted. The
    copy-and-paste path works without it and always will.
@@ -429,11 +431,11 @@ see into a constraint error rather than a skip.
   to put in the transfer, is shown once on screen and never again. `npm run
   mailtest` sends one real message through whatever `.env` holds and separates
   connecting from being allowed to send as that From address.
-- **The IMAP poller.** `P.record()` in `server/payments.js` is the whole entry
-  point. Now that the grid format is understood, this is plumbing rather than
-  guesswork. Point it at a mailbox that receives only the bank's notifications.
-  It cannot be started before the mailbox above exists, which is the whole of
-  why these two are in this order.
+- **The IMAP poller is built** — `server/mailbox.js`, off unless `IMAP_HOST` is
+  set, `npm run poll -- --dry` to try it against a live mailbox without writing
+  anything. What is left is not code: an inbox for it to read, the rule that
+  feeds it, and the bank registered to send notifications to the address
+  customers actually pay.
 - **The installed PWA is an untested surface.** Every camera test ran in a
   browser tab; an installed home-screen app has its own Android permission
   grants.

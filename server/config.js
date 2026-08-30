@@ -69,6 +69,32 @@ module.exports = {
     pass: process.env.SMTP_PASS || '',
     from: process.env.SMTP_FROM || '',
   },
+  /**
+   * Reading the bank's notifications back out of a mailbox.
+   *
+   * Blank host means off, the same way SMTP_HOST does: the Payments screen
+   * keeps its paste box and nothing polls. This is deliberately a *different*
+   * mailbox from the one the app sends as — `orders@dinnerbyderek.ca` carries
+   * customer replies, and the parser is owed an inbox that holds nothing but
+   * bank mail. See docs/PAYMENTS.md.
+   *
+   * `allowFrom` is the list of domains a notification may come from. It is a
+   * filter and not a proof: the messages arrive forwarded, so the original's
+   * DMARC verdict is long gone by the time they land, and a From line is
+   * whatever the sender typed. What actually stands between a forged
+   * notification and a wrong `paid` is the rule in payments.js — reference and
+   * exact total must agree — not this list.
+   */
+  imap: {
+    host: process.env.IMAP_HOST || '',
+    port: Number(process.env.IMAP_PORT || 993),
+    secure: String(process.env.IMAP_SECURE || 'true') === 'true',
+    user: process.env.IMAP_USER || '',
+    pass: process.env.IMAP_PASS || '',
+    mailbox: process.env.IMAP_MAILBOX || 'INBOX',
+    allowFrom: (process.env.IMAP_ALLOW_FROM || 'payments.interac.ca')
+      .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean),
+  },
   facebook: {
     appId: process.env.FB_APP_ID || '',
     appSecret: process.env.FB_APP_SECRET || '',

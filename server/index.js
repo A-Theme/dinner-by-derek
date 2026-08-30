@@ -345,6 +345,63 @@ function runScheduledPublish() {
   }
 }
 
+/* --- Background job: reading the payments mailbox -------------------------
+ * Off unless IMAP_HOST is set, the same way email is off unless SMTP_HOST is.
+ * With it off the Payments screen keeps its paste box and nothing else changes,
+ * which is the state this ran in for its whole first season.
+ *
+ * Every five minutes rather than every minute: a transfer that is read a few
+ * minutes late costs nothing, and the mailbox is a network round trip to
+ * somebody else's server rather than an indexed read of our own table.
+ *
+ * `busy` is the only piece of state. A poll that stalls on a slow IMAP server
+ * must not have a second one started on top of it — they would fight over the
+ * same messages, and while `record()` makes that harmless it also makes it
+ * pointless.
+ */
+const mailbox = require('./mailbox');
+let mailboxBusy = false;
+/* A wrong password does not get better by being retried on time. Without this,
+ * one bad character in .env is a stack trace every five minutes for as long as
+ * nobody looks — which buries the log that would say what else went wrong.
+ * Backs off to roughly an hour and stays there; any success resets it. */
+let mailboxFailures = 0;
+let mailboxCyclesToSkip = 0;
+
+function runMailboxPoll() {
+  if (!mailbox.configured() || mailboxBusy) return;
+  if (mailboxCyclesToSkip > 0) { mailboxCyclesToSkip -= 1; return; }
+  mailboxBusy = true;
+  mailbox.poll({
+    onRecorded(result) {
+      const p = result.payment;
+      if (result.auto) {
+        console.log(`[payments] $${(p.amount / 100).toFixed(2)} from `
+          + `${p.sender_name || 'someone'} settled ${result.matched.ref}`);
+      } else {
+        console.log(`[payments] $${(p.amount / 100).toFixed(2)} from `
+          + `${p.sender_name || 'someone'} is waiting to be matched`);
+      }
+    },
+    onSkipped({ reason }) {
+      // Only the ones that looked like bank mail and could not be read. A
+      // message that was never a notification is not worth a line.
+      if (reason !== 'not a notification') console.warn(`[payments] unread: ${reason}`);
+    },
+  })
+    .then(() => { mailboxFailures = 0; mailboxCyclesToSkip = 0; })
+    .catch((e) => {
+      mailboxFailures += 1;
+      mailboxCyclesToSkip = Math.min(2 ** mailboxFailures, 12) - 1;
+      console.error(`[job] payments mailbox (attempt ${mailboxFailures}): ${e.message}`);
+      if (mailboxFailures === 1) {
+        console.error('       Check IMAP_USER and IMAP_PASS — an app password, not '
+          + 'the account password — and that IMAP is switched on at the provider.');
+      }
+    })
+    .finally(() => { mailboxBusy = false; });
+}
+
 /* --- Start ---------------------------------------------------------------
  * Three settings are safe on a laptop and wrong on a public address, and each
  * fails silently rather than loudly, so they are said out loud at boot.
@@ -375,12 +432,19 @@ const server = app.listen(config.port, () => {
   console.log(`  Customers:  ${config.baseUrl}/`);
   console.log(`  Dashboard:  ${config.baseUrl}/admin`);
   console.log(`  Database:   ${config.dbPath}`);
-  console.log(`  Uploads:    ${config.uploadDir}\n`);
+  console.log(`  Uploads:    ${config.uploadDir}`);
+  console.log(`  Payments:   ${mailbox.configured()
+    ? `reading ${config.imap.user} every ${mailbox.POLL_MS / 60000} minutes`
+    : 'mailbox polling off (IMAP_HOST unset) — paste on the Payments screen'}\n`);
   warnAboutExposure();
   checkTokenExpiry();
   setInterval(checkTokenExpiry, 60 * 60 * 1000).unref();
   runScheduledPublish();
   setInterval(runScheduledPublish, 60 * 1000).unref();
+  if (mailbox.configured()) {
+    runMailboxPoll();
+    setInterval(runMailboxPoll, mailbox.POLL_MS).unref();
+  }
 });
 
 function shutdown(signal) {

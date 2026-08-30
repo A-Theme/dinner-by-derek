@@ -129,11 +129,14 @@ unclaimed, which is where money nobody has accounted for belongs.
 - **A notification with no `Message-ID`** is identified by a hash of its text, so
   two transfers identical in every visible character — same sender, same cent,
   same message, no timestamp — read as a duplicate and the second is refused.
-- **Reading the mailbox automatically is not built.** `P.record()` in
-  `server/payments.js` is the whole entry point: a poller that reads an IMAP
-  mailbox and hands it each new message needs nothing else, and the Payments
-  screen does not change. Point it at a mailbox that receives **only** the
-  bank's notifications, so the parser never reads anything else.
+- **The mailbox is read on a timer, not watched.** `server/mailbox.js` polls
+  every five minutes, so a transfer can be that late showing up. It is off
+  entirely unless `IMAP_HOST` is set, and the paste box never goes away.
+- **A forwarded notification cannot be proved genuine.** The forward strips the
+  original's DMARC result, so `IMAP_ALLOW_FROM` is a filter for what is worth
+  reading rather than evidence. The reference-and-exact-total rule is what
+  actually stands between a forged notification and a wrong `paid` — a high bar
+  for a stranger and a low one for the customer who was shown both.
 
 Both limits fail in the same direction: not marking something paid that was not.
 

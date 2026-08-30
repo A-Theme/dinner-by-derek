@@ -643,12 +643,32 @@ fail in the direction of not marking something paid that wasn't.
 
 ### Reading the mailbox automatically
 
-Not built yet, and it needs somewhere to run. `P.record()` in
-`server/payments.js` is the whole entry point: a poller that reads an IMAP
-mailbox and hands each new message to it needs nothing else, and the Payments
-screen does not change. Point it at a mailbox that receives **only** the bank's
-notifications — a dedicated address, or a filter that forwards them — so the
-parser never reads anything else.
+**Dashboard → Payments still takes a pasted notification and always will.** On
+top of that, the app can fetch them itself: fill in the `IMAP_*` block in `.env`
+and `server/mailbox.js` reads the mailbox every five minutes. Leave `IMAP_HOST`
+blank and none of this happens, which is how it ran for its whole first season.
+
+It reads **a mailbox of its own**, not the address on the domain.
+`orders@dinnerbyderek.ca` is the reply-to on every confirmation, so it carries
+customer mail; the poller reads a separate inbox that nobody reads by eye, fed
+by a rule forwarding only the bank's notifications into it. Everything arriving
+that way is a forwarded copy, which is already handled — the identity kept is
+the original's, so one transfer is one payment however many times it was
+forwarded, and re-reading a message costs nothing.
+
+Run it by hand before trusting the timer:
+
+```bash
+npm run poll -- --dry
+```
+
+That connects, fetches, parses and reports, without recording a payment or
+marking a message read. Drop `-- --dry` to do it for real.
+
+**What it does not do is authenticate.** The forward strips the original's DMARC
+result on the way through, so `IMAP_ALLOW_FROM` decides what is worth reading,
+not what is genuine. What protects `paid` is the rule that always did: an order
+settles itself only when the reference **and** the exact total agree.
 
 ---
 

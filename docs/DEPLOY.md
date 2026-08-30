@@ -1066,6 +1066,86 @@ npm run mailtest -- someone@example.com
 Then go and look at the inbox. Accepted for delivery is not the same as
 arrived, and the folder it lands in is the whole question.
 
+## Optional: reading the bank's notifications
+
+Interac has no API. The only signal that a transfer landed is the email the
+bank sends, and the app can read those out of a mailbox rather than waiting to
+be told — see *Matching e-transfers to orders* in the README. It is off until
+`IMAP_HOST` is set, and the paste box on the Payments screen never goes away.
+
+Four things have to be true, and the first two are not on this server.
+
+**1. The bank has to be sending them to the right place.** An e-transfer is not
+an email: the customer types an address into their own bank, and Interac looks
+it up in its **Autodeposit registry**. A forward is invisible to that lookup, so
+registering the inbox `orders@dinnerbyderek.ca` forwards *into* does nothing —
+the address itself has to be registered, by Derek, at RBC. Registered, a
+transfer deposits itself and the notification says *has been automatically
+deposited*. Unregistered, it says *sent you money* and carries a claim link, and
+**the money has not moved yet** — reading those as payments would make `paid`
+mean money offered instead of money arrived, which is the one thing this whole
+feature exists to avoid.
+
+**2. The notifications need an inbox of their own.** `orders@dinnerbyderek.ca`
+is the reply-to on every customer confirmation, so it is not that inbox. Use a
+free mailbox that exists for nothing else and that nobody reads by eye, and feed
+it with a rule on whichever inbox `orders@` forwards into — condition *from
+contains `payments.interac.ca`*, action *forward*, keeping a copy so Derek still
+sees his own mail. Everything arriving that way is a forwarded copy, which is
+handled: the identity kept is the original's, so one transfer is one payment
+however many times it was forwarded.
+
+**3. That mailbox has to allow a password over IMAP.** This is the part that
+catches people out. Personal Outlook and Hotmail accounts no longer do — basic
+auth was withdrawn, and reading one now means OAuth2, which is a refresh token
+and a renewal job on this server. Gmail does, with an **app password**: turn on
+2-Step Verification on the account, then create an app password and use that.
+The account's own password will not work and will not say so clearly.
+
+```
+IMAP_HOST=imap.gmail.com
+IMAP_PORT=993
+IMAP_SECURE=true
+IMAP_USER=pollerindex@gmail.com
+IMAP_PASS=<the 16-character app password, no spaces>
+IMAP_MAILBOX=INBOX
+IMAP_ALLOW_FROM=payments.interac.ca
+```
+
+**4. Prove it before it can write anything.**
+
+```bash
+npm run poll -- --dry
+```
+
+Connects, fetches, parses, and reports what it *would* record — writing no
+payment and marking no message read, so it can be run against the live mailbox
+as often as you like. Only when that output looks right, drop the flag:
+
+```bash
+npm run poll
+```
+
+On the day the forwarding rule is switched on, everything already sitting in
+the mailbox is older than the fortnight the timer looks back over and would
+never be read. Catch up once, as wide as you like — re-reading a message is
+free, because every payment is identified by the bank's own `Message-ID`:
+
+```bash
+npm run poll -- --days 90
+```
+
+Then restart the app and the timer takes over, every five minutes. The boot
+banner says which mailbox it is reading, or says that polling is off.
+
+**What this does not do is authenticate.** The forward strips the original's
+DMARC result on the way through, so `IMAP_ALLOW_FROM` decides what is worth
+reading, not what is genuine. An order still only settles itself when the
+reference **and** the exact total agree; everything weaker waits for a person.
+That bar is high for a stranger and low for the customer who was shown both, so
+the protection that matters most is simply that this mailbox is not a published
+address — the only thing that should ever write to it is Derek's forward.
+
 ---
 
 ## When something is wrong

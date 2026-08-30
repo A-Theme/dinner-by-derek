@@ -2158,6 +2158,73 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('and a cash order is not asked for one either',
     !/in the e-transfer message/.test(mailPlain(cashOrder, etLines, 'x', { forCustomer: true })));
 }
+/* --- Flattening the bank's table ------------------------------------------
+   `server/mailbox.js` turns Interac's HTML into the grid `parseNotification`
+   already reads: the label alone on a line, the value on the line below. It is
+   not a general-purpose html-to-text pass and must not become one — anything
+   that reflows the two columns back into sentences takes the message field
+   with it, and the message field is where the order reference rides.
+
+   The whole chain is exercised in flow.js against a real MIME message. These
+   are the edges of the one function. */
+{
+  const M = require('../server/mailbox');
+  const P = require('../server/payments');
+
+  const cell = M.flatten('<table><tr><td>Message:</td><td>A1B2C3D4</td></tr></table>');
+  check('a table cell ends a line, which is what makes it a grid',
+    cell.split('\n').filter(Boolean), ['Message:', 'A1B2C3D4']);
+
+  check('and the grid it produces is one the parser reads',
+    P.parseNotification(`Subject: you got $37.00\n\n${cell}`).memo, 'A1B2C3D4');
+
+  check('a <br> ends a line too', M.flatten('Amount:<br>$12.00').split('\n'), ['Amount:', '$12.00']);
+
+  /* Entities are not decoration here: an ampersand in a customer's name and a
+     non-breaking space between a label and its colon both come through encoded,
+     and a label the parser cannot match is a field it does not read. */
+  check('entities are decoded', M.flatten('<p>Sent From:</p><p>Ben &amp; Jo&#39;s</p>'),
+    'Sent From:\nBen & Jo\'s');
+  check('a non-breaking space is a space',
+    M.flatten('<td>Sent&nbsp;From:</td><td>Alex</td>'), 'Sent From:\nAlex');
+
+  ok('style and script blocks are dropped rather than read as text',
+    !/font-family|track\(/.test(
+      M.flatten('<style>td{font-family:x}</style><script>track()</script><td>Amount:</td>')));
+
+  /* Mail HTML is padded with empty rows and spacer cells. The grid pattern
+     tolerates up to four blank lines between a label and its value, so runs are
+     collapsed rather than left to grow past it. */
+  check('runs of blank lines are collapsed to one',
+    M.flatten('<td>Message:</td><tr></tr><tr></tr><tr></tr><tr></tr><tr></tr><td>A1B2C3D4</td>'),
+    'Message:\n\nA1B2C3D4');
+
+  check('and the value is still found across them',
+    P.parseNotification('Subject: you got $9.00\n\n'
+      + M.flatten('<td>Message:</td><tr></tr><tr></tr><td>DEADBEEF</td>')).memo, 'DEADBEEF');
+
+  check('nothing at all is not a crash', M.flatten(null), '');
+
+  /* The filter that decides what is worth parsing. Loose on purpose — see the
+     note on isNotification — but not so loose that ordinary mail gets read. */
+  const asMail = (from, subject, body) => `From: ${from}\nSubject: ${subject}\n\n${body}`;
+  ok('a forward that quotes the original headers is bank mail',
+    M.isNotification(asMail('Derek <d@hotmail.com>', 'Fw: money',
+      'From: ALEX <notify@payments.interac.ca>'), ['payments.interac.ca']));
+  /* A redirect can leave no Interac address anywhere, which is why the subject
+     counts too: dropping one of these is silent, and the only symptom is a
+     transfer that mysteriously has to be pasted by hand. */
+  ok('and so is a redirect that leaves no address behind, on its subject alone',
+    M.isNotification(asMail('Derek <d@hotmail.com>',
+      'INTERAC e-Transfer: You have received $37.00', 'table'), ['payments.interac.ca']));
+  ok('a customer reply is not, dollar sign and all',
+    !M.isNotification(asMail('Jane <jane@example.com>', 'Re: Order confirmed',
+      'Is the $37.00 for two?'), ['payments.interac.ca']));
+  ok('and neither is a newsletter',
+    !M.isNotification(asMail('Shop <news@shop.com>', 'Fall sale', 'Spend $50'),
+      ['payments.interac.ca']));
+}
+
 
 /* --- A parameter sent twice is not a server fault --------------------------
    Express turns ?date=a&date=b into an array, better-sqlite3 refuses to bind

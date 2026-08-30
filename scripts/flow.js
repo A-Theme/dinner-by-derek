@@ -2124,6 +2124,99 @@ const PAST_DATE = T.addDays(today, -2);
       /no\+longer\+exists/i.test(String(again.location)), String(again.location));
   }
 
+  /* --- A forwarded notification, read the way the poller reads it ---------
+     The whole chain in one pass, because every seam in it has already been a
+     place where money quietly failed to arrive: a real MIME message, decoded
+     by mailparser, rendered by mailbox.messageText, handed to P.record().
+
+     The message is HTML-only on purpose. That is the case with no text part of
+     its own, so mailparser invents one by stripping the tags — which puts the
+     entire grid on a single line, "Amount:$37.00Message:FEEDFACE". It still
+     mentions money, so a reading picked on "does this half have an amount in
+     it" picks that one and loses the message field, and losing the message
+     field is the difference between an order settling itself and an order
+     sitting unmatched with nothing in the log to explain it. */
+  {
+    const { simpleParser } = require('mailparser');
+    const M = require('../server/mailbox');
+    const P = require('../server/payments');
+    const { db } = require('../server/db');
+
+    db.prepare(`INSERT INTO orders (ref,service_date,status,name,phone,email,allergy_notes,
+      method,subtotal,delivery_fee,total,payment_method)
+      VALUES ('FEEDFACE',?,'confirmed','Alex Rivers','5195550144','ar@example.com','',
+              'pickup',3700,0,3700,'etransfer')`).run(SERVICE_DATE);
+
+    /* Outlook's shape, taken from a real forward: the original Message-ID
+       demoted to In-Reply-To, both folded onto the line below their own name,
+       and the notification itself carried as an HTML table. */
+    const raw = [
+      'From: Derek Hines <derekhines@hotmail.com>',
+      "Subject: Fw: INTERAC e-Transfer: You've received $37.00 from ALEX RIVERS",
+      `Date: ${new Date().toUTCString()}`,
+      'Message-ID:',
+      ' <fwd-outer-1@outlook.com>',
+      'In-Reply-To:',
+      ' <interac-original-1@ca-central-1.amazonses.com>',
+      'Content-Type: text/html; charset=utf-8',
+      '',
+      '<html><body><table>',
+      '<tr><td>Sent From:</td><td>ALEX RIVERS</td></tr>',
+      '<tr><td>Amount:</td><td>$37.00</td></tr>',
+      '<tr><td>Message:</td><td>FEEDFACE</td></tr>',
+      '<tr><td>Reference Number:</td><td>CA9d8f7e6a</td></tr>',
+      '</table></body></html>',
+    ].join('\r\n');
+
+    const text = M.messageText(await simpleParser(raw));
+
+    ok('a forward whose own From line is Derek is still recognised as bank mail',
+      M.isNotification(text, ['payments.interac.ca']));
+
+    const parsed = P.parseNotification(text);
+    check('the sender survives the table', parsed.sender_name, 'ALEX RIVERS');
+    check('and the amount', parsed.amount, 3700);
+    /* The one that the stripped-tags reading loses. */
+    check('and the message, which is where the reference rides', parsed.memo, 'FEEDFACE');
+    check('read as a field rather than guessed at', parsed.memo_parsed, 1);
+
+    /* A forward carries two identities. The one that belongs to the money is
+       Interac's, so the same transfer is one payment however it arrived. */
+    check('the payment is identified by the original, not the forward',
+      parsed.external_id, 'msgid:interac-original-1@ca-central-1.amazonses.com');
+
+    const result = P.record(text, { source: 'mailbox' });
+    ok('reference and exact total agreeing settles the order by itself', result.auto);
+    check('and it settles the right one', result.matched.ref, 'FEEDFACE');
+    check('the order is now paid', db.prepare("SELECT paid FROM orders WHERE ref='FEEDFACE'").get().paid, 1);
+    check('and the row says the mailbox found it, not a person',
+      db.prepare("SELECT source FROM payments WHERE external_id=?").get(parsed.external_id).source,
+      'mailbox');
+
+    /* Which is what lets the poller keep no memory of what it has read. */
+    const again = P.record(text, { source: 'mailbox' });
+    ok('reading the same message a second time is free', again.duplicate);
+
+    /* Forwarded twice — a new outer Message-ID, the same original underneath.
+       This is the case that would have doubled everything in flight. */
+    const reforwarded = raw
+      .replace('<fwd-outer-1@outlook.com>', '<fwd-outer-2@outlook.com>')
+      .replace('From: Derek Hines <derekhines@hotmail.com>', 'From: Derek <derek@example.com>');
+    const twice = P.record(M.messageText(await simpleParser(reforwarded)), { source: 'mailbox' });
+    ok('and so is the same transfer forwarded a second time', twice.duplicate);
+
+    /* A customer reply lands in the same shape and must not be read as money,
+       even though it is a real email with a real dollar sign in it. */
+    const reply = [
+      'From: Jane Customer <jane@example.com>',
+      'Subject: Re: Order confirmed — Wednesday',
+      '',
+      'Is the $37.00 for two people or one?',
+    ].join('\r\n');
+    ok('a customer reply is not mistaken for a notification',
+      !M.isNotification(M.messageText(await simpleParser(reply)), ['payments.interac.ca']));
+  }
+
   /* --- The buttons on the recipe list ------------------------------------
      Over HTTP, because a filter is a thing you click: the query string, the
      lit button and the rows shown all have to agree, and a unit test on the
