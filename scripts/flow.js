@@ -116,6 +116,17 @@ const PAST_DATE = T.addDays(today, -2);
     const strict = await GET('/admin/export/orders.csv');
     check('exports refuse outright rather than redirect', strict.status, 401);
 
+    /* Signing out is a state change and sits below the guard like every other
+       one, so a stranger's POST goes to the login page rather than clearing the
+       session of whoever loaded a form on another site. Asked as a request:
+       the acceptance suite used to compare two indexOf positions in admin.js,
+       which proved the lines are in that order and nothing about the guard
+       still working. */
+    const out = await POST('/admin/logout', {});
+    check('signing out is behind the guard, like every other state change', out.status, 302);
+    ok('and a stranger is sent to sign in instead',
+      String(out.location).startsWith('/admin/login'), String(out.location));
+
     const manifest = await GET('/manifest.webmanifest');
     const m = JSON.parse(manifest.text);
     ok('the manifest is installable', m.display === 'standalone' && m.icons.length >= 3);
@@ -143,6 +154,31 @@ const PAST_DATE = T.addDays(today, -2);
 
     const dash = await GET('/admin');
     check('the dashboard opens', dash.status, 200);
+  }
+
+  /* --- Starting the week is a POST, not a page view -----------------------
+     Opening This Week used to create the week, which made a GET the only
+     request in this app that writes — and the session cookie is SameSite=Lax,
+     so a top-level navigation from anywhere would do it: a link, a restored
+     tab, a prefetch. The blank draft that produced is not inert either, because
+     the scheduler then emails about a week nobody started.
+
+     It runs here, before the page is examined below, because everything after
+     this point needs a week to look at. */
+  let weekId;
+  let weekSlug;
+  {
+    const { db } = require('../server/db');
+    const offer = await GET('/admin/week');
+    check('visiting This Week when there is none renders', offer.status, 200);
+    check('and starts nothing', db.prepare('SELECT COUNT(*) n FROM weeks').get().n, 0);
+    ok('it offers to start one instead', /action="\/admin\/week\/new"/.test(offer.text));
+
+    await POST('/admin/week/new', {});
+    /* Tapping it twice, or a restored tab re-posting it, is one week. */
+    await POST('/admin/week/new', {});
+    check('the button starts exactly one draft',
+      db.prepare('SELECT COUNT(*) n FROM weeks').get().n, 1);
   }
 
   /* --- The photo inputs must not sit inside the dropzone ----------------- *
@@ -205,13 +241,10 @@ const PAST_DATE = T.addDays(today, -2);
   }
 
   /* --- Build a week ----------------------------------------------------- */
-  let weekId;
-  let weekSlug;
   {
-    await GET('/admin/week');                     // creates the draft week
     const { db } = require('../server/db');
     const week = db.prepare('SELECT * FROM weeks ORDER BY id DESC LIMIT 1').get();
-    ok('visiting This Week starts a draft', !!week);
+    ok('the week the button started is there', !!week);
     weekId = week.id;
     weekSlug = week.slug;
     check('a new week starts as a draft, not live', week.status, 'draft');
@@ -653,6 +686,19 @@ const PAST_DATE = T.addDays(today, -2);
 
     const pickup = await GET(`/admin/sheet/pickup/${SERVICE_DATE}`);
     check('the pickup sheet renders', pickup.status, 200);
+
+    /* All three, with a date that is not one. These are the only places a date
+       arrives off a URL and goes to Intl by way of parseDate, where a shape it
+       cannot read used to be a 500 blaming the server for a mistyped link.
+       Asked of each sheet in turn rather than by counting how many times
+       `sheetDate` appears in the file — a count says the words are there, not
+       that all three act on what comes back. */
+    for (const [label, kind] of [['kitchen', 'kitchen'], ['pickup', 'pickup'], ['delivery', 'delivery']]) {
+      const bad = await GET(`/admin/sheet/${kind}/2026-08-32`);
+      check(`the ${label} sheet refuses a date that rolls past the month`, bad.status, 404);
+      const junk = await GET(`/admin/sheet/${kind}/tuesday`);
+      check(`and the ${label} sheet refuses one that is not a date at all`, junk.status, 404);
+    }
   }
 
   /* --- Duplicating a week resets every acknowledgement --------------------- */
@@ -697,6 +743,25 @@ const PAST_DATE = T.addDays(today, -2);
     const desc = 'Slow braised beef with buttered mash';
     const today = T.todayIn(TZ);
     const tomorrow = T.addDays(today, 1);
+
+    /* The week is moved to cover today and tomorrow, and put back at the end —
+       the same borrow-and-return this block already does with the clock.
+
+       It has to be. A cutoff is 22:00 on the day BEFORE service, so the only
+       dates whose cutoff can already have passed are today and tomorrow; and
+       the week under test starts on the Monday of SERVICE_DATE, which is three
+       days out. Whether those two dates fall inside it is therefore a fact
+       about which weekday the suite is run on: Monday to Thursday they do,
+       Friday to Sunday they do not.
+
+       On the days they did not, this block used to be testing the cutoff
+       through a day the week does not cover — which the customer week page has
+       never listed, the publish gate has never checked, and the order route now
+       refuses by name. The check was passing on a fixture the app is meant to
+       reject. Moving the week makes the day a real one on every weekday, so
+       what is under test is the clock and only the clock. */
+    const realWeekStart = db.prepare('SELECT week_start FROM weeks WHERE id = ?').get(weekId).week_start;
+    db.prepare('UPDATE weeks SET week_start = ? WHERE id = ?').run(T.mondayOf(today), weekId);
 
     const addDay = (date) => {
       const reviewed = A.reviewedText({ name: 'Cutoff Test Dish', description: desc });
@@ -772,6 +837,10 @@ const PAST_DATE = T.addDays(today, -2);
     settings.set('cutoff_minute', 0);
     settings.set('late_cutoff_hour', 6);
     settings.set('late_cutoff_minute', 0);
+    /* Handed back, so everything below this reads the week it was written
+       against. The two days added above go out of range with it, which is
+       correct — they were only ever this block's fixture. */
+    db.prepare('UPDATE weeks SET week_start = ? WHERE id = ?').run(realWeekStart, weekId);
   }
 
   /* --- Closing a day, and closing the week --------------------------------
@@ -1136,8 +1205,23 @@ const PAST_DATE = T.addDays(today, -2);
      * is what this block is checking. */
     const A = require('../server/allergens');
     const pubWeek = db.prepare(
-      `SELECT id, slug FROM weeks WHERE status = 'published' ORDER BY id DESC LIMIT 1`).get();
+      `SELECT id, slug, week_start FROM weeks WHERE status = 'published' ORDER BY id DESC LIMIT 1`).get();
     ok('a published week exists to hang the duplicate test on', !!pubWeek);
+
+    /* The published week is moved to cover SERVICE_DATE, and put back at the
+       end — the same borrow-and-return the late-window block above does.
+
+       Whichever week is published by this point was not chosen for its dates:
+       it is whatever the scheduling checks left behind, and its seven days can
+       be wholly in the past, so no date inside it has a cutoff still to come.
+       The day this test hangs on was therefore attached to a week that does not
+       cover it — never listed on the customer week page, never seen by the
+       publish gate, and now refused by the order route. What is under test here
+       is the submission key and not the calendar, so the week is made to cover
+       the date rather than the date bent to fit the week. */
+    const realPubStart = pubWeek.week_start;
+    db.prepare('UPDATE weeks SET week_start = ? WHERE id = ?')
+      .run(T.mondayOf(SERVICE_DATE), pubWeek.id);
 
     const dtDesc = 'Braised beef, for the duplicate-submission check';
     const dtReviewed = A.reviewedText({ name: 'Double Tap Dish', description: dtDesc });
@@ -1191,6 +1275,8 @@ const PAST_DATE = T.addDays(today, -2);
     delete bare.submission_key;
     await POST('/order', bare);
     check('an order without a key is still accepted', countFor('Double Tap'), 3);
+    /* Handed back, so the scheduling checks' week reads as they wrote it. */
+    db.prepare('UPDATE weeks SET week_start = ? WHERE id = ?').run(realPubStart, pubWeek.id);
     require('../server/ratelimit').reset();
   }
 
@@ -1422,13 +1508,44 @@ const PAST_DATE = T.addDays(today, -2);
     const O2 = require('../server/orders');
     const crypto = require('crypto');
     /* Strictly after today, for the same reason the duplicate-submission
-       block builds its own day: the earliest published day by this point is
+       block borrows a week: the earliest published day by this point is
        dated today and closed to orders at 6 a.m., so "the first one found"
-       was a day nobody could order for. */
-    const live = db.prepare(`SELECT w.slug, d.id AS day_id, d.service_date
-      FROM weeks w JOIN service_days d ON d.week_id = w.id
-      WHERE w.status = 'published' AND d.closed = 0 AND d.service_date > ?
-      ORDER BY d.service_date LIMIT 1`).get(today);
+       was a day nobody could order for.
+
+       Found through serviceDaysOf rather than by joining the two tables here,
+       because those are not the same question. A join answers "attached to a
+       published week", and this suite leaves days attached to weeks whose dates
+       have since moved past them; serviceDaysOf answers "on that week's menu",
+       which is what an order needs and what the route now enforces. */
+    /* And the week is borrowed and returned, as above. By this point the suite
+       has published, unpublished, duplicated and scheduled, and what is left
+       published covers only dates that have gone by — so there is no day both
+       on a menu and still ahead of its cutoff until one is made. */
+    const pub = db.prepare(
+      `SELECT id, week_start FROM weeks WHERE status = 'published' ORDER BY id DESC LIMIT 1`).get();
+    const realCollisionStart = pub && pub.week_start;
+    if (pub) {
+      db.prepare('UPDATE weeks SET week_start = ? WHERE id = ?')
+        .run(T.mondayOf(SERVICE_DATE), pub.id);
+      const A2 = require('../server/allergens');
+      const cDesc = 'Braised beef, for the reference-collision check';
+      const cReviewed = A2.reviewedText({ name: 'Collision Dish', description: cDesc });
+      db.prepare(`INSERT OR IGNORE INTO service_days
+        (week_id, service_date, dish_name, description, allergens, dismissed, ack, ack_of,
+         full_on, full_price)
+        VALUES (?,?,?,?,?,'[]',1,?,1,2200)`)
+        .run(pub.id, SERVICE_DATE, 'Collision Dish', cDesc,
+          JSON.stringify(A2.detect(cReviewed).map((h) => h.allergen)), cReviewed);
+    }
+    const live = (() => {
+      for (const w of db.prepare(
+        `SELECT id, slug FROM weeks WHERE status = 'published' ORDER BY id DESC`).all()) {
+        const d = M.serviceDaysOf(w.id)
+          .find((x) => !x.closed && x.service_date > today);
+        if (d) return { slug: w.slug, day_id: d.id, service_date: d.service_date };
+      }
+      return null;
+    })();
     ok('there is a day still open to order against', !!live, `today is ${today}`);
     const loc = db.prepare('SELECT id FROM locations WHERE active = 1 LIMIT 1').get();
     const taken = db.prepare('SELECT ref FROM orders ORDER BY id LIMIT 1').get();
@@ -1464,6 +1581,9 @@ const PAST_DATE = T.addDays(today, -2);
       !!placed && placed.order.ref !== taken.ref, placed && placed.order.ref);
     check('leaving the order that had it first alone',
       db.prepare('SELECT COUNT(*) n FROM orders WHERE ref = ?').get(taken.ref).n, 1);
+    if (pub) {
+      db.prepare('UPDATE weeks SET week_start = ? WHERE id = ?').run(realCollisionStart, pub.id);
+    }
   }
 
   /* --- Signing in against a HASHED password, over HTTP --------------------

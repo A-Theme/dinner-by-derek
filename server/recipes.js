@@ -1,6 +1,10 @@
 'use strict';
 const { db } = require('./db');
 const seed = require('./recipe-seed');
+/* The same LIKE escaper the orders search and the CSV export use. Imported
+   rather than written again here — a third copy is a third place for the next
+   fix to be applied in two of. */
+const { likeContains } = require('./exports');
 
 /**
  * Recipes: how a thing is made, kept apart from how it is sold.
@@ -170,7 +174,13 @@ function get(idOrSlug) {
 }
 
 /* Column names are written qualified because the list query joins the parent
-   recipe onto itself, and an unqualified `name` in that query is ambiguous. */
+   recipe onto itself, and an unqualified `name` in that query is ambiguous.
+   Looked up with hasOwnProperty rather than `SORTS[sort] ||`, which is the same
+   guard dishes.js, delivery.js and graphics.js each carry: every object
+   inherits `constructor`, so ?sort=constructor produced the Object function,
+   was truthy enough to skip the fallback, and put "function Object() { [native
+   code] }" into an ORDER BY clause. No route passes `sort` today; the guard is
+   here so that adding one is not the change that discovers this. */
 const SORTS = {
   name: 'r.name COLLATE NOCASE',
   category: "CASE r.category WHEN 'preparation' THEN 0 WHEN 'component' THEN 1 ELSE 2 END, r.name COLLATE NOCASE",
@@ -185,7 +195,14 @@ function list({ category = '', q = '', tag = '', sort = 'category' } = {}) {
   const where = [];
   const args = [];
   if (category) { where.push('r.category = ?'); args.push(category); }
-  if (q) { where.push('(r.name LIKE ? OR r.summary LIKE ?)'); args.push(`%${q}%`, `%${q}%`); }
+  /* Escaped, and declared with ESCAPE, exactly as the orders search is. A box
+     that takes words was reading them as patterns: "%" matched every recipe in
+     the book and "_" matched all of them too, so the one character a cook is
+     most likely to type looking for a percentage returned the whole list. */
+  if (q) {
+    where.push("(r.name LIKE ? ESCAPE '\\' OR r.summary LIKE ? ESCAPE '\\')");
+    args.push(likeContains(q), likeContains(q));
+  }
   /* EXISTS rather than a join, because a recipe carries more than one tag and
      joining would return it once per tag it happens to match. */
   if (tag) {
@@ -198,7 +215,7 @@ function list({ category = '', q = '', tag = '', sort = 'category' } = {}) {
     LEFT JOIN recipes p ON p.id = r.parent_id
     LEFT JOIN saved_dishes d ON d.id = r.dish_id
     ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-    ORDER BY ${SORTS[sort] || SORTS.category}`;
+    ORDER BY ${Object.prototype.hasOwnProperty.call(SORTS, sort) ? SORTS[sort] : SORTS.category}`;
   return db.prepare(sql).all(...args);
 }
 
@@ -377,9 +394,20 @@ function parseIngredientLine(line) {
   return { qty, unit, item, prep, optional };
 }
 
+/**
+ * A slug is never all digits.
+ *
+ * get() decides between an id and a slug by looking at the string, so a recipe
+ * named "2024" produced the slug "2024", the list linked to /admin/recipes/2024,
+ * and that lookup went to `WHERE id = 2024` — a 404 for a recipe that plainly
+ * exists, or, if some other recipe happens to hold that id, the wrong recipe
+ * shown under the right link. Prefixed with the same word the empty-name case
+ * already falls back to, so the two odd names read alike.
+ */
 function slugify(name, id) {
-  const base = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+  let base = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '').slice(0, 60) || 'recipe';
+  if (/^\d+$/.test(base)) base = `recipe-${base}`;
   const taken = db.prepare('SELECT id FROM recipes WHERE slug = ?').get(base);
   if (!taken || (id && taken.id === id)) return base;
   let n = 2;

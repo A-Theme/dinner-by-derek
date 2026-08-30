@@ -1443,7 +1443,7 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   const inFile = JSON.parse(good).saved_dishes;
   ok('a backup carries the saved dishes', Array.isArray(inFile) && inFile.length === 3,
     `saved_dishes in the file: ${JSON.stringify(inFile)}`);
-  check('and says which version wrote it', JSON.parse(good).version, 2);
+  check('and says which version wrote it', JSON.parse(good).version, 3);
   check('the round trip brought them back', dishCount(), 3);
   check('and counted them for the owner', back.dishes, 3);
 
@@ -1634,10 +1634,17 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     X2.likeContains('a' + String.fromCharCode(92) + 'b'),
     '%a' + String.fromCharCode(92, 92) + 'b%');
 
-  /* The mail escaper is used on text today, but it is named "escape". */
-  const mailerSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'mailer.js'), 'utf8');
-  ok('the mail escaper handles double quotes', mailerSrc.includes('&quot;'));
-  ok('and single quotes', mailerSrc.includes('&#39;'));
+  /* The mail escaper is used on text today, but it is named "escape".
+     Called rather than grepped for: reading the file for "&quot;" passes if
+     that string appears anywhere in it, including in a comment, and fails on a
+     rename that changes nothing about what the function does. */
+  const mailEsc = require('../server/mailer').esc;
+  check('the mail escaper handles double quotes', mailEsc('say "hi"'), 'say &quot;hi&quot;');
+  check('and single quotes', mailEsc("it's"), 'it&#39;s');
+  check('and angle brackets', mailEsc('<b>x</b>'), '&lt;b&gt;x&lt;/b&gt;');
+  check('and ampersands first, so nothing is double-escaped',
+    mailEsc('Fish & Chips'), 'Fish &amp; Chips');
+  check('and an absent value is an empty string, not "undefined"', mailEsc(undefined), '');
 
   /* The allergen chips are built from dictionary terms, which the owner
      edits and a restored backup can rewrite. There is no browser here to
@@ -2130,9 +2137,26 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('the confirmation screen asks e-transfer customers for the reference',
     /payment_method === 'etransfer'/.test(customerView)
     && /in the e-transfer message/.test(customerView));
-  const mailerSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'mailer.js'), 'utf8');
-  ok('so does the confirmation email', /in the e-transfer message/.test(mailerSrc));
-  ok('but only the customer\'s copy of it', /forCustomer/.test(mailerSrc));
+  /* The email is rendered rather than grepped for. Reading mailer.js for the
+     word "forCustomer" says the flag is mentioned somewhere in the file; it
+     says nothing about the owner's copy actually leaving the line out, which is
+     the whole claim. */
+  const mailPlain = require('../server/mailer').plain;
+  const etOrder = {
+    ref: 'REF12345', service_date: '2026-09-01', method: 'pickup', subtotal: 2200,
+    delivery_fee: 0, total: 2200, payment_method: 'etransfer',
+    location_name: 'Kitchen', location_addr: '1 Main St', pickup_window: '4:00 PM–7:00 PM',
+  };
+  const etLines = [{ qty: 1, item_name: 'Braised Beef', variant_label: 'Full size', unit_price: 2200 }];
+  const toCustomer = mailPlain(etOrder, etLines, 'Order confirmed', { forCustomer: true });
+  const toOwner = mailPlain(etOrder, etLines, 'New order');
+  ok('the confirmation email asks for the reference in the transfer message',
+    /in the e-transfer message/.test(toCustomer) && toCustomer.includes('REF12345'), toCustomer);
+  ok('but the owner\'s copy leaves that instruction out — he is not the one sending it',
+    !/in the e-transfer message/.test(toOwner), toOwner);
+  const cashOrder = { ...etOrder, payment_method: 'cash' };
+  ok('and a cash order is not asked for one either',
+    !/in the e-transfer message/.test(mailPlain(cashOrder, etLines, 'x', { forCustomer: true })));
 }
 
 /* --- A parameter sent twice is not a server fault --------------------------
@@ -2234,9 +2258,11 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     !T.isCalendarDate('2026-08-32'));
   check('and the roll is real, which is why the check is', T.addDays('2026-08-31', 1), '2026-09-01');
 
-  const admin3Src = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'admin3.js'), 'utf8');
-  const sheetGuards = (admin3Src.match(/const date = sheetDate\(req, res\);/g) || []).length;
-  check('all three print sheets check the date first', sheetGuards, 3);
+  /* That all three sheets actually apply it is asked of the running server in
+     flow.js, by requesting each one with a date that is not a date. Counting
+     occurrences of `sheetDate(req, res)` in the file said only that the words
+     appear three times, and would have gone on passing if one of the three
+     ignored what it got back. */
 }
 
 /* --- Headers belong to the whole site --------------------------------------
@@ -2252,9 +2278,12 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('the upload ceiling is one number, not two',
     /fileSize: images\.MAX_RAW/.test(indexSrc));
 
-  const adminSrc = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'admin.js'), 'utf8');
-  ok('signing out is behind the guard, like every other state change',
-    adminSrc.indexOf('router.use(auth.required)') < adminSrc.indexOf("router.post('/logout'"));
+  /* Signing out being behind the guard is asked of the running server in
+     flow.js: a POST with no session has to land on the login page. Comparing
+     two indexOf positions in the source proved the lines are in that order and
+     nothing at all about the guard still doing its job — it would go on passing
+     with auth.required edited to call next() unconditionally, which is the one
+     regression it exists to catch. */
 }
 
 /* --- A day belongs to the week whose dates contain it ----------------------

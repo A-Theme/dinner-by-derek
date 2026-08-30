@@ -991,7 +991,12 @@ function all() {
 
 module.exports = {
   db,
-  settings: { get, getInt, set, all, guard, usableTimezone, ALLOWED: ALLOWED_SETTINGS },
+  /* clockTime is exported for the same reason usableTimezone is: it is not
+   * only a settings guard, it is this app's definition of a wall-clock time it
+   * can store and print, and a service day's pickup override is one of those
+   * without being a setting. Reaching it through guard('pickup_start', …) would
+   * have worked and would have been a lie about what was being validated. */
+  settings: { get, getInt, set, all, guard, usableTimezone, clockTime, ALLOWED: ALLOWED_SETTINGS },
   /* Exported so the suite can drive a re-seed rather than restarting a process.
    * The old gate could not be tested at all from outside: it ran once at
    * require time against a database the test had just created empty, which is

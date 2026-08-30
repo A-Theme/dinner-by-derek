@@ -24,6 +24,48 @@ function escapeRe(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Lower case, and one kind of apostrophe.
+ *
+ * A word processor, a phone keyboard and Facebook all produce the curly one;
+ * the dictionary is typed into a form and carries the straight one. They are
+ * the same character to a cook and different characters to a regular
+ * expression, so "brewer's yeast" pasted out of a post raised no gluten at all
+ * while the same words typed by hand raised it. Applied to both sides, so it
+ * does not matter which of them has which.
+ */
+function flatten(s) {
+  return String(s == null ? '' : s).toLowerCase().replace(/[‘’ʼ]/g, '\'');
+}
+
+/**
+ * Every written form of one dictionary term, as regex alternatives.
+ *
+ * A phrase is matched literally — inflecting one is guesswork, and "half and
+ * half" has no plural worth guessing at.
+ *
+ * A single word carries the endings menu writing actually uses. The suffixes
+ * are the cheap half: butter/butters/buttered/buttering all hang off the term
+ * unchanged. The -y words are the half that needs its own form, because
+ * "gravy" to "gravies" is a change to the stem rather than something added to
+ * the end of it, and a suffix group can never reach it — which is why a menu
+ * "finished with two gravies" raised no wheat and no gluten.
+ *
+ * Only a consonant before the y. "soy" must not become "soies", and it is the
+ * vowel that tells them apart.
+ */
+function formsOf(t) {
+  if (t.includes(' ')) return [escapeRe(t)];
+  /* -ing earns its place the same way -ed did: "breaded" raised wheat and
+     gluten and "breading" raised nothing, for the same chicken. It costs a few
+     false suggestions — a rolling boil now offers wheat off "roll" — and that
+     is the trade this file has always made on purpose: a wrong suggestion is
+     one tap to dismiss, a missing one reaches a customer with an allergy. */
+  const forms = [`${escapeRe(t)}(?:e?s|ed|d|ing)?`];
+  if (/[^aeiou]y$/.test(t)) forms.push(`${escapeRe(t.slice(0, -1))}ies`);
+  return forms;
+}
+
 /** All dictionary rows, grouped term -> [allergen]. */
 function dictionary() {
   return db.prepare('SELECT term, allergen FROM allergen_terms ORDER BY term').all();
@@ -52,23 +94,19 @@ function reviewedText(item) {
  * Returns [{ allergen, terms: [matched words] }] ordered by the Health Canada list.
  */
 function detect(description) {
-  const text = String(description || '').toLowerCase();
+  const text = flatten(description);
   if (!text.trim()) return [];
 
   const hits = new Map(); // allergen -> Set(term)
   for (const { term, allergen } of dictionary()) {
-    const t = term.toLowerCase().trim();
+    const t = flatten(term).trim();
     if (!t) continue;
-    // Word-boundary match, tolerating the inflections menu writing actually
-    // uses: a trailing plural, and the past participle. "Buttered mash" has to
-    // match "butter" and "creamed corn" has to match "cream", or the dish that
-    // most needs a milk tag is the one that silently gets none. Multi-word
-    // terms are matched literally, since inflecting a phrase is guesswork.
-    //
-    // The trade is deliberate. A false suggestion costs the owner one tap to
-    // dismiss; a missed one reaches a customer with an allergy.
-    const inflect = t.includes(' ') ? '' : '(?:e?s|ed|d)?';
-    const re = new RegExp(`(?:^|[^a-z0-9])${escapeRe(t)}${inflect}(?:$|[^a-z0-9])`, 'i');
+    // Word-boundary match around every written form of the term — see formsOf.
+    // "Buttered mash" has to match "butter" and "creamed corn" has to match
+    // "cream", or the dish that most needs a milk tag is the one that silently
+    // gets none.
+    const re = new RegExp(
+      `(?:^|[^a-z0-9])(?:${formsOf(t).join('|')})(?:$|[^a-z0-9])`, 'i');
     if (re.test(text)) {
       if (!hits.has(allergen)) hits.set(allergen, new Set());
       hits.get(allergen).add(term);

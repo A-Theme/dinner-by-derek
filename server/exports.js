@@ -43,9 +43,26 @@ function slug() {
   return settings.get('business_name', 'menu').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
-/** Self-describing, sortable: orders_2026-08-17_dinner-by-derek.csv */
+/**
+ * Self-describing, sortable: orders_2026-08-17_dinner-by-derek.csv
+ *
+ * The date arrives off a query string — the Orders screen hangs its filters on
+ * the download link — and this lands inside a quoted Content-Disposition
+ * header. A date containing a quote closed that quoting early, and a repeated
+ * ?date= parameter arrives as an array and stringified to "a,b". Neither was
+ * reachable by anyone but the owner, and CR/LF is refused by Node before it
+ * reaches the wire, so nothing here was dangerous — a header this app builds by
+ * hand should still only be built out of the shapes it means.
+ *
+ * A date that is not one is dropped rather than refused: the file is still the
+ * right file, and failing a download over the name of it would be a worse
+ * answer than naming it after today.
+ */
 function filename(kind, date, ext) {
-  const d = date || T.todayIn(settings.get('timezone', 'America/Toronto'));
+  const asked = one(date);
+  const d = asked && T.isCalendarDate(asked)
+    ? asked
+    : T.todayIn(settings.get('timezone', 'America/Toronto'));
   return `${kind}_${d}_${slug()}.${ext}`;
 }
 
@@ -147,12 +164,38 @@ function contactsCsv() {
  * and left the dish library empty — 800-odd rows, three years of menus read
  * out of Facebook, and the only other copy of them is a file in data/ that is
  * gitignored. Adding a table to the schema means adding it here.
+ *
+ * Version 3 carries the three that had drifted the same way since, and the
+ * sentence above is the reason all three are named rather than summarised:
+ *
+ *   payments                 the money that has actually arrived. An order is
+ *                            what somebody asked for; this is the record of a
+ *                            bank transfer, and nothing else in the app holds
+ *                            a second copy of it.
+ *   recipes and their
+ *   ingredients, steps
+ *   and tags                 the kitchen's own documents. The seed comes back
+ *                            on boot, so a restore without these looked
+ *                            survivable — but it comes back as the SEED, and
+ *                            every edit the owner ever made to one is in the
+ *                            row, not in the file it was seeded from.
+ *   allergen_terms_removed   the words deliberately taken out of the
+ *                            dictionary. This one is the quiet one: the seed
+ *                            re-applies on every boot and skips only what this
+ *                            table remembers, so a restore that dropped it put
+ *                            every removed term back the next time the app
+ *                            started — undoing an allergen decision the owner
+ *                            made on purpose, days later, silently.
+ *
+ * fb_connection and oauth_states stay out, as above. login_failures stays out
+ * too: it is a month of security noise, it is pruned on its own, and it is not
+ * something anybody restores.
  */
 function backup() {
   const t = (name) => db.prepare(`SELECT * FROM ${name}`).all();
   return JSON.stringify({
     format: 'dinner-by-derek-backup',
-    version: 2,
+    version: 3,
     exported_at: new Date().toISOString(),
     note: 'Facebook tokens and other secrets are deliberately excluded.',
     settings: settings.all(),
@@ -166,7 +209,13 @@ function backup() {
     fsas: t('fsas'),
     orders: t('orders'),
     order_lines: t('order_lines'),
+    payments: t('payments'),
     allergen_terms: t('allergen_terms'),
+    allergen_terms_removed: t('allergen_terms_removed'),
+    recipes: t('recipes'),
+    recipe_ingredients: t('recipe_ingredients'),
+    recipe_steps: t('recipe_steps'),
+    recipe_tags: t('recipe_tags'),
   }, null, 2);
 }
 
@@ -218,14 +267,70 @@ function restore(json) {
    * So an absent section leaves the library alone and the caller is told. An
    * empty ARRAY is different and does empty it: that is a file saying the
    * library was empty, which is a statement rather than a silence.
+   *
+   * The same bargain now covers everything version 3 added, for the same
+   * reason: version 1 and version 2 files are on Derek's disk today, none of
+   * them carries a recipe book or a payment ledger, and reading that silence
+   * as "there were none" would destroy both on the way to restoring a week.
    */
-  const library = Array.isArray(data.saved_dishes) ? data.saved_dishes : null;
+  const section = (v) => (Array.isArray(v) ? v : null);
+  const library = section(data.saved_dishes);
+  const ledger = section(data.payments);
+  const removed = section(data.allergen_terms_removed);
+  /* One flag for the whole recipe book. The four tables are one document —
+     a recipe without its ingredients is not a partial recipe, it is a wrong
+     one — so they arrive together or not at all. */
+  const book = section(data.recipes);
 
   const skipped = [];
+  /* Filled inside the transaction, read after it, the same way `skipped` is. */
+  const outcome = { relinked: 0, orphaned: 0 };
 
   const tx = db.transaction(() => {
+    /* Foreign keys are checked at COMMIT rather than at each row.
+     *
+     * Not a relaxation — a dangling reference still refuses the whole file, and
+     * the transaction still rolls back. It is that a restore writes a graph, and
+     * a graph has no insert order that is correct row by row: `recipes.parent_id`
+     * points at another recipe, and a derivative whose base was written to the
+     * file after it cannot be inserted before its base exists. Deferring is the
+     * one mechanism SQLite offers for exactly this, and it is checked here rather
+     * than trusted — a payment naming an order nobody restored is still refused.
+     *
+     * It does NOT defer ON DELETE actions, which is why the links below have to
+     * be carried across by hand rather than simply surviving. */
+    db.pragma('defer_foreign_keys = ON');
+
+    /* Which order each payment belongs to, held across a restore that has no
+     * payments of its own to put back.
+     *
+     * Deleting the orders fires ON DELETE SET NULL on every payment pointing at
+     * one, so a version 2 file — which carries no payments section, and is what
+     * is on Derek's disk today — silently unlinked the whole ledger on its way
+     * to restoring a week. The money survived; what it had paid for did not.
+     *
+     * Carried by REFERENCE, never by id. The ids in the file are re-inserted as
+     * written and usually do come back the same, but "usually" is not a thing to
+     * decide with: restoring somebody else's backup, or an older one taken before
+     * an order existed, would reattach a transfer to whichever order happened to
+     * land on that number. A ref is the order's name. If it does not come back,
+     * the payment stays unclaimed, which is the honest answer and the one the
+     * Payments screen is built to show. */
+    const heldLinks = ledger ? [] : db.prepare(
+      `SELECT p.id, o.ref FROM payments p JOIN orders o ON o.id = p.order_id`).all();
+
     for (const name of tables) db.prepare(`DELETE FROM ${name}`).run();
     if (library) db.prepare('DELETE FROM saved_dishes').run();
+    if (ledger) db.prepare('DELETE FROM payments').run();
+    if (removed) db.prepare('DELETE FROM allergen_terms_removed').run();
+    /* Children first, matching order_lines above. ON DELETE CASCADE would reach
+       them from `recipes` alone; saying so is how the next reader knows the
+       whole document goes, rather than having to look the schema up. */
+    if (book) {
+      for (const name of ['recipe_tags', 'recipe_steps', 'recipe_ingredients', 'recipes']) {
+        db.prepare(`DELETE FROM ${name}`).run();
+      }
+    }
     const insertAll = (name, rows) => {
       if (!Array.isArray(rows) || !rows.length) return;
       if (rows.some((r) => !r || typeof r !== 'object' || Array.isArray(r))) {
@@ -286,7 +391,32 @@ function restore(json) {
     insertAll('fsas', data.fsas);
     insertAll('orders', data.orders);
     insertAll('order_lines', data.order_lines);
+    if (ledger) insertAll('payments', ledger);
     insertAll('allergen_terms', data.allergen_terms);
+    if (removed) insertAll('allergen_terms_removed', removed);
+    /* After saved_dishes, which recipes.dish_id points at, and before its own
+       three children. */
+    if (book) {
+      insertAll('recipes', book);
+      insertAll('recipe_ingredients', data.recipe_ingredients);
+      insertAll('recipe_steps', data.recipe_steps);
+      insertAll('recipe_tags', data.recipe_tags);
+    }
+
+    /* The links held above, put back on the orders that answer to the same
+       reference. Anything whose order did not come back stays unclaimed. */
+    let relinked = 0;
+    if (heldLinks.length) {
+      const orderByRef = db.prepare('SELECT id FROM orders WHERE ref = ?');
+      const relink = db.prepare('UPDATE payments SET order_id = ? WHERE id = ?');
+      for (const held of heldLinks) {
+        const o = orderByRef.get(held.ref);
+        if (o) { relink.run(o.id, held.id); relinked++; }
+      }
+    }
+    outcome.relinked = relinked;
+    outcome.orphaned = heldLinks.length - relinked;
+
     const incoming = data.settings;
     if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
       for (const [k, v] of Object.entries(incoming)) {
@@ -303,11 +433,24 @@ function restore(json) {
     orders: (data.orders || []).length,
     standing: (data.standing_items || []).length,
     dishes: library ? library.length : 0,
+    recipes: book ? book.length : 0,
+    payments: ledger ? ledger.length : 0,
     /* True when the file predates version 2 and the library on disk was left
      * standing. The owner needs that sentence: what they have now is a week
      * from the file and a dish list from before it, which is not what the
      * word "restore" led them to expect. */
     keptLibrary: !library,
+    /* The same sentence, owed for the same reason, about the two that version 3
+     * added. An owner who restores a version 2 file still has the recipe book
+     * and the ledger that were on disk a minute ago, not the ones the file is
+     * named after. */
+    keptRecipes: !book,
+    keptPayments: !ledger,
+    /* How many of those kept payments found their order again by reference, and
+     * how many are now sitting in the unclaimed list because it did not come
+     * back. Both are worth saying: the second is money the owner has to look at. */
+    relinked: outcome.relinked,
+    orphaned: outcome.orphaned,
     skipped,
   };
 }

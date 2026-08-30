@@ -75,9 +75,20 @@
   section("The saved/failed message", function () {
     /* The sentence a redirect carried in the query string, shown once and
        then wiped out of the address bar so a reload does not repeat it. */
+    /* Decoded once, by URLSearchParams, and not again.
+     *
+     * The second decodeURIComponent was not a belt-and-braces — it was a throw
+     * waiting for a percent sign. back() puts the sentence in the query string,
+     * URLSearchParams encodes a literal % as %25, .get() hands it back as %,
+     * and decoding THAT is a URIError: URI malformed. So removing "100% Beef
+     * Chili" from the saved list stored the dish, redirected correctly, and
+     * then reported "The saved/failed message isn't working on this page" —
+     * the one time the owner is told the dashboard is broken is the moment a
+     * write succeeded. The line below it never ran either, so the stale ?ok=
+     * stayed in the address bar and said it again on the next reload. */
     var params = new URLSearchParams(location.search);
-    if (params.get('ok')) toast(decodeURIComponent(params.get('ok')), 'ok');
-    if (params.get('err')) toast(decodeURIComponent(params.get('err')), 'bad');
+    if (params.get('ok')) toast(params.get('ok'), 'ok');
+    if (params.get('err')) toast(params.get('err'), 'bad');
     if (params.get('ok') || params.get('err')) {
       params.delete('ok'); params.delete('err');
       history.replaceState({}, '', location.pathname + (params.toString() ? '?' + params : ''));

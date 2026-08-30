@@ -346,6 +346,14 @@ router.get('/orders', (req, res) => {
 router.post('/orders/:id/flag', (req, res) => {
   const field = req.body.field === 'paid' ? 'paid' : 'fulfilled';
   const id = Number(req.params.id);
+  /* Checked first, like its two neighbours on this screen. The UPDATE was
+     harmless against an order that had gone, but the row is read back to say
+     which way the flag went — and reading .paid off nothing is a TypeError and
+     a 500. Ordinary to reach now that there is a Delete button: delete an order
+     in one tab, tap "Mark as paid" on a stale list in another. */
+  if (!db.prepare('SELECT 1 FROM orders WHERE id=?').get(id)) {
+    return back(res, req, null, 'That order no longer exists.');
+  }
   db.prepare(`UPDATE orders SET ${field} = NOT ${field} WHERE id = ?`).run(id);
   const o = db.prepare('SELECT * FROM orders WHERE id=?').get(id);
   back(res, req, field === 'paid'

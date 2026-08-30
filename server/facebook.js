@@ -116,13 +116,28 @@ function beginAuth() {
   return u.toString();
 }
 
-/** A callback whose state is missing, unknown or already used is rejected. */
+/**
+ * A callback whose state is missing, unknown, expired or already used is
+ * rejected.
+ *
+ * The age was checked nowhere. beginAuth prunes rows older than fifteen minutes
+ * — but only when a NEW connection is started, so a flow abandoned halfway and
+ * never followed by another left its state valid indefinitely. Single-use and
+ * thirty-two random bytes either way, so this was a stale form completing rather
+ * than anything a stranger could reach; fifteen minutes is what the screen
+ * promises, and the promise should be the one enforced.
+ */
+const STATE_TTL_MS = 15 * 60 * 1000;
+
 function consumeState(state) {
   if (!state) return false;
-  const row = db.prepare('SELECT state FROM oauth_states WHERE state = ?').get(state);
+  const row = db.prepare('SELECT state, created_at FROM oauth_states WHERE state = ?').get(state);
   if (!row) return false;
+  /* Spent whether or not it was still in time: a state that has been presented
+     once is finished with, and leaving an expired one behind would let it be
+     retried until the next connection pruned it. */
   db.prepare('DELETE FROM oauth_states WHERE state = ?').run(state);
-  return true;
+  return Date.now() - Number(row.created_at) < STATE_TTL_MS;
 }
 
 /* --- The Pages a callback came back with ---------------------------------

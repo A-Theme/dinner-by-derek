@@ -1,6 +1,6 @@
 'use strict';
 const express = require('express');
-const { db, settings } = require('../db');
+const { settings } = require('../db');
 const M = require('../menu');
 const D = require('../delivery');
 const O = require('../orders');
@@ -83,8 +83,9 @@ router.get('/w/:slug/:date', (req, res) => {
   if (!week || week.status !== 'published') {
     return res.status(404).type('html').send(String(V.emptyView('That menu isn\'t available.')));
   }
-  const day = db.prepare('SELECT * FROM service_days WHERE week_id = ? AND service_date = ?')
-    .get(week.id, req.params.date);
+  /* Through the same filter the week page is built from, so a date it does not
+     list cannot be reached by typing it into the address bar either. */
+  const day = M.serviceDayOn(week.id, req.params.date);
   if (!day) {
     return res.status(404).type('html').send(String(V.emptyView('That day isn\'t on the menu.')));
   }

@@ -187,15 +187,31 @@ router.get('/week', (req, res) => {
                   ORDER BY CASE status WHEN 'draft' THEN 0 ELSE 1 END, id DESC LIMIT 1`).get();
 
   if (!week) {
-    // Defaults to the upcoming week, not the current one — the menu is
-    // planned and posted ahead of time (Saturday, for the week starting the
-    // following Monday), so "today" is rarely the week being built.
-    const weekStart = T.mondayOnOrAfter(T.todayIn(tz()));
-    const slug = `week-${T.todayIn(tz())}`;
-    const id = db.prepare('INSERT INTO weeks (slug, title, week_start) VALUES (?,?,?)')
-      .run(slug, T.fmtWeekRange(weekStart, tz()), weekStart).lastInsertRowid;
-    week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(id);
-  } else if (!week.week_start) {
+    /* Offered rather than done. Opening this page used to CREATE a week, which
+     * made a GET the only request in the app that writes — and the session
+     * cookie is SameSite=Lax, which is sent on a top-level cross-site
+     * navigation, so a link on somebody else's page could make one. A browser
+     * restoring tabs or prefetching a link did just as well.
+     *
+     * A blank draft is not harmless: publish.js sees it, isEmpty() refuses it,
+     * and the owner gets a "there is nothing on this week yet" email about a
+     * week they never opened. So the button says so and the POST below does it.
+     *
+     * Only reachable with no draft and no published week at all, which in
+     * practice means a fresh install — publishing always leaves one behind. */
+    const body = html`
+      <h1>This week</h1>
+      <div class="card">
+        <p>There is no week started yet. This makes an empty one, dated the week
+          beginning ${T.fmtDayShort(T.mondayOnOrAfter(T.todayIn(tz())), tz())}, and opens it
+          for you to fill in.</p>
+        <form method="post" action="/admin/week/new">
+          <button class="btn btn--primary btn--block" type="submit">Start this week's menu</button>
+        </form>
+      </div>`;
+    return res.type('html').send(String(V.shell({ title: 'This Week', body, current: 'week' })));
+  }
+  if (!week.week_start) {
     // Backfills a week created before week_start existed. Prefers its earliest
     // service day, so an already-planned week keeps showing the right dates.
     const earliest = db.prepare(`SELECT MIN(service_date) d FROM service_days WHERE week_id = ?`).get(week.id).d;
@@ -211,6 +227,30 @@ router.get('/week', (req, res) => {
     items: M.weekItemsOf(week.id),
     hasPrevious: !!db.prepare(`SELECT id FROM weeks WHERE id != ? ORDER BY id DESC LIMIT 1`).get(week.id),
   })));
+});
+
+/* The write the page above used to do on a GET.
+ *
+ * Defaults to the upcoming week, not the current one — the menu is planned and
+ * posted ahead of time (Saturday, for the week starting the following Monday),
+ * so "today" is rarely the week being built.
+ *
+ * The slug carries a random tail, the way a duplicate's does. It was
+ * `week-${today}`, which is unique only until a week created today has been
+ * retired and no draft or published one is left — at which point the INSERT
+ * collided with a UNIQUE column and the owner got a 500 on the button that
+ * starts their week. */
+router.post('/week/new', (req, res) => {
+  /* Two taps, or a tab restored onto the POST, should not make two weeks. */
+  const already = db.prepare(`SELECT id FROM weeks WHERE status IN ('draft','published')
+                              ORDER BY CASE status WHEN 'draft' THEN 0 ELSE 1 END, id DESC LIMIT 1`).get();
+  if (already) return res.redirect(303, `/admin/week?id=${already.id}`);
+
+  const weekStart = T.mondayOnOrAfter(T.todayIn(tz()));
+  const slug = `week-${weekStart}-${crypto.randomBytes(2).toString('hex')}`;
+  const id = db.prepare('INSERT INTO weeks (slug, title, week_start) VALUES (?,?,?)')
+    .run(slug, T.fmtWeekRange(weekStart, tz()), weekStart).lastInsertRowid;
+  res.redirect(303, `/admin/week?id=${id}`);
 });
 
 router.post('/week/:id/basics', (req, res) => {
@@ -459,10 +499,45 @@ router.post('/week/:id/dates', (req, res) => {
    edited in the weekday box above — this route only ever touches the
    per-day pickup override, so it can never clobber what that box saved. */
 router.post('/week/:id/day/:dayId', (req, res) => {
+  /* Through the same clock guard the global pickup window goes through.
+   *
+   * This box was the one way into the app that stored a time without asking
+   * whether it was one. The Settings form has been guarded since a typed
+   * "four pm" printed as "NaN:undefined AM" on the customer menu — and this
+   * override is the worse of the two places for that, because it is not only
+   * shown. It is frozen onto every order placed on that day: fmtWindow reads it
+   * at submit and writes the result into orders.pickup_window, permanently, on
+   * a record no screen can correct and in the confirmation email the customer
+   * keeps. A stored 99:99 printed as "3:99 PM", which is the dangerous kind of
+   * wrong — obviously broken is a bug report, plausibly wrong is somebody
+   * arriving at the wrong hour.
+   *
+   * Three answers, not two. Blank is not a bad value here: it is how a day says
+   * "use the usual window", and it has to keep meaning NULL. So null is
+   * inherit, false is "not a time at all", and a string is the normalised
+   * value — '9:5' is stored as '09:05', which is the form fmtClock expects.
+   */
+  const override = (v) => {
+    const raw = String(v == null ? '' : v).trim();
+    if (!raw) return null;                                // inherit the global window
+    return settings.clockTime(raw) || false;              // false: not a time
+  };
+  const start = override(req.body.pickup_start);
+  const end = override(req.body.pickup_end);
+
+  /* Refused whole, and nothing changed — the same bargain /admin/settings/pickup
+     makes. Saving the delivery override while dropping a time the owner typed
+     would leave the form showing one thing and the day doing another. */
+  if (start === false || end === false) {
+    const message = 'A pickup time has to look like 16:00, or be left empty to use the '
+      + 'usual window. Nothing was changed.';
+    if (req.get('X-Draft')) return res.status(400).json({ error: message });
+    return back(res, req, null, message);
+  }
+
   db.prepare(`UPDATE service_days SET pickup_start=?, pickup_end=?, delivery_on=?
       WHERE id=? AND week_id=?`)
-    .run(String(req.body.pickup_start || '').trim() || null,
-      String(req.body.pickup_end || '').trim() || null,
+    .run(start, end,
       req.body.delivery_override === '' ? null : (req.body.delivery_override === '1' ? 1 : 0),
       Number(req.params.dayId), Number(req.params.id));
   if (req.get('X-Draft')) return res.json({ ok: true });

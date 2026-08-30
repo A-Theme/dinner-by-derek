@@ -82,8 +82,30 @@ strict.post('/restore', auth.requiredStrict, (req, res) => {
     const dishes = n.keptLibrary
       ? ' That file predates saved dishes, so your saved list was left as it is.'
       : ` ${n.dishes} saved dish${n.dishes === 1 ? '' : 'es'} came back too.`;
+    /* The same courtesy for the recipe book and the ledger, which version 3 is
+     * the first format to carry. Named separately rather than lumped in with
+     * the dishes, because "left as it is" and "came back" are different
+     * outcomes and an owner deciding whether to restore again needs to know
+     * which one they got. */
+    const older = [];
+    if (n.keptRecipes) older.push('recipes');
+    if (n.keptPayments) older.push('payments');
+    const legacy = older.length
+      ? ` That file predates ${older.join(' and ')}, so ${older.length === 1 ? 'that' : 'those'} `
+        + `on this server ${older.length === 1 ? 'was' : 'were'} left as ${
+          older.length === 1 ? 'it is' : 'they are'}.`
+      : ` ${n.recipes} recipe${n.recipes === 1 ? '' : 's'} and `
+        + `${n.payments} payment${n.payments === 1 ? '' : 's'} came back as well.`;
+    /* Payments kept from before a legacy restore are put back on the order with
+     * the same reference. Any that could not be is money with nothing against
+     * it, which is the one thing on this screen worth chasing. */
+    const money = n.orphaned
+      ? ` ${n.orphaned} payment${n.orphaned === 1 ? '' : 's'} could not be matched to an `
+        + `order in that file and ${n.orphaned === 1 ? 'is' : 'are'} now unclaimed on the `
+        + 'Payments screen.'
+      : '';
     back(res, req, `Restored ${n.weeks} weeks, ${n.orders} orders and `
-      + `${n.standing} standing items.${dishes}${kept}`);
+      + `${n.standing} standing items.${dishes}${legacy}${money}${kept}`);
   } catch (e) {
     // The message names what was wrong with the file when the file was the
     // problem, because "check it's the right backup" is no help to someone

@@ -48,16 +48,53 @@ function ref() {
   return crypto.randomBytes(4).toString('hex').toUpperCase();
 }
 
+/**
+ * The lines the browser sent, with each item counted once.
+ *
+ * The same key and variant may arrive more than once. The order form cannot
+ * produce that — it holds its lines in an object keyed by `key|variant`, so a
+ * second tap on a stepper raises a quantity rather than adding a row — but the
+ * lines are a JSON string in a form field, and every check below was written
+ * against one line per item. Availability was measured per line, so three lines
+ * of five each passed a ceiling of five and the day oversold by ten portions.
+ * The whole-day ceiling further down already summed across lines, which is what
+ * kept the featured dish safe wherever one was set, and is the check this brings
+ * the per-size ones into line with.
+ *
+ * Merged rather than refused. Two lines for the same size is a request for their
+ * sum, and merging is what the form would have sent in the first place — so the
+ * order, the kitchen sheet, the CSV and the confirmation email each carry one row
+ * per item either way, rather than a repeat that reads as two separate things
+ * off the same shelf.
+ *
+ * A quantity is checked here, per line, so that nonsense cannot hide inside a
+ * sum: a negative would otherwise cancel part of another line rather than being
+ * refused. The CEILING is deliberately not checked here. It belongs to the
+ * merged total — a per-line 40 is a per-item 80 the moment the line is sent
+ * twice — and quote() applies it to what this returns.
+ */
 function parseLines(input) {
   let arr;
   try { arr = JSON.parse(input || '[]'); } catch { throw new OrderError('We couldn\'t read your order. Please add your items again.'); }
   if (!Array.isArray(arr) || !arr.length) throw new OrderError('Your order is empty.');
   if (arr.length > 60) throw new OrderError('That order is too large to place online. Please get in touch directly.');
-  return arr.map((l) => ({
-    key: String(l.key || ''),
-    variant: String(l.variant || ''),
-    qty: Math.floor(Number(l.qty)),
-  }));
+
+  /* Keyed as JSON, the same way the price tally in facebook.js is: it is the
+     one separator no key or variant can collide with by carrying it. */
+  const merged = new Map();
+  for (const l of arr) {
+    const key = String(l.key || '');
+    const variant = String(l.variant || '');
+    const qty = Math.floor(Number(l.qty));
+    if (!Number.isFinite(qty) || qty < 1) {
+      throw new OrderError('One of the quantities on your order isn\'t valid.');
+    }
+    const id = JSON.stringify([key, variant]);
+    const held = merged.get(id);
+    if (held) held.qty += qty;
+    else merged.set(id, { key, variant, qty });
+  }
+  return [...merged.values()];
 }
 
 /**
@@ -78,8 +115,11 @@ function quote(payload) {
   const week = M.weekBySlug(String(payload.week || ''));
   if (!week || week.status !== 'published') throw new OrderError('That menu is no longer available.');
 
-  const day = db.prepare('SELECT * FROM service_days WHERE week_id = ? AND service_date = ?')
-    .get(week.id, String(payload.date || ''));
+  /* Filtered to the week's own dates, like the page the customer ordered from.
+     A straggler left behind by a change to "Week starts" is not on this menu,
+     and taking a confirmed order for it is taking one for a day the kitchen has
+     not planned and the publish gate never looked at. */
+  const day = M.serviceDayOn(week.id, String(payload.date || ''));
   if (!day) throw new OrderError('That service day is no longer on the menu.');
 
   const menu = M.menuForDay(week, day);
@@ -114,8 +154,12 @@ function quote(payload) {
   let featuredQty = 0;
   let meatlessQty = 0;
 
+  /* r.qty is this item's whole share of the order, summed by parseLines over
+     however many lines carried it. Everything measured below — the ceiling, the
+     remaining count, the two headline totals — therefore counts portions of a
+     dish rather than rows in a form field. */
   for (const r of requested) {
-    if (!Number.isFinite(r.qty) || r.qty < 1 || r.qty > 40) {
+    if (r.qty > 40) {
       throw new OrderError('One of the quantities on your order isn\'t valid.');
     }
     const item = M.findItem(menu, r.key);
@@ -128,6 +172,10 @@ function quote(payload) {
     }
     // Availability is only held by confirmed orders — a pending late request
     // reserves nothing, so late requests skip the remaining-count check.
+    //
+    // Read off a single line of the body this was a ceiling on rows rather than
+    // on portions: three lines of five each sat under a remainder of five, and
+    // the day sold fifteen.
     if (status === 'confirmed' && variant.remaining !== null && r.qty > variant.remaining) {
       throw new OrderError(variant.remaining === 0
         ? `${item.name} (${variant.label}) has just sold out for that day.`

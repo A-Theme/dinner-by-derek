@@ -99,9 +99,21 @@ async function store(buf) {
   return webName;
 }
 
-/** Remove a derivative and its original. Never touches brand assets. */
+/**
+ * Remove a derivative and its original. Never touches brand assets.
+ *
+ * Matched against the one shape store() produces — sixteen hex characters and
+ * .jpg — rather than screened for the separators that would escape the
+ * directory. The old guard refused "/" and ".." and said nothing about "\",
+ * which is a separator on Windows and not on the Linux box this deploys to; a
+ * guard written to stop path traversal should not be one whose correctness
+ * depends on which machine it is running on. Nothing can currently hand this a
+ * name it did not generate, so this is the belt rather than the braces.
+ */
+const STORED_NAME = /^[0-9a-f]{16}\.jpg$/;
+
 function remove(name) {
-  if (!name || name.includes('/') || name.includes('..')) return;
+  if (!STORED_NAME.test(String(name || ''))) return;
   const id = name.replace(/\.jpg$/, '');
   for (const f of [name, `${id}-original.jpg`]) {
     try { fs.unlinkSync(path.join(config.uploadDir, f)); } catch (e) { /* already gone */ }

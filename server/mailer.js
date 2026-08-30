@@ -375,6 +375,13 @@ async function signinFailuresEmail({ count, addresses }) {
 }
 
 module.exports = {
+  /* esc and plain are exported for the suite. They were checked by grepping
+     this file for "&quot;" and for the word forCustomer, which is an
+     assertion about the source rather than about the behaviour: it passes if
+     the string is anywhere in the file and fails on a rename that changes
+     nothing. Both are pure functions of their arguments, so the suite can
+     simply call them. */
+  esc, plain,
   send, ownerOrderEmail, customerOrderEmail, lateDecisionEmail, tokenExpiryEmail,
   weekPublishedEmail, weekPublishRefusedEmail, weekMissingEmail, signinFailuresEmail,
   configured: () => !!config.smtp.host,

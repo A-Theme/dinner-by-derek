@@ -197,7 +197,7 @@ function detail({ recipe, scaled, factor, kids, suggestions }) {
       <strong>What this recipe would suggest on a menu.</strong>
       ${suggestions.length
         ? html`Reading its ingredients — and the recipes underneath them — the allergen
-            dictionary finds ${raw(suggestions.map((s) => `<strong>${s.allergen}</strong>`).join(', '))}.
+            dictionary finds ${suggestions.map((s, i) => html`${i ? ', ' : ''}<strong>${s.allergen}</strong>`)}.
             That is a prompt, not a tag. Nothing here has been applied to any dish and no
             review box has been ticked. When you put a dish on a day, review it there.`
         : html`The allergen dictionary finds nothing in this one. That is not a clearance —

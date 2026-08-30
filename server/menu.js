@@ -124,15 +124,41 @@ function weekBySlug(slug) {
  * A week with no week_start is not filtered — those predate the column, and the
  * dashboard backfills one the first time such a week is opened.
  */
+/* Written once, because two questions ask it and they must not be able to
+   disagree: "which days does this week have" and "does this week have this day".
+   The second used to be asked with a plain week_id-and-date lookup that knew
+   nothing about the range, so it answered yes where the first said no — and a
+   date absent from the week page, absent from Menu history's idea of the week,
+   and never checked by the publish gate was still reachable by URL and still
+   took confirmed orders. */
+const IN_WEEK_RANGE = `(w.week_start IS NULL
+       OR (sd.service_date >= w.week_start
+           AND sd.service_date < date(w.week_start, '+7 days')))`;
+
 function serviceDaysOf(weekId) {
   return db.prepare(`
     SELECT sd.* FROM service_days sd
     JOIN weeks w ON w.id = sd.week_id
-    WHERE sd.week_id = ?
-      AND (w.week_start IS NULL
-           OR (sd.service_date >= w.week_start
-               AND sd.service_date < date(w.week_start, '+7 days')))
+    WHERE sd.week_id = ? AND ${IN_WEEK_RANGE}
     ORDER BY sd.service_date`).all(weekId);
+}
+
+/**
+ * One day of a week, by date — and only if the week actually covers that date.
+ *
+ * The customer deep link and the order pipeline both start here. Neither has any
+ * business seeing a day the week page does not list: a straggler left behind by
+ * a change to "Week starts" is not part of this menu, and the two places that
+ * used to look it up directly are the two places where saying otherwise costs
+ * something. Returns undefined for a date outside the range, which is the same
+ * answer they already handle for a date with no row at all.
+ */
+function serviceDayOn(weekId, serviceDate) {
+  return db.prepare(`
+    SELECT sd.* FROM service_days sd
+    JOIN weeks w ON w.id = sd.week_id
+    WHERE sd.week_id = ? AND sd.service_date = ? AND ${IN_WEEK_RANGE}`)
+    .get(weekId, serviceDate);
 }
 
 /**
@@ -387,7 +413,7 @@ function activeLocations() {
 }
 
 module.exports = {
-  SUBCATEGORY_ORDER, activeWeek, weekBySlug, serviceDaysOf, weekItemsOf,
+  SUBCATEGORY_ORDER, activeWeek, weekBySlug, serviceDaysOf, serviceDayOn, weekItemsOf,
   everyServiceDayOf, meatlessLabel,
   standingItems, standingRunsOn, weekItemRunsOn, pickupWindowFor, clock,
   deliveryOnFor, closureFor, menuForDay, findItem, alsoAvailableLine, activeLocations,
