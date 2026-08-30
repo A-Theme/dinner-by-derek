@@ -761,7 +761,18 @@ const PAST_DATE = T.addDays(today, -2);
        reject. Moving the week makes the day a real one on every weekday, so
        what is under test is the clock and only the clock. */
     const realWeekStart = db.prepare('SELECT week_start FROM weeks WHERE id = ?').get(weekId).week_start;
-    db.prepare('UPDATE weeks SET week_start = ? WHERE id = ?').run(T.mondayOf(today), weekId);
+
+    /* Moved to cover ONE date at a time, immediately before the checks that
+       use it, rather than once for the whole block.
+
+       A week starts on a Monday, so no single week can contain both a Sunday
+       and the day after it. Setting the week from `today` therefore covers
+       `tomorrow` on six days out of seven and not on the seventh — and on that
+       seventh day the late-window checks fail, having proved nothing about the
+       clock. Each check below needs only one of the two dates, so the week
+       follows whichever one is being tested. */
+    const cover = (d) => db.prepare('UPDATE weeks SET week_start = ? WHERE id = ?')
+      .run(T.mondayOf(d), weekId);
 
     const addDay = (date) => {
       const reviewed = A.reviewedText({ name: 'Cutoff Test Dish', description: desc });
@@ -790,6 +801,7 @@ const PAST_DATE = T.addDays(today, -2);
     settings.set('cutoff_minute', 0);
     settings.set('late_cutoff_hour', 23); // 23:59 tomorrow: still to come
     settings.set('late_cutoff_minute', 59);
+    cover(tomorrow);
     const lateDay = addDay(tomorrow);
 
     cookie = '';
@@ -805,6 +817,7 @@ const PAST_DATE = T.addDays(today, -2);
     /* 2. Past the late cutoff, on the morning of service: nothing at all. */
     settings.set('late_cutoff_hour', 0);  // 00:00 today: passed, whatever the hour
     settings.set('late_cutoff_minute', 0);
+    cover(today);
     const shutDay = addDay(today);
 
     const page = await GET(`/w/${weekSlug}/${today}`);

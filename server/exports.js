@@ -245,6 +245,41 @@ function isJsonArray(v) {
   try { return Array.isArray(JSON.parse(v)); } catch (e) { return false; }
 }
 
+/**
+ * Columns holding a wall-clock time, and columns holding a calendar date.
+ *
+ * Same argument as the JSON arrays above, and the same blast radius: the
+ * column NAMES were checked against the table and the VALUES were written
+ * through untouched, so one edited word in a file people pass around reaches
+ * code that assumes the app wrote it.
+ *
+ * A time that is not one does not throw — it prints. "four pm" renders as
+ * "NaN:undefined AM" on the customer menu and 25:00 becomes "1:00 PM", which
+ * is the worse of the two: obviously broken is a bug report, plausibly wrong
+ * is a customer arriving at the wrong hour. Worse still, the window is frozen
+ * onto every order placed on that day at submit, so a bad value is not a wrong
+ * page but a permanent mark on records the owner cannot correct.
+ *
+ * A date that is not one DOES throw. fmtDayShort hands it to parseDate, NaN
+ * reaches Intl, and Intl raises RangeError — so a single bad service_date is
+ * a 500 on the whole customer week view, from a row nothing on screen would
+ * explain.
+ *
+ * Only the two shapes the app actually writes as dates. `created_at`,
+ * `placed_at`, `published_at` and the rest are timestamps with a time in them
+ * and would fail isCalendarDate on every legitimate backup.
+ */
+const CLOCK_COLUMNS = new Set(['pickup_start', 'pickup_end']);
+const DATE_COLUMNS = new Set(['service_date', 'week_start']);
+
+/* Absent is not the same as wrong. A NULL pickup time means "inherit the
+   global window" and a NULL week_start means a week that predates the column;
+   both are states the app writes on purpose. An EMPTY STRING is only ever a
+   date that isn't one, so it is refused where a date is expected and allowed
+   where a time is. What is not nullable at all — service_date — is left to the
+   NOT NULL the table already carries. */
+const isAbsent = (v) => v === null || v === undefined;
+
 function restore(json) {
   const data = JSON.parse(json);
   if (data.format !== 'dinner-by-derek-backup') {
@@ -374,6 +409,17 @@ function restore(json) {
           if (JSON_ARRAY_COLUMNS.has(c) && !isJsonArray(r[c])) {
             throw new Error(`Row ${i + 1} of "${name}" in that backup has a value in `
               + `${c} that isn't a list: ${JSON.stringify(r[c])}.`);
+          }
+          if (CLOCK_COLUMNS.has(c) && !isAbsent(r[c]) && r[c] !== ''
+              && settings.clockTime(r[c]) === null) {
+            throw new Error(`Row ${i + 1} of "${name}" in that backup has a value in `
+              + `${c} that isn't a time: ${JSON.stringify(r[c])}. It should look like `
+              + '16:00, or be empty to use the usual window.');
+          }
+          if (DATE_COLUMNS.has(c) && !isAbsent(r[c]) && !T.isCalendarDate(r[c])) {
+            throw new Error(`Row ${i + 1} of "${name}" in that backup has a value in `
+              + `${c} that isn't a date: ${JSON.stringify(r[c])}. It should look like `
+              + '2026-08-31.');
           }
         }
       });
