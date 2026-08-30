@@ -52,7 +52,7 @@ those rows as history rather than as state.
 | Standing items | 6, of which **3 are unreviewed** and therefore invisible to customers |
 | Saved dishes | 816 |
 | Allergen terms | 479 |
-| Orders | 1 (a test: `A16C0962`, Aug 25, Pork Souvlaki) |
+| Orders | 0 — the test order (`A16C0962`, Aug 25, Pork Souvlaki) was deleted on 30 Aug |
 | Payments | 0 |
 | Recipes | 230, all of them tagged onto one of 16 buttons |
 | Recipes linked to a dish | **0** — the column and the picker exist; nothing populates them |
@@ -73,7 +73,7 @@ boot output on the 30th say so; the rest are as they were.
 | Session secret | set |
 | `BASE_URL` | `https://dinnerbyderek.ca` since 29 Aug — secure cookies and HSTS follow from the scheme |
 | `TOKEN_ENCRYPTION_KEY` | empty; needed only for Facebook one-tap publishing |
-| `SMTP_*` | still empty as of 30 Aug — orders are recorded, nothing is sent |
+| `SMTP_*` | still empty as of 30 Aug — orders are recorded, nothing is sent. Cyberimpact is chosen and signed up for; the domain validation there is the outstanding step |
 | `FB_APP_ID` / `FB_APP_SECRET` | empty; copy-and-paste publishing works without them |
 | `NODE_ENV` / `TRUST_PROXY` | was `development` and unset; **not re-read since the move**, and `TRUST_PROXY` must be `1` behind nginx |
 
@@ -97,12 +97,19 @@ boot output on the 30th say so; the rest are as they were.
    visible to customers** for the first time — the section stays hidden while any
    item in it is unticked, and all three were the ones holding it shut.
 
-4. **Email, and the accounts the poller needs.** The poller itself is now built;
-   what is unfinished is everything around it that is not code — a sending
-   provider so confirmations go out, an inbox for the poller to read, the
-   forward rule that feeds it, and `orders@dinnerbyderek.ca` registered for
-   Autodeposit at the bank, so the notification means money arrived rather than
-   money offered. See [Known and unbuilt](#known-and-unbuilt).
+4. **Email, and the accounts the poller needs.** The poller itself is built and
+   **running live** — the boot line reads `Payments: reading … every 5 minutes`,
+   and silence in the journal is its healthy state, since only recorded payments
+   and failures log. Receiving is done: Cloudflare Email Routing delivers
+   `orders@dinnerbyderek.ca`, now the only address on the domain. What is left is
+   not code, and it is three things. **Sending:** Cyberimpact is chosen and
+   signed up for; validate the domain there — three CNAMEs, added DNS-only at
+   Cloudflare — then fill `SMTP_*` in the server's `.env` and run
+   `npm run mailtest`. **The forward rule**, in Outlook, sending
+   `payments.interac.ca` mail to the poller's inbox; until it exists the poller
+   correctly finds nothing, which looks exactly like working. **Autodeposit** on
+   `orders@dinnerbyderek.ca` at the bank, so a notification means money arrived
+   rather than money offered. See [Known and unbuilt](#known-and-unbuilt).
 
 5. **`TOKEN_ENCRYPTION_KEY`**, if Facebook one-tap publishing is wanted. The
    copy-and-paste path works without it and always will.

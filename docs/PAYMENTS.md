@@ -138,7 +138,14 @@ unclaimed, which is where money nobody has accounted for belongs.
   actually stands between a forged notification and a wrong `paid` — a high bar
   for a stranger and a low one for the customer who was shown both.
 
-Both limits fail in the same direction: not marking something paid that was not.
+The first three fail in the safe direction — not marking something paid that was
+not. **The fourth does not**, and it is the one to know about: an email reaching
+the poller's inbox that carries a valid order reference *and* the exact total
+will settle that order as paid with nobody tapping anything. `paid` can now be
+set by an email rather than only by Derek. That bar is high for a stranger and
+low for the customer who was shown both numbers — and a customer who forges a
+deposit to avoid paying for dinner has done something a person notices at the
+door, which is why this is accepted rather than solved in code.
 
 ## Chasing what has not arrived
 

@@ -149,6 +149,11 @@ Receiving is a different job from sending, it is free, and it is done in
 Cloudflare rather than on the server. Both halves, in order, are in
 [docs/DEPLOY.md → Optional: email](docs/DEPLOY.md#optional-email).
 
+**What this deployment uses:** Cyberimpact for sending — a Quebec company on
+Canadian servers, free relay to 1,000 messages a month — and Cloudflare Email
+Routing for receiving, which forwards `orders@dinnerbyderek.ca` to a mailbox
+that is already read. The two halves are independent; receiving worked first.
+
 A note on the sending account. Receiving alerts at a consumer mailbox is fine.
 Sending *through* one is a fight — Microsoft and Google have both tightened
 SMTP auth for consumer accounts, and mail sent from a personal address on
@@ -833,11 +838,20 @@ never the PNGs.
 
 ## Business card
 
-**Dashboard → Graphics**, or from a terminal:
+**Dashboard → Graphics.**
 
 ```bash
 npm run card
 ```
+
+> [!WARNING] The terminal form cannot see `BASE_URL`
+> Unlike the social graphics, this one puts a URL in the artwork. It reads
+> `process.env.BASE_URL`, and `dotenv` is loaded only by `server/config.js`,
+> which this script does not require — so run from a shell it sees nothing and
+> draws a QR pointing at `https://dinner-by-derek.example`. The Dashboard runs
+> the same function inside the server process, which read `.env` at boot. Use
+> the terminal form only with `BASE_URL` exported explicitly. The address is
+> printed under the code, so check the card face before printing.
 
 Writes two faces to `GRAPHICS_DIR/print/`, ready for a printer:
 
@@ -903,6 +917,14 @@ both orientations.
 ```bash
 npm run sticker
 ```
+
+> [!WARNING] Generate these from Dashboard → Graphics
+> The QR carries `BASE_URL`, and this script never reads `.env` — see the
+> warning under [Business card](#business-card). **The sticker is the more
+> dangerous of the two**: the card prints its address under the code, so a bad
+> one is visible, while the sticker face says only "SCAN ME". A roll can be
+> printed dead with nothing on it to give that away. Check a sticker by
+> scanning it, never by looking at it.
 
 | File | Shape | Pixels | For |
 |---|---|---|---|

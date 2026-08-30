@@ -39,7 +39,7 @@ within four hours of a commit whose entire purpose was to re-read it.
 |---|---|---|
 | Hosting | `ok: live` OVH VPS, Ubuntu 24.04 | **Done.** The app runs under systemd as `dinnerbyderek`, code in `/srv/dinner-by-derek`, data in `/var/lib/dinnerbyderek`. Deploying a change is `git pull` and a restart — see [DEPLOY](DEPLOY.md#deploying-a-change-later). |
 | Domain | `ok: live` `dinnerbyderek.ca`, in Cloudflare | Resolving, with a certificate. The site answers on https. |
-| `BASE_URL` | `ok: https://dinnerbyderek.ca` | Read off the server's own boot line. Secure cookies and HSTS follow from it automatically — the app decides both from the scheme rather than from `NODE_ENV`. **The graphics still need regenerating**: any QR made before this was set points at a placeholder, which is the expensive mistake once something reaches a printer. |
+| `BASE_URL` | `ok: https://dinnerbyderek.ca` | Read off the server's own boot line. Secure cookies and HSTS follow from it automatically — the app decides both from the scheme rather than from `NODE_ENV`. The graphics were regenerated afterwards and the codes were **decoded and checked on 2026-08-30**: the card back and the scan sticker served from `/print` both resolve to `https://dinnerbyderek.ca`, and the card prints that address under the code. See [step 6](#6-regenerate-the-printed-graphics). |
 | `NODE_ENV` / `TRUST_PROXY` | `warn: not re-read` | Both matter and neither is visible from outside. `TRUST_PROXY=1` behind nginx, or every visitor shares one rate-limit bucket; the app prints a warning at boot if it is wrong, so `journalctl -u dinnerbyderek -n 30` answers this in one command. |
 | Admin password | `ok: hashed` scrypt | `ADMIN_PASSWORD_HASH` is set and the plaintext `ADMIN_PASSWORD` line is gone. Step 2 is already done; confirm the boot output rather than redo it. |
 | Weeks | `ok: published` starting 2026-08-31 | The week of **Aug 31 – Sep 6 went live on its own** at 20:27 UTC on 2026-08-29 — the first time the scheduler has published rather than the owner. It had been refused as empty three hours earlier and published itself once it had content, which is the design working. It replaces the Aug 24 week described in the rest of this document. What is on it has `warn: not re-read`. |
@@ -47,18 +47,19 @@ within four hours of a commit whose entire purpose was to re-read it.
 | Standing items | `ok: all reviewed` | **Done, reported 2026-08-30.** Breaded Chicken Cutlets, Pulled Pork and BBQ Brisket were the three outstanding, and they were the one blocking item on this list. **Other Options is therefore visible to customers now**, which it had never been — the section stays hidden while any item in it is unticked. |
 | Allergen dictionary | `warn: not re-read` was 479 terms | Was 303 until the seed learned to reach a database that already exists. The extra 176 include caesar salad, oatmeal, tempura, croissant and most of the breads — the working vocabulary of these menus. A bigger dictionary can raise a new suggestion on an item already reviewed, which revokes that review; all fourteen reviewed items were re-checked on 2026-08-26 and none were revoked. |
 | Saved dishes | `warn: not re-read` was 816 | A catalogue was imported. The Load picker is live and long, which is why it now sorts by how often a dish has run. |
-| Orders | `warn: not re-read` was 1 test order | One order exists (Aug 25, Pork Souvlaki). Delete it before the first real one, so the first real one is unmistakably the first. |
+| Orders | `ok: none` re-read 2026-08-30 | **The test order has been deleted.** The table is empty, so the first real order will be unmistakably the first. |
 | Locations | `warn: not re-read` was 1, Waterloo home kitchen | |
-| Email | `todo: off` confirmed 2026-08-30 | Orders are recorded and shown in the dashboard; nothing is sent. Also the reason a customer sees the e-transfer reference only once, on screen — see [payments](#knowing-which-transfer-paid-for-what). |
+| Email | `todo: sending off, receiving on` 2026-08-30 | **Receiving works**: Cloudflare Email Routing delivers `orders@dinnerbyderek.ca` to Derek's Hotmail. **Sending does not yet** — Cyberimpact is chosen and signed up for, and the remaining step is validating the domain there. Until it is done, orders are recorded and shown in the dashboard but nothing is sent. Also the reason a customer sees the e-transfer reference only once, on screen — see [payments](#knowing-which-transfer-paid-for-what). |
 | Payments | `warn: not re-read` was **0 rows** | The app has booted against this database, so the table is there. Empty is the correct state until a transfer arrives. |
 | Facebook | not connected | Manual copy-and-paste publishing works without it. |
 
 > [!NOTE] Use this while it lasts
-> As of the 26th the only order in the database was a test, and no payment had
-> ever arrived. While that holds, rebuilding the week, unpublishing it and
-> restoring a backup are all cheap — and all expensive the moment a real
-> customer is in the orders table. Check before assuming it still holds: the
-> site has been taking orders on a public address since the 29th.
+> Re-read 2026-08-30: the orders table is **empty** — the test order has been
+> deleted — and no payment has ever arrived. While that holds, rebuilding the
+> week, unpublishing it and restoring a backup are all cheap, and all expensive
+> the moment a real customer is in the orders table. Check before assuming it
+> still holds: the site has been taking orders on a public address since the
+> 29th, and nothing warns you when the first one lands except the dashboard.
 
 ---
 
@@ -201,6 +202,16 @@ set points at a placeholder, and that is the expensive version of the mistake �
 wrong on paper rather than wrong on a screen. Regenerate again if `BASE_URL`
 ever changes.
 
+> [!WARNING] Regenerate from the Dashboard, never from `npm run`
+> `scripts/card.js` and `scripts/sticker.js` read `process.env.BASE_URL`
+> directly, and `dotenv` is loaded in exactly one file — `server/config.js` —
+> which neither script requires. Run from a shell, **on the server or the
+> laptop**, they therefore see no `BASE_URL` and quietly emit the placeholder.
+> **Dashboard → Graphics** calls the same two functions from inside the server
+> process, where `.env` was already read at boot. The card prints its address
+> under the code so a bad one is visible; the sticker face says only "SCAN ME",
+> so a roll can be printed dead with nothing on it to give that away.
+
 ### 7. Reinstall the PWA on the phone
 
 Remove the app from the home screen, reload in Chrome, add it again.
@@ -233,9 +244,12 @@ Orders are recorded and appear in the dashboard whether or not email works, so
 this is genuinely optional — but without it, nothing tells you an order
 arrived except opening the dashboard.
 
-Sending needs an SMTP provider (Resend, Postmark and Fastmail all have small
-or free tiers). Put `SMTP_FROM` on the domain — `orders@dinnerbyderek.ca` —
-not on a personal mailbox, or it lands in spam. Receiving is separate and
+Sending needs an SMTP provider. **This deployment uses Cyberimpact** — a Quebec
+company on Canadian servers, free relay to 1,000 messages a month, no card —
+which suits both the volume (two emails an order, so roughly 300 a month) and
+the reason the VPS is in Beauharnois. Resend, Postmark and Fastmail are the
+alternatives if that ever changes. Put `SMTP_FROM` on the domain —
+`orders@dinnerbyderek.ca` — not on a personal mailbox, or it lands in spam. Receiving is separate and
 free: Cloudflare → Email → Email Routing forwards to an inbox you already
 read.
 
