@@ -71,6 +71,25 @@ const MAX_BYTES = 1024 * 1024;
 
 const configured = () => !!config.imap.host;
 
+/**
+ * What actually went wrong, rather than what the IMAP client called it.
+ *
+ * ImapFlow reports a rejected login as `Command failed`, which is true and
+ * useless: the server's own words are on `responseText`, and they are the whole
+ * diagnosis — `[AUTHENTICATIONFAILED] Invalid credentials` is a different
+ * afternoon from `[ALERT] Please log in via your web browser`. Printing only
+ * the message sends someone to check the four things that were already right.
+ *
+ * Learned the slow way on the first live run, which failed with `Command
+ * failed` and nothing else while the cause sat one property away.
+ */
+function describe(err) {
+  const parts = [err && err.message ? err.message : 'unknown error'];
+  const detail = (err && err.responseText) || (err && err.serverResponseCode) || '';
+  if (detail && detail !== parts[0]) parts.push(detail);
+  return parts.join(' — ');
+}
+
 /* --- HTML to the grid the parser expects ---------------------------------
  * Interac states the transfer as a two-column table, and `parseNotification`
  * was written against what that table flattens to: the label alone on a line,
@@ -343,5 +362,5 @@ async function poll({
 
 module.exports = {
   configured, poll, flatten, messageText, isNotification,
-  POLL_MS, WINDOW_DAYS, MAX_PER_POLL, MAX_BYTES,
+  POLL_MS, WINDOW_DAYS, MAX_PER_POLL, MAX_BYTES, describe,
 };

@@ -71,10 +71,18 @@ async function main() {
     });
   } catch (e) {
     /* Nearly always one of three things, and the raw error names which. */
-    console.error(`\n  Could not read the mailbox: ${e.message}\n`);
-    console.error('  Check, in this order: the app password (a Gmail account password');
-    console.error('  will not work), that IMAP is switched on in the mail provider, and');
-    console.error(`  that ${config.imap.mailbox} is the folder the forward lands in.\n`);
+    console.error(`\n  Could not read the mailbox: ${mailbox.describe(e)}\n`);
+    if (e.authenticationFailed) {
+      console.error('  That is the credentials, not the mailbox. It has to be a 16-character');
+      console.error('  app password, with 2-Step Verification switched on first — an ordinary');
+      console.error('  account password is refused with exactly this error. Check what landed:');
+      console.error("    awk -F= '/^IMAP_PASS=/{print length($2)}' .env");
+      console.error('  A blind prompt shows nothing as you paste, so pasting twice stores 32');
+      console.error('  characters and looks identical to pasting once.\n');
+    } else {
+      console.error('  Check that IMAP is switched on at the provider, and that');
+      console.error(`  ${config.imap.mailbox} is the folder the forward lands in.\n`);
+    }
     process.exit(1);
   }
 

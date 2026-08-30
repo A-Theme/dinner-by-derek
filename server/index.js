@@ -393,7 +393,7 @@ function runMailboxPoll() {
     .catch((e) => {
       mailboxFailures += 1;
       mailboxCyclesToSkip = Math.min(2 ** mailboxFailures, 12) - 1;
-      console.error(`[job] payments mailbox (attempt ${mailboxFailures}): ${e.message}`);
+      console.error(`[job] payments mailbox (attempt ${mailboxFailures}): ${mailbox.describe(e)}`);
       if (mailboxFailures === 1) {
         console.error('       Check IMAP_USER and IMAP_PASS — an app password, not '
           + 'the account password — and that IMAP is switched on at the provider.');
