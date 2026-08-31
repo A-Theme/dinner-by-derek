@@ -50,10 +50,11 @@ a { color: var(--dbd-olive-deep); }
    readme-art.js) rendered in CSS: olive band, a warm bloom behind the mark,
    a tan hairline top and bottom, and the lockup centred over a spaced tagline.
    The two are meant to be recognisably one thing, so if you move one, move the
-   other — the banner's geometry is in scripts/readme-art.js. What is not
-   carried across is the banner's motion (steam, a travelling shine) and its
-   second line of copy: a README is looked at once, and a header is passed
-   every time somebody orders. */
+   other — the banner's geometry is in scripts/readme-art.js. The motion is
+   carried across too, at half scale: a shine along each hairline and steam
+   off the mark. What is not carried across is the banner's second line of
+   copy, because a README is looked at once and a header is passed every time
+   somebody orders. */
 .site-header {
   position: relative;
   overflow: hidden;
@@ -82,6 +83,68 @@ a { color: var(--dbd-olive-deep); }
   border-top: 3px solid var(--dbd-rule-tan-dark);
   border-bottom: 3px solid var(--dbd-rule-tan-dark);
   pointer-events: none;
+}
+/* --- The two moving parts ---
+   In the banner these are SMIL; here they are CSS animations, so the
+   prefers-reduced-motion rule further down already switches them off. Both
+   rest in their invisible state — the shine parked off the left edge, the
+   steam at zero opacity — so switching them off leaves nothing frozen on
+   screen. Both paint above the hairlines and under the lockup, which is the
+   order the banner draws them in. */
+.site-shine {
+  position: absolute;
+  top: var(--dbd-sp-3); bottom: var(--dbd-sp-3);
+  left: 0; width: 40%;
+  z-index: 1;
+  pointer-events: none;
+  transform: translateX(-100%);
+  background-image:
+    linear-gradient(90deg, transparent, var(--dbd-tan-lift), transparent),
+    linear-gradient(90deg, transparent, var(--dbd-tan-lift), transparent);
+  background-size: 100% 3px;
+  background-position: left top, left bottom;
+  background-repeat: no-repeat;
+  opacity: 0.95;
+  animation: dbd-shine 7s linear infinite;
+}
+/* 250% of a 40%-wide box is one header width, so this crosses edge to edge. */
+@keyframes dbd-shine {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(250%); }
+}
+
+/* 120x48 user units drawn at 120x48 CSS pixels, so the px in the keyframes
+   below are the same units as the path data. */
+.site-steam {
+  position: absolute;
+  top: 0; left: 50%; margin-left: -60px;
+  z-index: 1;
+  pointer-events: none;
+  /* The band clips at its own top edge, and a bright stroke cut off mid-curve
+     reads as a bug rather than as steam. Fading the top third dissipates the
+     wisp before the edge can cut it. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 45%);
+          mask-image: linear-gradient(to bottom, transparent 0, #000 45%);
+}
+.site-steam path {
+  fill: none;
+  stroke: var(--dbd-tan-lift);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  opacity: 0;
+  transform-box: view-box;
+  --drift: -9px;
+  animation: dbd-steam 5.5s linear infinite;
+}
+.site-steam path:nth-child(2) { --drift:  4px; animation-duration: 6.2s; animation-delay: 1.4s; }
+.site-steam path:nth-child(3) { --drift: 10px; animation-duration: 5.9s; animation-delay: 2.9s; }
+/* Rises, drifts sideways, fades out, repeats — the banner's wisp timings. */
+@keyframes dbd-steam {
+  0%   { opacity: 0;    transform: translate(0, 13px); }
+  25%  { opacity: 0.68; }
+  50%  { transform: translate(calc(var(--drift) * 0.4), 0); }
+  60%  { opacity: 0.68; }
+  100% { opacity: 0;    transform: translate(var(--drift), -15px); }
 }
 .site-header .wrap { position: relative; z-index: 1; }
 .site-header a { color: var(--dbd-parchment); text-decoration: none; }

@@ -50,6 +50,18 @@ ${extraHead || ''}
 <body class="${bodyClass}">
 <div id="install-slot"></div>
 <header class="site-header">
+  <!-- The banner's two moving parts, carried across: a shine travelling along
+       each hairline, and steam rising from behind the mark. Both are
+       decoration, so both are hidden from assistive tech and both stop under
+       prefers-reduced-motion. The geometry is half the banner's, because the
+       mark here is half the size — see scripts/readme-art.js. -->
+  <span class="site-shine" aria-hidden="true"></span>
+  <svg class="site-steam" viewBox="0 0 120 48" width="120" height="48"
+    aria-hidden="true" focusable="false">
+    <path d="M 28 44 c -4.5 -8 4.5 -13 0 -21 c -4.5 -8 3.5 -12.5 0 -20"/>
+    <path d="M 60 44 c -4.5 -8 4.5 -13 0 -21 c -4.5 -8 3.5 -12.5 0 -20"/>
+    <path d="M 91 44 c -4.5 -8 4.5 -13 0 -21 c -4.5 -8 3.5 -12.5 0 -20"/>
+  </svg>
   <div class="wrap">
     <a href="/" class="site-lockup">
       <img src="/icons/header-mark.png" alt="" class="brandmark">
