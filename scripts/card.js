@@ -189,10 +189,15 @@ async function front() {
  * them to ask. Parchment, because a card that gets written on gets kept.
  */
 async function back(d, url) {
-  // The mark in espresso rather than the leather badge: this half is parchment,
-  // and the gold lockup on the front is a gradient that needs a dark ground to
-  // be lighter than. Same line art the stickers print, one flat colour.
-  const seal = await brandmark.stamp({ width: 96 });
+  // The mark rather than the leather badge: this half is parchment, and the
+  // gold lockup on the front is a gradient that needs a dark ground to be
+  // lighter than. Same line art the stickers print, one flat colour -- and now
+  // in the same ink they print it in. It was espresso, the brand's warm dark
+  // brown, which is right on screen and reads as brown next to a sticker off
+  // the same artwork. Black, because these two are printed and handed over
+  // together, and 'black' rather than a hex so nothing can drift from
+  // theme.css, which owns every other colour here.
+  const seal = await brandmark.stamp({ width: 96, colour: 'black' });
   const code = await qrImage(url, 300);
 
   const left = SAFE;
