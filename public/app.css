@@ -320,7 +320,9 @@ legend { font-weight: 700; font-size: var(--dbd-step--1); padding: 0 var(--dbd-s
 /* --- Fields that need fixing --------------------------------------------
    Colour alone never carries this: the box is doubled in weight and sunk a
    shade, and the reason is spelled out in words directly under it. */
-[aria-invalid="true"] {
+/* Written out per element: the base rule for inputs is `input[type=text]`,
+   which outranks a bare attribute selector and kept the border olive. */
+input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="true"] {
   border-color: var(--dbd-danger);
   box-shadow: inset 0 0 0 1px var(--dbd-danger);
   background: var(--dbd-parchment-2);

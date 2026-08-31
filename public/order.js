@@ -100,6 +100,9 @@
       var del = document.getElementById('delivery-pane');
       if (pick) pick.hidden = d;
       if (del) del.hidden = !d;
+      /* Switching changes which fields are being asked for, so whatever was
+         flagged under the old choice is no longer the question. */
+      clearProblems();
       render();
     });
   });
@@ -108,6 +111,7 @@
   var postal = document.getElementById('postal');
   var elig = document.getElementById('eligibility');
   var eligible = false;
+  var checking = false;                 // a code typed but not yet answered for
   var checkTimer = null;
 
   function showElig(kind, msg) {
@@ -118,13 +122,14 @@
 
   function runCheck() {
     var raw = (postal.value || '').replace(/[^A-Za-z0-9]/g, '');
-    if (raw.length < 6) { elig.hidden = true; eligible = false; fee = 0; render(); return; }
+    if (raw.length < 6) { elig.hidden = true; eligible = false; checking = false; fee = 0; render(); return; }
     fetch('/api/eligibility', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ postal: postal.value }),
     }).then(function (r) { return r.json(); }).then(function (d) {
       eligible = !!d.ok;
+      checking = false;
       fee = d.ok ? d.fee : 0;
       if (d.ok) {
         showElig('ok', 'We deliver to <strong>' + d.fsa + '</strong>. Delivery is '
@@ -139,13 +144,14 @@
       render();
     }).catch(function () {
       showElig('bad', "We couldn't check that postal code just now. Check your connection and try again.");
-      eligible = false; fee = 0; render();
+      eligible = false; checking = false; fee = 0; render();
     });
   }
 
   if (postal) {
     postal.addEventListener('input', function () {
       clearTimeout(checkTimer);
+      checking = (postal.value || '').replace(/[^A-Za-z0-9]/g, '').length >= 6;
       checkTimer = setTimeout(runCheck, 300);
     });
   }
@@ -292,29 +298,144 @@
     });
   }
 
-  /* --- Submit ------------------------------------------------------------ */
-  form.addEventListener('submit', function (e) {
+  /* --- What's missing, and where -----------------------------------------
+     Two things have to happen when details are incomplete: the customer has
+     to be stopped, and they have to be told which box to go back to. The
+     summary above the button does the first job and used to do both, which
+     left "Add your name." floating above a dozen inputs. So each problem now
+     also names its own field: the box is marked, the reason sits under it,
+     and focus lands on the first one. The summary stays, because a list of
+     four problems is easier to hold onto than four scattered lines.
+
+     None of this replaces the server's checks. Every rule here is enforced
+     again in orders.js, which is what an unscripted post still meets. */
+
+  function fieldEl(n) { return form.querySelector('[name=' + n + ']'); }
+  function noteEl(el) { return el && el.id ? document.getElementById('err-' + el.id) : null; }
+  function val(el) { return el ? (el.value || '').trim() : ''; }
+
+  function markBad(el, msg) {
+    if (!el) return;
+    el.setAttribute('aria-invalid', 'true');
+    var n = noteEl(el);
+    if (n) { n.textContent = msg; n.hidden = false; }
+  }
+  function markGood(el) {
+    if (!el) return;
+    el.removeAttribute('aria-invalid');
+    var n = noteEl(el);
+    if (n) { n.hidden = true; n.textContent = ''; }
+  }
+
+  /* One entry per field. `run` returns a message when the box is wrong and
+     nothing when it is fine; `when` limits a check to the fulfilment method
+     that actually asks for that box. */
+  var CHECKS = [
+    { name: 'postal', when: isDelivery, run: function (v) {
+      if (!v) return 'Add the postal code we\'re delivering to.';
+      if (v.replace(/[^A-Za-z0-9]/g, '').length < 6) return 'That postal code looks incomplete — it should look like N2L 3G1.';
+      if (checking) return 'Still checking this postal code — give it a second and try again.';
+      if (!eligible) return 'We can\'t deliver to this postal code — see the note below.';
+    } },
+    { name: 'addr_line', when: isDelivery, run: function (v) {
+      if (!v) return 'Add your street address.';
+    } },
+    { name: 'name', run: function (v) {
+      if (!v) return 'Add your name, so Derek knows whose dinner this is.';
+    } },
+    { name: 'phone', run: function (v) {
+      if (!v) return 'Add a phone number Derek can reach you on.';
+      if (v.replace(/\D/g, '').length < 10) return 'That number looks too short — include the area code.';
+    } },
+    { name: 'email', run: function (v) {
+      if (v && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return 'That email address doesn\'t look right.';
+    } },
+  ];
+
+  function clearProblems() {
+    CHECKS.forEach(function (c) { markGood(fieldEl(c.name)); });
     elErr.hidden = true;
-    var problems = [];
-    if (count() === 0) problems.push('Add at least one item.');
-    if (!form.querySelector('[name=name]').value.trim()) problems.push('Add your name.');
-    if (!form.querySelector('[name=phone]').value.trim()) problems.push('Add a phone number.');
+    elErr.innerHTML = '';
+  }
+
+  /* Everything wrong, in the order the form asks for it, so the first problem
+     reported is the topmost one on the page. */
+  function findProblems() {
+    var out = [];
+    if (count() === 0) out.push({ msg: 'Add at least one item from the menu.' });
+    CHECKS.forEach(function (c) {
+      if (c.when && !c.when()) return;
+      var el = fieldEl(c.name);
+      if (!el) return;
+      var msg = c.run(val(el));
+      if (msg) out.push({ el: el, msg: msg });
+    });
     if (isDelivery()) {
-      if (!eligible) problems.push('Enter a postal code we deliver to.');
-      if (!form.querySelector('[name=addr_line]').value.trim()) problems.push('Add your street address.');
       var min = Number(cfg.deliveryMin || 0);
       if (min > 0 && subtotal() < min) {
-        problems.push('Delivery orders start at ' + money(min) + '. You\'re '
-          + money(min - subtotal()) + ' short.');
+        out.push({ msg: 'Delivery orders start at ' + money(min) + '. You\'re '
+          + money(min - subtotal()) + ' short.' });
       }
     }
+    return out;
+  }
+
+  /* Paint the result. Fields that are fine are cleared as well as fields that
+     are wrong — a message that has been fixed must not sit there contradicting
+     the box it points at. */
+  function showProblems(problems) {
+    clearProblems();
+    if (!problems.length) return;
+    problems.forEach(function (p) { if (p.el) markBad(p.el, p.msg); });
+    elErr.hidden = false;
+    elErr.innerHTML = '<strong>' + (problems.length === 1
+      ? 'One thing to fix before you can continue:'
+      : 'A few things to fix before you can continue:') + '</strong><ul>'
+      + problems.map(function (p) { return '<li>' + esc(p.msg) + '</li>'; }).join('') + '</ul>';
+
+    var first = problems[0].el;
+    if (first && first.offsetParent !== null) {
+      first.focus();
+      first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } else {
+      elErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      elErr.focus();
+    }
+  }
+
+  /* Live corrections. Typing only ever clears a message, so a box that is
+     already marked stops arguing with what is now in it the moment it is
+     fixed — and a box nobody has reached yet is left alone. Leaving a field
+     with something in it does run the check, which is how a mistyped email is
+     caught where it was typed rather than at the bottom of the form. */
+  CHECKS.forEach(function (c) {
+    var el = fieldEl(c.name);
+    if (!el) return;
+    function recheck(onBlur) {
+      var flagged = el.hasAttribute('aria-invalid');
+      var v = val(el);
+      if (!flagged && (!onBlur || !v)) return;
+      if (c.when && !c.when()) { markGood(el); return; }
+      var msg = c.run(v);
+      if (!msg) { markGood(el); return; }
+      // Mid-typing, a message can only go away, never change: swapping "add a
+      // phone number" for "that number is too short" on the third digit is the
+      // form arguing with someone who is still answering it.
+      if (onBlur) markBad(el, msg);
+    }
+    el.addEventListener('input', function () { recheck(false); });
+    el.addEventListener('blur', function () { recheck(true); });
+  });
+
+  /* --- Submit ------------------------------------------------------------ */
+  form.addEventListener('submit', function (e) {
+    var problems = findProblems();
     if (problems.length) {
       e.preventDefault();
-      elErr.hidden = false;
-      elErr.innerHTML = '<strong>Almost there.</strong> ' + problems.join(' ');
-      elErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showProblems(problems);
       return;
     }
+    showProblems([]);
     // Everything checks out locally. Show the review rather than sending —
     // unless this submit is the confirmation coming back from the review.
     if (dlg && !confirmed) {

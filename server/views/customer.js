@@ -272,10 +272,14 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
           <fieldset>
             <legend>Delivery address</legend>
             <label for="postal">Postal code</label>
-            <input type="text" id="postal" name="postal" autocomplete="postal-code" inputmode="text" placeholder="N2L 3G1">
+            <input type="text" id="postal" name="postal" autocomplete="postal-code" inputmode="text"
+              placeholder="N2L 3G1" aria-describedby="err-postal">
+            <p class="field-err" id="err-postal" hidden></p>
             <div id="eligibility" class="notice" hidden></div>
             <label for="addr">Street address</label>
-            <input type="text" id="addr" name="addr_line" autocomplete="address-line1">
+            <input type="text" id="addr" name="addr_line" autocomplete="address-line1"
+              aria-describedby="err-addr">
+            <p class="field-err" id="err-addr" hidden></p>
             <label for="unit">Unit or buzzer <span class="variant__label">(optional)</span></label>
             <input type="text" id="unit" name="addr_unit" autocomplete="address-line2">
             <label for="anotes">Delivery instructions <span class="variant__label">(optional)</span></label>
@@ -287,11 +291,17 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
         <fieldset>
           <legend>Your details</legend>
           <label for="cname">Name</label>
-          <input type="text" id="cname" name="name" autocomplete="name" required>
+          <input type="text" id="cname" name="name" autocomplete="name" required
+            aria-describedby="err-cname">
+          <p class="field-err" id="err-cname" hidden></p>
           <label for="cphone">Phone</label>
-          <input type="tel" id="cphone" name="phone" autocomplete="tel" required>
-          <label for="cemail">Email</label>
-          <input type="email" id="cemail" name="email" autocomplete="email">
+          <input type="tel" id="cphone" name="phone" autocomplete="tel" required
+            aria-describedby="err-cphone">
+          <p class="field-err" id="err-cphone" hidden></p>
+          <label for="cemail">Email <span class="variant__label">(optional — for your confirmation)</span></label>
+          <input type="email" id="cemail" name="email" autocomplete="email"
+            aria-describedby="err-cemail">
+          <p class="field-err" id="err-cemail" hidden></p>
           <label for="callergy">Allergies or notes for the kitchen</label>
           <textarea id="callergy" name="allergy_notes" rows="3"
             placeholder="Tell Derek about any allergies here."></textarea>
@@ -315,7 +325,7 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
           <div class="totals__row totals__row--grand"><span>Total</span><span id="t-total">$0.00</span></div>
         </div>
 
-        <div id="formerror" class="notice notice--strong" hidden></div>
+        <div id="formerror" class="notice notice--strong" role="alert" tabindex="-1" hidden></div>
 
         <button type="submit" class="btn btn--primary btn--block" id="submitbtn">
           ${late ? 'Review late request' : 'Review order'}
