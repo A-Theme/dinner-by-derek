@@ -31,6 +31,7 @@ have a trap in them and each one is called out where it happens.
 - [A staging copy on the same server](#a-staging-copy-on-the-same-server)
 - [Optional: the orange cloud](#optional-the-orange-cloud)
 - [Optional: email](#optional-email)
+- [Optional: reading the bank's notifications](#optional-reading-the-banks-notifications)
 - [When something is wrong](#when-something-is-wrong)
 
 ---
@@ -1048,6 +1049,42 @@ Use the provider's own Copy button, because a wrong character fails validation
 silently. Then fill in the `SMTP_*` block in `.env` and restart. Put
 `SMTP_FROM` on the domain — `orders@dinnerbyderek.ca` — not on a personal
 Gmail or Hotmail, or the mail lands in spam.
+
+The settings that worked, for reference:
+
+```
+SMTP_HOST=smtp-relay.cyberimpact.com
+SMTP_PORT=587
+SMTP_SECURE=false
+```
+
+`false` is right for 587: that is STARTTLS, where the connection is upgraded
+after connecting rather than encrypted from the first byte. Port 465 is the
+other valid pair, and it wants `true`. Both are encrypted; setting the wrong
+one for the port fails as an authentication error, which sends you looking at
+the password instead of the port.
+
+**Two things cost an afternoon here, both of which look like a bad password.**
+
+*The DKIM records validate on a delay you cannot shorten.* Cyberimpact checks
+DNS the moment the domain is added, and if the records are not there yet it
+caches the miss — for this zone, 1,800 seconds, which is the SOA minimum. Every
+"Refresh now" inside that window returns Invalid however correct the records
+are. The tell is DMARC passing while the three new records fail: that proves
+the checker can read the zone and is reading a cached answer. Confirm from
+outside and then wait it out:
+
+```bash
+nslookup -type=CNAME cyberimpact-s1-xxxxxx._domainkey.dinnerbyderek.ca 8.8.8.8
+```
+
+*The password shown while creating an SMTP user is not committed until you
+press Save.* Copying it from that dialog and saving it into `.env` produces
+`535 5.7.8 Authentication credentials invalid` against a user that exists, with
+the right username, on a validated domain — every part of which points away
+from the real cause. It cannot be displayed again either. The fix is Edit →
+Reset → Copy → **Save**, in that order, and `Last connection: –` on the user
+row is the sign that no login has ever succeeded.
 
 **The trap is SPF.** A domain may have exactly one SPF record. Cloudflare
 already wrote one for Email Routing, and the sending provider will tell you to
