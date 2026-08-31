@@ -30,6 +30,9 @@
     try { note = (JSON.parse(cfgEl ? cfgEl.textContent : '{}') || {}).shutNote || ''; } catch (e) { note = ''; }
     if (!note) return;                       // an open day has nothing to explain
 
+    var box = document.getElementById('shutbox');
+    var taps = 0;
+
     document.addEventListener('click', function (e) {
       var btn = e.target.closest && e.target.closest('.qty[data-shut] button');
       if (!btn) return;
@@ -48,7 +51,31 @@
         row.appendChild(msg);
       }
       msg.textContent = note + ' Pick another day to order.';
+
+      /* Counted across the page rather than per row: tapping + on one dish and
+         then on another is the same person not being told, and the second tap
+         is the tell that a line of text under a button has not landed. From
+         there every further tap opens it again — they are still trying, and a
+         warning that gives up while somebody is still pressing is no warning. */
+      taps++;
+      if (taps < 2 || !box) return;
+      try {
+        if (box.open) return;
+        if (box.showModal) { box.showModal(); return; }
+      } catch (err) { /* fall through to the inline dialog */ }
+      box.setAttribute('open', '');
     });
+
+    /* "Stay here" only closes it. The other button is a link out to the week,
+       which needs no handler. */
+    if (box) {
+      var stay = box.querySelector('[data-shutbox-close]');
+      if (stay) {
+        stay.addEventListener('click', function () {
+          if (box.close) box.close(); else box.removeAttribute('open');
+        });
+      }
+    }
   })();
 
   /* --- The bigger picture -------------------------------------------------

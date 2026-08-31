@@ -254,6 +254,16 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
               Get your order in before then.</div>`
           : '';
 
+  /* Why this day cannot take an order, in one sentence. Said three times over,
+     in descending order of how hard it is to miss: the banner at the top, the
+     line under the stepper that was tapped, and — once somebody has tapped
+     twice, which is the tell that neither has landed — the box below. */
+  const shutNote = past
+    ? `${dayLabel} has already passed, so nothing on it can be ordered.`
+    : shut
+      ? `Ordering has closed for ${dayLabel}.`
+      : '';
+
   const body = html`
     <p><a href="/w/${week.slug}">← All days</a></p>
     <h1>${dayLabel}</h1>
@@ -268,6 +278,24 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
       ${menu.grouped.map((g) => html`
         <h3 class="subhead">${g.label}</h3>
         ${g.items.map((i) => optionCard(i, past || shut))}`)}` : ''}
+
+    <!-- The third telling, and the loud one. Only rendered on a day that
+         cannot take an order, and only opened once somebody has tapped a
+         stepper twice — by which point the banner and the inline line have
+         both failed, and repeating them a third time quietly would fail too.
+         It carries the way out rather than only the refusal: the whole reason
+         someone is tapping is that they want to order something. -->
+    ${past || shut ? html`
+    <dialog class="shutbox" id="shutbox" aria-labelledby="shutbox-title">
+      <h2 class="shutbox__title" id="shutbox-title">You can't order for this day</h2>
+      <p class="shutbox__why">${shutNote}</p>
+      <p>The menu is still here so you can see what was on. To order, pick a day
+        that is still open.</p>
+      <div class="shutbox__actions">
+        <a class="btn btn--primary" href="/w/${week.slug}">See the days you can order</a>
+        <button type="button" class="btn btn--secondary" data-shutbox-close>Stay here</button>
+      </div>
+    </dialog>` : ''}
 
     ${past || shut ? '' : html`
     <form id="orderform" method="post" action="/order" novalidate>
@@ -431,16 +459,8 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
     deliveryMin,
     servedAreas,
     ownerContact: settings.get('owner_contact'),
-    /* What to say when somebody taps a stepper on a day that cannot take the
-       order. The banner at the top of the page says this at length, but by the
-       time a thumb reaches the dish that banner is several hundred pixels off
-       the screen — which is how a closed day comes to look like a broken app.
-       Empty on a day that is open, and the handler stays out of the way. */
-    shutNote: past
-      ? `${dayLabel} has already passed, so nothing on it can be ordered.`
-      : shut
-        ? `Ordering has closed for ${dayLabel}.`
-        : '',
+    /* Empty on a day that is open, and the handler stays out of the way. */
+    shutNote,
   };
 
   return L.page({
