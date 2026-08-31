@@ -508,14 +508,39 @@ function confirmationView({ order, lines, late }) {
            muted line on it. -->
       ${order.email
         ? html`<p class="confirm__sent">A copy is on its way to
-            <strong>${order.email}</strong>. Your reference is
-            <strong>${order.ref}</strong>.</p>`
+            <strong>${order.email}</strong>.${
+            /* The reference is only named here when nothing below is about to
+               show it larger. Saying it twice within three lines, in two
+               different sizes, invites the reading that they are two different
+               numbers — which on the one screen carrying a payment code is the
+               last thing worth risking. */
+            !(!late && order.payment_method === 'etransfer')
+              ? html` Your reference is <strong>${order.ref}</strong>.` : ''}</p>`
         : html`<div class="notice notice--strong confirm__norecord">
             <strong>This page is your only record.</strong>
             You didn't give an email address, so there is nothing for us to send.
             Please write this reference down or take a photo of this screen:
             <span class="confirm__ref">${order.ref}</span>
             ${settings.get('owner_contact')}</div>`}
+
+      <!-- The one thing the customer still has to do, at the top where it will
+           be read, rather than last on the page under the pickup address.
+
+           The code in the transfer message is the only field that travels with
+           the money and comes back out the other end: with it the payment finds
+           this order by itself, without it somebody matches it up by hand. So
+           it is worth more than a line of small print, and "message" is the
+           word the banking app puts on the box. -->
+      ${!late && order.payment_method === 'etransfer'
+        ? html`<div class="notice notice--strong etdo">
+            <h2 class="etdo__h">When you send the e-transfer</h2>
+            <p class="etdo__step">Send <strong>${money(order.total)}</strong>, and type
+              this code into the <strong>message</strong> box:</p>
+            <span class="confirm__ref">${order.ref}</span>
+            <p class="etdo__why">The code is how Derek knows which order your payment
+              is for. Without it, nothing connects the two until someone works it
+              out by hand.</p>
+          </div>` : ''}
 
       <h3 class="subhead">Your order</h3>
       ${lines.map((l) => html`
@@ -542,15 +567,16 @@ function confirmationView({ order, lines, late }) {
         ? html`<p><strong>You chose ${O.PAYMENT_LABEL(order.payment_method)}.</strong>
             Nothing has been charged — payment happens with Derek directly.</p>` : ''}
       <p>${settings.get('payment_instructions')}</p>
-      ${/* The reference is asked for in the transfer message because the
-            message is the one field that travels with the money and comes
-            back out the other end. With it, the payment finds this order by
-            itself; without it, somebody matches it up by hand later. */
-        order.payment_method === 'etransfer'
+      ${/* The instruction that used to sit here has moved to the top of the
+            page, where it is read. Repeating it down here in different words
+            was a second thing to reconcile rather than a second chance to see
+            it — a late request keeps its own copy below, because that order
+            has no confirmed total to send yet and says so differently. */
+        late && order.payment_method === 'etransfer'
         ? html`<div class="notice notice--strong">
-            <strong>Put <code>${order.ref}</code> in the e-transfer message.</strong>
-            That is what tells Derek which order the money is for. Send
-            ${money(order.total)}.</div>` : ''}
+            <strong>If Derek confirms this, put <code>${order.ref}</code> in the
+            e-transfer message.</strong> That is what tells him which order the
+            money is for.</div>` : ''}
 
       <p style="margin-top:var(--dbd-sp-5)"><a class="btn btn--secondary" href="/">Back to the menu</a></p>
     </div>

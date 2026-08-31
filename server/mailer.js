@@ -79,6 +79,31 @@ function fulfilBlock(order) {
    reference in the transfer message. The owner's copy leaves it out — he is
    not the one sending the money, and an instruction aimed past him is noise
    on the email he reads at the stove. */
+/**
+ * The one thing left to do, in the HTML mail, said the same way the screen says
+ * it. Written once because two places need it: the confirmation, and a late
+ * request once Derek confirms it — that second one gave the total and the
+ * payment instructions and never mentioned the code at all, so the customer
+ * most likely to be paying late was the one told least about it.
+ *
+ * The code is set large rather than in the 13px small print it used to share
+ * with the caveats: it is copied by hand into a banking app, often from a
+ * phone, by someone who may be reading it at arm's length.
+ */
+function etransferBox(order) {
+  return `<div style="border:2px solid ${palette.tan};border-radius:8px;padding:14px;margin:14px 0;
+       background:${palette.parchment}">
+       <p style="margin:0 0 8px;font-size:17px;font-weight:700;color:${palette.umber}">
+         When you send the e-transfer</p>
+       <p style="margin:0">Send <strong>${money(order.total)}</strong>, and type this code
+         into the <strong>message</strong> box:</p>
+       <p style="margin:10px 0;font-family:ui-monospace,Menlo,Consolas,monospace;
+         font-size:26px;letter-spacing:2px;font-weight:700;color:${palette.umber}">${esc(order.ref)}</p>
+       <p style="margin:0;font-size:14px;color:${palette['umber-soft']}">The code is how Derek knows
+         which order your payment is for. Without it, nothing connects the two until someone works
+         it out by hand.</p></div>`;
+}
+
 function plain(order, lines, heading, { forCustomer = false } = {}) {
   const tz = settings.get('timezone');
   const parts = [
@@ -98,8 +123,17 @@ function plain(order, lines, heading, { forCustomer = false } = {}) {
   if (order.allergy_notes) parts.push('', `Allergy notes: ${order.allergy_notes}`);
   parts.push('', settings.get('payment_instructions'));
   if (forCustomer && order.payment_method === 'etransfer') {
-    parts.push('', `Put ${order.ref} in the e-transfer message, and send ${money(order.total)}.`,
-      'That is what tells Derek which order the money is for.');
+    /* Set out as a step to follow rather than a sentence to parse, and the code
+       on its own line so it survives being read on a phone and copied into a
+       banking app. "Message" is the word that app puts on the box. */
+    parts.push('',
+      'WHEN YOU SEND THE E-TRANSFER',
+      `Send ${money(order.total)}, and type this code into the message box:`,
+      '',
+      `    ${order.ref}`,
+      '',
+      'The code is how Derek knows which order your payment is for. Without it,',
+      'nothing connects the two until someone works it out by hand.');
   }
   return parts.join('\n');
 }
@@ -185,14 +219,7 @@ async function customerOrderEmail(order, lines) {
     <p><strong>Paying:</strong>${order.payment_method
       ? ` you chose ${esc(O.PAYMENT_LABEL(order.payment_method))}.` : ''}
       ${esc(settings.get('payment_instructions'))}</p>
-    ${order.payment_method === 'etransfer'
-      ? `<div style="border:2px solid ${palette.tan};border-radius:8px;padding:12px;margin:12px 0;
-           background:${palette.parchment}">
-           <p style="margin:0">Put <strong style="font-family:ui-monospace,Menlo,Consolas,monospace;
-             font-size:18px;letter-spacing:1px">${esc(order.ref)}</strong> in the e-transfer message,
-             and send <strong>${money(order.total)}</strong>.</p>
-           <p style="margin:6px 0 0;font-size:13px;color:${palette['umber-soft']}">That is what tells
-             Derek which order the money is for.</p></div>` : ''}
+    ${order.payment_method === 'etransfer' ? etransferBox(order) : ''}
     ${tags ? `<p><strong>Allergen information as shown when you ordered</strong></p><ul>${tags}</ul>` : ''}
     <p style="font-size:13px;color:${palette['umber-soft']}">Allergen information is a guide only.
       Every necessary precaution is taken in the kitchen, but cross-contamination remains a
@@ -218,12 +245,16 @@ async function lateDecisionEmail(order, lines, decision) {
     ${confirmed ? linesTable(lines) + fulfilBlock(order)
       + `<p><strong>Total owed ${money(order.total)}</strong></p>
          <p>${esc(settings.get('payment_instructions'))}</p>`
+        + (order.payment_method === 'etransfer' ? etransferBox(order) : '')
       : `<p>${esc(settings.get('owner_contact'))}</p>`}`);
   return send({
     to: order.email,
     subject: confirmed ? `Confirmed — ${day}` : `Couldn't fit your late request — ${day}`,
     html,
-    text: confirmed ? plain(order, lines, 'Your late order is confirmed')
+    /* forCustomer, because this one goes to the customer and they still have to
+       pay it. Without the flag the plain-text copy of a confirmed late order
+       carried the total and no instruction to put the code in the message. */
+    text: confirmed ? plain(order, lines, 'Your late order is confirmed', { forCustomer: true })
       : `Sorry — Derek wasn't able to fit your late request for ${day} in. ${settings.get('owner_contact')}`,
   });
 }

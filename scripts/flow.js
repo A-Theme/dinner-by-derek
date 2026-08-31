@@ -490,7 +490,8 @@ const PAST_DATE = T.addDays(today, -2);
     ok('and is stored', !!order);
 
     ok('the confirmation screen tells the customer to put the reference in the message',
-      placed.text.includes(order.ref) && /in the e-transfer message/i.test(placed.text),
+      placed.text.includes(order.ref) && /When you send the e-transfer/i.test(placed.text)
+      && placed.text.includes('message</strong> box'),
       placed.text.slice(0, 200));
 
   }

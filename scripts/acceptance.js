@@ -2183,9 +2183,15 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
 
   /* --- The customer is told what to type -------------------------------- */
   const customerView = fs.readFileSync(path.join(__dirname, '..', 'server', 'views', 'customer.js'), 'utf8');
+  /* Matched on the heading of the instruction block rather than on a sentence
+     inside it. The wording changed once already — "put X in the e-transfer
+     message" became a named step with the code on its own line — and these
+     checks failed on the rewrite while the instruction was still there and
+     clearer than before. The heading is the thing that must not vanish. */
   ok('the confirmation screen asks e-transfer customers for the reference',
     /payment_method === 'etransfer'/.test(customerView)
-    && /in the e-transfer message/.test(customerView));
+    && /When you send the e-transfer/.test(customerView)
+    && /message<\/strong> box/.test(customerView));
   /* The email is rendered rather than grepped for. Reading mailer.js for the
      word "forCustomer" says the flag is mentioned somewhere in the file; it
      says nothing about the owner's copy actually leaving the line out, which is
@@ -2200,12 +2206,12 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   const toCustomer = mailPlain(etOrder, etLines, 'Order confirmed', { forCustomer: true });
   const toOwner = mailPlain(etOrder, etLines, 'New order');
   ok('the confirmation email asks for the reference in the transfer message',
-    /in the e-transfer message/.test(toCustomer) && toCustomer.includes('REF12345'), toCustomer);
+    /WHEN YOU SEND THE E-TRANSFER/.test(toCustomer) && /message box/.test(toCustomer) && toCustomer.includes('REF12345'), toCustomer);
   ok('but the owner\'s copy leaves that instruction out — he is not the one sending it',
-    !/in the e-transfer message/.test(toOwner), toOwner);
+    !/WHEN YOU SEND THE E-TRANSFER/.test(toOwner), toOwner);
   const cashOrder = { ...etOrder, payment_method: 'cash' };
   ok('and a cash order is not asked for one either',
-    !/in the e-transfer message/.test(mailPlain(cashOrder, etLines, 'x', { forCustomer: true })));
+    !/WHEN YOU SEND THE E-TRANSFER/.test(mailPlain(cashOrder, etLines, 'x', { forCustomer: true })));
 }
 /* --- Flattening the bank's table ------------------------------------------
    `server/mailbox.js` turns Interac's HTML into the grid `parseNotification`

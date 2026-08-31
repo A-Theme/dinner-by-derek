@@ -370,6 +370,12 @@ a { color: var(--dbd-olive-deep); }
   color: var(--dbd-danger);
 }
 
+/* The one action left after ordering. Sized like an instruction someone is
+   meant to follow while holding a banking app in the other hand. */
+.etdo__h { font-size: var(--dbd-step-2); margin: 0 0 var(--dbd-sp-3); }
+.etdo__step { font-size: var(--dbd-step-1); margin: 0; }
+.etdo__why { font-size: var(--dbd-step-0); margin: 0; }
+
 /* The loud telling, after two taps. Deliberately not styled like the quiet
    notices further up the page — those are what went unread. Full-width on a
    phone, a warm-dark heading rule across the top so it reads as a stop rather
