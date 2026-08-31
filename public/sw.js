@@ -31,10 +31,27 @@ var SHELL = [
   '/manifest.webmanifest',
 ];
 
+/* cache:'reload' on every shell request, and the whole mechanism depends on it.
+ *
+ * A plain addAll() fetches through the browser's ordinary HTTP cache, and these
+ * files are served with a seven-day max-age. So a new CACHE_VERSION opened a
+ * new cache and then filled it from the old copies sitting in that HTTP cache:
+ * the cache name changed, the bytes did not, and a deployed fix reached nobody
+ * who had visited in the past week. Measured on the live site — a cache named
+ * for the new build holding a copy of app.js 2,668 bytes short of the file the
+ * server was serving, dated two deploys earlier.
+ *
+ * 'reload' bypasses the HTTP cache on the way out and refreshes it on the way
+ * back, which is what makes renaming the cache mean something.
+ */
 self.addEventListener('install', function (e) {
   e.waitUntil(
     caches.open(CACHE_VERSION)
-      .then(function (c) { return c.addAll(SHELL); })
+      .then(function (c) {
+        return c.addAll(SHELL.map(function (u) {
+          return new Request(u, { cache: 'reload' });
+        }));
+      })
   );
 });
 
