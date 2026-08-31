@@ -4,6 +4,7 @@ const { settings } = require('../db');
 const { palette } = require('../theme');
 const T = require('../time');
 const A = require('../allergens');
+const assets = require('../assets');
 
 const NAV = [
   ['/admin', 'This Week', '/admin/week'],
@@ -25,7 +26,7 @@ function shell({ title, body, current = '', extraHead = null, scripts = null }) 
 <meta name="robots" content="noindex">
 <link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/app.css">
-<link rel="stylesheet" href="/admin.css">
+<link rel="stylesheet" href="${assets.url('/admin.css')}">
 ${extraHead || ''}
 </head><body>
 <nav class="admin-nav no-print"><ul>
@@ -45,7 +46,7 @@ ${extraHead || ''}
 ${body}
 </main>
 <div id="toasts" aria-live="polite"></div>
-<script src="/admin.js" defer></script>
+<script src="${assets.url('/admin.js')}" defer></script>
 ${scripts || ''}
 </body></html>`;
 }

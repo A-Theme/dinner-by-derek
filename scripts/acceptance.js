@@ -1588,15 +1588,14 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
    The version IS the fingerprint now, and this recomputes it. When it fails,
    the string it prints is the one to paste into sw.js. */
 {
-  const crypto = require('crypto');
-  const pub = path.join(__dirname, '..', 'public');
+  const assets = require('../server/assets');
+  const pub = assets.publicDir;
   // The files a browser actually caches by URL. /offline and the manifest are
   // rendered by routes, so they change with the code rather than with a file.
   const SHELL_FILES = ['theme.css', 'app.css', 'app.js', 'order.js',
     'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
-  const h = crypto.createHash('sha256');
-  for (const n of SHELL_FILES) h.update(n).update(fs.readFileSync(path.join(pub, n)));
-  const expected = `dbd-shell-${h.digest('hex').slice(0, 10)}`;
+  // The same fingerprint the dashboard URLs use, from the one place it lives.
+  const expected = `dbd-shell-${assets.fingerprint(SHELL_FILES)}`;
 
   const sw = fs.readFileSync(path.join(pub, 'sw.js'), 'utf8');
   const found = (/var CACHE_VERSION = '([^']+)'/.exec(sw) || [])[1];
@@ -1609,6 +1608,56 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   }
   ok('and the dashboard is not cached at any version',
     !listed.includes('/admin.js') && !listed.includes('/admin.css'));
+}
+
+/* --- The dashboard carries its version in the URL ---------------------------
+   Which is the other half of that last line. The service worker skips /admin
+   deliberately, but the HTTP cache does not: /admin.js and /admin.css are
+   served with a seven-day max-age, so a deployed fix reached the dashboard
+   only after a hard reload. Commit 9196234 fixed photo uploads being lost and
+   Ctrl+Shift+R was the only way to see it.
+
+   The fix is the shell's own idea moved onto the URL, so this checks the two
+   properties a cache-buster has to have: the same bytes give the same URL
+   (or every page load is a fresh download), and different bytes give a
+   different one (or the fix stays invisible). */
+{
+  const assets = require('../server/assets');
+  const V = require('../server/views/admin');
+
+  const head = String(V.shell({ title: 'Test', body: '' }));
+  for (const p of assets.VERSIONED) {
+    const name = p.slice(1);
+    ok(`the dashboard asks for ${name} by version`,
+      head.includes(`${p}?v=${assets.fingerprint([name])}`));
+    ok(`and never for a bare ${name}, which is the copy that goes stale`,
+      !head.includes(`"${p}"`));
+  }
+
+  // Same bytes, same URL — otherwise the seven-day cache never gets used.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dbd-asset-'));
+  fs.writeFileSync(path.join(dir, 'a.js'), 'one');
+  const first = assets.fingerprint(['a.js'], dir);
+  check('the same file fingerprints the same way twice',
+    assets.fingerprint(['a.js'], dir), first);
+
+  fs.writeFileSync(path.join(dir, 'a.js'), 'two');
+  ok('and a changed file fingerprints differently',
+    assets.fingerprint(['a.js'], dir) !== first);
+
+  // The name is hashed alongside the bytes, exactly as sw.js's version is, so
+  // two files that happen to hold the same thing are still two URLs.
+  fs.writeFileSync(path.join(dir, 'b.js'), 'two');
+  ok('and two files with identical contents are still told apart',
+    assets.fingerprint(['a.js'], dir) !== assets.fingerprint(['b.js'], dir));
+
+  fs.rmSync(dir, { recursive: true, force: true });
+
+  // A file nobody versioned must not silently render an unversioned URL.
+  let refused = false;
+  try { assets.url('/app.js'); } catch { refused = true; }
+  ok('asking for a version of a file that has none is an error, not a bare URL',
+    refused);
 }
 
 /* --- Odds and ends the audit turned up ------------------------------------ */

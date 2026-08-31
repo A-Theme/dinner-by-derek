@@ -154,6 +154,29 @@ const PAST_DATE = T.addDays(today, -2);
 
     const dash = await GET('/admin');
     check('the dashboard opens', dash.status, 200);
+
+    /* --- and asks for its own files by version --------------------------
+       /admin.js and /admin.css are served with a seven-day max-age and the
+       service worker skips /admin on purpose, so an unversioned URL means a
+       deployed dashboard fix waits a week or a hard reload — which is what
+       happened to the photo-upload fix in 9196234. The version is the
+       fingerprint of the file, so changing the file changes the URL.
+
+       Asserted here against the page as the server actually serves it, and
+       the versioned URL is then fetched: express ignores a query string when
+       it looks a static file up, but nothing in this repo said so. */
+    const assets = require('../server/assets');
+    for (const p of assets.VERSIONED) {
+      const want = `${p}?v=${assets.fingerprint([p.slice(1)])}`;
+      ok(`the dashboard asks for ${p} by version`, dash.text.includes(want),
+        `no ${want} in the served page`);
+      ok(`and not for a bare ${p}`, !dash.text.includes(`"${p}"`));
+
+      const asset = await GET(want);
+      check(`and ${want} is served`, asset.status, 200);
+      check('with the bytes of the file it was fingerprinted from',
+        asset.text, fs.readFileSync(path.join(__dirname, '..', 'public', p.slice(1)), 'utf8'));
+    }
   }
 
   /* --- Starting the week is a POST, not a page view -----------------------
