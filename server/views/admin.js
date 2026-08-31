@@ -17,6 +17,14 @@ const NAV = [
 ];
 
 function shell({ title, body, current = '', extraHead = null, scripts = null }) {
+  /* raw(), because html`` escapes what it interpolates — and an escaped
+     attribute is not an attribute. This shipped as
+     `aria-current=&quot;page&quot;`, so `[aria-current=page]` matched nothing:
+     the active tab has never been marked, for a screen reader or for the
+     stylesheet that was already written to highlight it. Every route was
+     passing `current` correctly the whole time. */
+  const here = (key) => (current === key ? raw(' aria-current="page"') : '');
+
   return html`<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8">
@@ -30,17 +38,17 @@ function shell({ title, body, current = '', extraHead = null, scripts = null }) 
 ${extraHead || ''}
 </head><body>
 <nav class="admin-nav no-print"><ul>
-  <li><a href="/admin"${current === 'today' ? ' aria-current="page"' : ''}>Today</a></li>
-  <li><a href="/admin/week"${current === 'week' ? ' aria-current="page"' : ''}>This Week</a></li>
-  <li><a href="/admin/history"${current === 'history' ? ' aria-current="page"' : ''}>Menu History</a></li>
-  <li><a href="/admin/dishes"${current === 'dishes' ? ' aria-current="page"' : ''}>Saved Dishes</a></li>
-  <li><a href="/admin/recipes"${current === 'recipes' ? ' aria-current="page"' : ''}>Recipes</a></li>
-  <li><a href="/admin/other-options"${current === 'other' ? ' aria-current="page"' : ''}>Other Options</a></li>
-  <li><a href="/admin/orders"${current === 'orders' ? ' aria-current="page"' : ''}>Orders</a></li>
-  <li><a href="/admin/payments"${current === 'payments' ? ' aria-current="page"' : ''}>Payments</a></li>
-  <li><a href="/admin/locations"${current === 'locations' ? ' aria-current="page"' : ''}>Locations &amp; Delivery</a></li>
-  <li><a href="/admin/graphics"${current === 'graphics' ? ' aria-current="page"' : ''}>Graphics</a></li>
-  <li><a href="/admin/settings"${current === 'settings' ? ' aria-current="page"' : ''}>Settings</a></li>
+  <li><a href="/admin"${here('today')}>Today</a></li>
+  <li><a href="/admin/week"${here('week')}>This Week</a></li>
+  <li><a href="/admin/history"${here('history')}>Menu History</a></li>
+  <li><a href="/admin/dishes"${here('dishes')}>Saved Dishes</a></li>
+  <li><a href="/admin/recipes"${here('recipes')}>Recipes</a></li>
+  <li><a href="/admin/other-options"${here('other')}>Other Options</a></li>
+  <li><a href="/admin/orders"${here('orders')}>Orders</a></li>
+  <li><a href="/admin/payments"${here('payments')}>Payments</a></li>
+  <li><a href="/admin/locations"${here('locations')}>Locations &amp; Delivery</a></li>
+  <li><a href="/admin/graphics"${here('graphics')}>Graphics</a></li>
+  <li><a href="/admin/settings"${here('settings')}>Settings</a></li>
 </ul></nav>
 <main class="admin-wrap">
 ${body}

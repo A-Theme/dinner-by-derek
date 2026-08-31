@@ -18,9 +18,24 @@
   font-size: var(--dbd-step--1); font-weight: 600;
   border-bottom: 3px solid transparent;
 }
+/* The tab you are on, said as a tab rather than as a hairline.
+
+   It was a 3px tan bar landing directly on the nav's own umber rule, which
+   reads in a screenshot and disappears on a phone -- where this list scrolls
+   sideways, so the marked tab is often the one half off the edge. Now the tab
+   itself is a darker panel with the accent closing it top and bottom, so it is
+   legible as a shape and not only as a line.
+
+   The bar keeps tan-lift at 3.64:1 on olive (CONTRAST.md, failure 2). The
+   panel is olive-deep, which only raises the parchment label's contrast --
+   both pairs are checked by `npm run contrast`. */
 .admin-nav a[aria-current=page] {
+  background: var(--dbd-olive-deep);
   border-bottom-color: var(--dbd-tan-lift);  /* 3.64:1 — see CONTRAST.md */
   color: var(--dbd-parchment);
+  /* inset rather than border-top: a real border would push the label down 3px
+     and leave the active tab's text sitting lower than every other one. */
+  box-shadow: inset 0 3px 0 var(--dbd-tan-lift);
 }
 
 .admin-wrap { max-width: 860px; margin: 0 auto; padding: var(--dbd-sp-4); }

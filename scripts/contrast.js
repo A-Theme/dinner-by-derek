@@ -44,6 +44,11 @@ const PAIRS = [
   // line on that image somebody needs to read from a phone in a feed.
   ['Muted text on cards', 'umber-soft', 'parchment', 4.5],
   ['Active nav indicator', 'tan-lift', 'olive', 3.0],
+  // The active tab is a panel now, so its label sits on olive-deep rather than
+  // olive. Nav labels are normal-size text and held to 4.5 like the others.
+  ['Active nav label on its panel', 'parchment', 'olive-deep', 4.5],
+  // And the indicator has to stay visible against the panel it now closes.
+  ['Active nav indicator on its panel', 'tan-lift', 'olive-deep', 3.0],
   ['Card border on parchment', 'olive', 'parchment', 3.0],
 ];
 

@@ -51,6 +51,31 @@
     });
   });
 
+  section("The active tab", function () {
+    /* --- Bring the marked tab into view ------------------------------------
+       The nav is one row of eleven that scrolls sideways, so on a phone the
+       tab you are on is usually past the right edge: Graphics sits 900px along
+       a 375px screen. Marking it is not much use if nobody can see the mark.
+
+       Only the nav's own scrollLeft is touched — not scrollIntoView, which is
+       free to scroll ancestors and would move the page under a sticky bar. And
+       only when the tab is actually out of view, so the common case of Today
+       or This Week does not jump on every load. */
+    var ul = document.querySelector('.admin-nav ul');
+    var cur = ul && ul.querySelector('a[aria-current="page"]');
+    if (!ul || !cur) return;
+
+    var pad = 24;
+    var left = cur.offsetLeft;
+    var right = left + cur.offsetWidth;
+    var viewLeft = ul.scrollLeft;
+    var viewRight = viewLeft + ul.clientWidth;
+
+    if (left < viewLeft + pad || right > viewRight - pad) {
+      ul.scrollLeft = Math.max(0, left - (ul.clientWidth - cur.offsetWidth) / 2);
+    }
+  });
+
   section("The copy buttons", function () {
     /* --- Copy buttons ------------------------------------------------------
        One listener for every [data-copy] on the page. These used to be inline
