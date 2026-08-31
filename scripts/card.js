@@ -191,13 +191,10 @@ async function front() {
 async function back(d, url) {
   // The mark rather than the leather badge: this half is parchment, and the
   // gold lockup on the front is a gradient that needs a dark ground to be
-  // lighter than. Same line art the stickers print, one flat colour -- and now
-  // in the same ink they print it in. It was espresso, the brand's warm dark
-  // brown, which is right on screen and reads as brown next to a sticker off
-  // the same artwork. Black, because these two are printed and handed over
-  // together, and 'black' rather than a hex so nothing can drift from
-  // theme.css, which owns every other colour here.
-  const seal = await brandmark.stamp({ width: 96, colour: 'black' });
+  // lighter than. Same line art the stickers print, one flat colour -- in
+  // umber, the colour the name beside it is set in, so the two read as one
+  // lockup rather than a mark that happens to sit near some words.
+  const seal = await brandmark.stamp({ width: 124, colour: palette.umber });
   const code = await qrImage(url, 300);
 
   const left = SAFE;
@@ -215,9 +212,14 @@ async function back(d, url) {
   const rowH = 84;
   const columnRight = qrLeft - 56;
 
+  /* The text column clears the seal by a fixed gap rather than a fixed x, so
+     resizing the mark moves the words instead of crowding them. At the old
+     96px these were 26px apart by coincidence of two hardcoded numbers. */
+  const textLeft = left + seal.width + 26;
+
   const body = [
-    label('Supper club', { x: left + 122, y: 168, size: 19, fill: palette['tan-deep'], track: 6 }),
-    text(d.business, { x: left + 122, y: 224, size: 52, fill: palette.umber, font: DISPLAY }),
+    label('Supper club', { x: textLeft, y: 168, size: 19, fill: palette['tan-deep'], track: 6 }),
+    text(d.business, { x: textLeft, y: 224, size: 52, fill: palette.umber, font: DISPLAY }),
     rule(left, 262, columnRight, palette.tan, 0.45, 2),
 
     rows.map(([k, v], i) => {
