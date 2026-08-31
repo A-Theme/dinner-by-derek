@@ -54,7 +54,7 @@ router.get('/other-options', (req, res) => {
           i.single_on && i.single_price != null ? `${i.single_label} ${money(i.single_price)}` : null,
         ].filter(Boolean).join(' · ') || '—';
         return html`<tr>
-          <td data-label="Item"><strong>${i.name}</strong><br><span class="variant__label">${i.subcategory}</span></td>
+          <td data-label="Item"><strong>${i.name}</strong><br><span class="variant__label">${M.subcategoryLabel(i.subcategory)}</span></td>
           <td data-label="Available">${wd}</td>
           <td data-label="Prices">${prices}</td>
           <td data-label="Status">
@@ -105,7 +105,7 @@ router.get('/other-options', (req, res) => {
         ${V.itemEditor({ prefix: 'si', item: editing || blank, nameLabel: 'Item name' })}
         <label for="sub">Section</label>
         <select id="sub" name="si_subcategory">
-          ${M.SUBCATEGORY_ORDER.map((s) => html`<option value="${s}"${(editing ? editing.subcategory : 'Mains') === s ? ' selected' : ''}>${s}</option>`)}
+          ${M.SUBCATEGORY_ORDER.map((s) => html`<option value="${s}"${(editing ? editing.subcategory : 'Mains') === s ? ' selected' : ''}>${M.subcategoryLabel(s)}</option>`)}
         </select>
         <fieldset>
           <legend>When it's available</legend>

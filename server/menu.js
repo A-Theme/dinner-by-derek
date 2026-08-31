@@ -24,6 +24,18 @@ const { reviewState } = require('./allergens');
    already read. */
 const SUBCATEGORY_ORDER = ['Soups', 'Salads', 'Desserts', 'Mains'];
 
+/* What each section is called on screen, which is not the same as what it is
+   called in storage. 'Mains' is the value sitting in standing_items.subcategory
+   on every row, in the column's DEFAULT, and in the seed data; renaming the
+   value would be a migration against a live database, to change a word. So the
+   key stays and the label moves.
+
+   "Everyday Items" is also the truer name: these are the things available every
+   service day, which is exactly what distinguishes them from the soup, salad
+   and dessert above that change every week. */
+const SUBCATEGORY_LABELS = { Mains: 'Everyday Items' };
+const subcategoryLabel = (s) => SUBCATEGORY_LABELS[s] || s;
+
 /** Shared shape for an item from any level. */
 function toRenderItem(row, { level, refTable, subcategory, name, serviceDate }) {
   const variants = [];
@@ -375,7 +387,11 @@ function menuForDay(week, day) {
   // Group for display. Items simply absent when they don't run today — no
   // greyed-out "not available Monday" placeholders.
   const grouped = SUBCATEGORY_ORDER
-    .map((sub) => ({ subcategory: sub, items: others.filter((i) => i.subcategory === sub) }))
+    .map((sub) => ({
+      subcategory: sub,                       // the stored value
+      label: subcategoryLabel(sub),           // what the customer reads
+      items: others.filter((i) => i.subcategory === sub),
+    }))
     .filter((g) => g.items.length);
 
   const state = T.dayState(day.service_date, clock());
@@ -418,7 +434,7 @@ function activeLocations() {
 }
 
 module.exports = {
-  SUBCATEGORY_ORDER, activeWeek, weekBySlug, serviceDaysOf, serviceDayOn, weekItemsOf,
+  SUBCATEGORY_ORDER, subcategoryLabel, activeWeek, weekBySlug, serviceDaysOf, serviceDayOn, weekItemsOf,
   everyServiceDayOf, meatlessLabel,
   standingItems, standingRunsOn, weekItemRunsOn, pickupWindowFor, clock,
   deliveryOnFor, closureFor, menuForDay, findItem, alsoAvailableLine, activeLocations,

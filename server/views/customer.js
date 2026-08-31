@@ -227,7 +227,7 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
     ${menu.grouped.length ? html`
       <div class="section-rule"><h2>Other Options</h2></div>
       ${menu.grouped.map((g) => html`
-        <h3 class="subhead">${g.subcategory}</h3>
+        <h3 class="subhead">${g.label}</h3>
         ${g.items.map((i) => optionCard(i, past || shut))}`)}` : ''}
 
     ${past || shut ? '' : html`
