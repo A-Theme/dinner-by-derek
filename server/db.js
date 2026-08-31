@@ -504,7 +504,7 @@ const DEFAULTS = {
   remind_missing_week: '1',
   remind_missing_week_days: '2',
   payment_instructions:
-    'No online payment. Pay at pickup, on delivery, or by e-transfer to derekhines@hotmail.com.',
+    'No online payment. Pay at pickup, on delivery, or by e-transfer to orders@dinnerbyderek.ca.',
   owner_contact: 'Message Dinner By Derek on Facebook, or call (226) 748-8378.',
   notify_email: '',
   full_label: 'Full size',
@@ -838,6 +838,30 @@ for (const [table, nameCol] of [
       db.exec('ALTER TABLE week_items_rebuild RENAME TO week_items');
     })();
     db.pragma('foreign_keys = ON');
+  }
+}
+
+/* The e-transfer address moved to the business inbox.
+ *
+ * The customer sees payment_instructions verbatim -- on the order form and
+ * again on the confirmation -- so the old personal address kept being handed
+ * out on every order until somebody retyped the setting. The seeded default
+ * above only helps a database that does not exist yet; this reaches the one
+ * already running.
+ *
+ * The substring is swapped rather than the whole value, so any wording the
+ * owner has since put around it survives and only the address changes.
+ * Idempotent: the new address does not contain the old one, so a second run
+ * finds nothing to replace.
+ */
+{
+  const OLD_PAY_EMAIL = 'derekhines@hotmail.com';
+  const NEW_PAY_EMAIL = 'orders@dinnerbyderek.ca';
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'payment_instructions'").get();
+  if (row && row.value.includes(OLD_PAY_EMAIL)) {
+    db.prepare("UPDATE settings SET value = ? WHERE key = 'payment_instructions'")
+      .run(row.value.split(OLD_PAY_EMAIL).join(NEW_PAY_EMAIL));
+    console.warn(`[db] Payment instructions now send e-transfers to ${NEW_PAY_EMAIL}.`);
   }
 }
 
