@@ -846,10 +846,19 @@ const PAST_DATE = T.addDays(today, -2);
     const page = await GET(`/w/${weekSlug}/${today}`);
     ok('the day page says ordering has closed', /Ordering has closed/i.test(page.text));
     ok('and carries no order form at all', !/id="orderform"/.test(page.text));
+    /* aria-disabled rather than disabled, and the difference is the point: a
+       disabled button receives no click, so tapping one on a closed day was
+       silent — no quantity, no total bar, and nothing able to say why. What
+       makes these dead is that nothing wires them up (no order form, asserted
+       above); the marking is what lets the tap be answered. */
     const steppers = page.text.match(/<button[^>]*data-step[^>]*>/g) || [];
     ok('while every stepper on the menu is dead, not merely pointless',
-      steppers.length > 0 && steppers.every((s) => /\sdisabled/.test(s)),
+      steppers.length > 0 && steppers.every((s) => /\saria-disabled="true"/.test(s)),
       `${steppers.length} steppers, first: ${steppers[0]}`);
+    ok('and each one can be told apart by the handler that explains it',
+      /class="qty" data-qty data-shut/.test(page.text));
+    ok('and the page carries the reason to say when one is tapped',
+      /"shutNote":"[^"]+"/.test(page.text));
     ok('while still showing the dish, so the reader knows what they missed',
       /Cutoff Test Dish/.test(page.text));
 

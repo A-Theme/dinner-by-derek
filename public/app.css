@@ -336,13 +336,34 @@ a { color: var(--dbd-olive-deep); }
   border: 1px solid var(--dbd-olive); border-radius: var(--dbd-radius-sm);
   cursor: pointer;
 }
-.qty button:not(:disabled):hover { background: var(--dbd-ochre); }
-/* A + that cannot add has to look like one. These are disabled on any day whose
+.qty button:not(:disabled):not([aria-disabled]):hover { background: var(--dbd-ochre); }
+/* A + that cannot add has to look like one. These are marked on any day whose
    ordering has closed, and with no style of their own they sat at full contrast
    with a pointer cursor over them — tapping a dish on today's page did nothing
    at all and looked like it should have. The banner above says ordering has
-   closed; these now agree with it. */
-.qty button:disabled { opacity: 0.5; cursor: not-allowed; }
+   closed; these now agree with it.
+
+   Opacity alone did not carry it. At 0.5 on parchment the buttons still read as
+   live on a phone, and cursor:not-allowed says nothing to a thumb — which is
+   exactly how a closed Monday got reported as a broken app. The border and the
+   glyph now go muted too, so the control looks spent rather than merely pale. */
+.qty button:disabled,
+.qty button[aria-disabled="true"] {
+  opacity: 0.55; cursor: not-allowed;
+  background: var(--dbd-surface-sunk);
+  border-color: var(--dbd-rule-tan);
+  color: var(--dbd-ink-muted);
+}
+/* Said where the tap happened, because the banner that says it properly is off
+   the top of the screen by the time anyone is reaching for a +. */
+.shutnote {
+  /* .variant is a three-column grid, so the note has to be told to span it or
+     it lands in the first column and squeezes the price and the stepper. */
+  grid-column: 1 / -1;
+  margin: var(--dbd-sp-2) 0 0;
+  font-size: var(--dbd-step--1); font-weight: 600;
+  color: var(--dbd-warn);
+}
 .qty output { min-width: 2ch; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* --- Forms -------------------------------------------------------------- */

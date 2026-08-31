@@ -15,6 +15,42 @@
     else if (e.target.closest('[data-back]')) history.back();
   });
 
+  /* --- Why the + does nothing ---------------------------------------------
+     On a day whose ordering has closed, the steppers are marked aria-disabled
+     and nothing wires them up: order.js returns early where there is no order
+     form. Tapping one was therefore completely silent, and the banner
+     explaining it had long since scrolled off the top. Silence from a control
+     that looks live reads as a broken app, not a closed day.
+
+     This lives in app.js rather than order.js precisely because order.js is
+     not running on these pages. */
+  (function () {
+    var cfgEl = document.getElementById('dbd-config');
+    var note = '';
+    try { note = (JSON.parse(cfgEl ? cfgEl.textContent : '{}') || {}).shutNote || ''; } catch (e) { note = ''; }
+    if (!note) return;                       // an open day has nothing to explain
+
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('.qty[data-shut] button');
+      if (!btn) return;
+      e.preventDefault();
+
+      var qty = btn.closest('.qty');
+      var row = qty.closest('.variant') || qty.parentNode;
+
+      /* One message per row, reused. Re-tapping should not stack up copies,
+         and re-setting the text is what makes a screen reader say it again. */
+      var msg = row.querySelector('.shutnote');
+      if (!msg) {
+        msg = document.createElement('p');
+        msg.className = 'shutnote';
+        msg.setAttribute('role', 'status');
+        row.appendChild(msg);
+      }
+      msg.textContent = note + ' Pick another day to order.';
+    });
+  })();
+
   /* --- The bigger picture -------------------------------------------------
      Tapping a dish photo opens the full-resolution original with the item's
      name and description beside it — the description repeated here on purpose,

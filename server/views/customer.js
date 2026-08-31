@@ -93,6 +93,22 @@ function weekView({ week, days }) {
 }
 
 /* --- Item rendering ----------------------------------------------------- */
+/**
+ * A stepper that cannot step, marked so it can still answer for itself.
+ *
+ * `disabled` was the honest word for it and the wrong attribute: a disabled
+ * button receives no click at all, so tapping one on a closed day produced
+ * silence — no quantity, no total bar, and no way for anything to say why.
+ * aria-disabled tells assistive tech the same thing while leaving the tap
+ * audible, which is what lets the warning exist. Nothing wires these up on a
+ * closed day anyway — order.js returns early without an order form — so the
+ * only thing the tap can do is explain itself.
+ *
+ * raw(), because the value carries quotes and html`` would escape them into
+ * an attribute the browser never sees. See the same bug in views/admin.js.
+ */
+const off = (disabled) => (disabled ? raw(' aria-disabled="true"') : '');
+
 function variantRows(item, disabled) {
   return html`${item.variants.map((v) => html`
     <div class="variant">
@@ -104,14 +120,14 @@ function variantRows(item, disabled) {
       <div class="variant__price">${money(v.price)}</div>
       ${v.soldOut
         ? html`<span class="chip chip--soldout">Sold out</span>`
-        : html`<div class="qty" data-qty
+        : html`<div class="qty" data-qty${disabled ? raw(' data-shut') : ''}
                  data-key="${item.key}" data-variant="${v.id}"
                  data-price="${v.price}" data-name="${item.name}"
                  data-label="${v.label}" data-level="${item.level}"
                  data-max="${v.remaining === null ? '' : v.remaining}">
-            <button type="button" data-step="-1" aria-label="One fewer ${item.name}, ${v.label}"${disabled ? ' disabled' : ''}>−</button>
+            <button type="button" data-step="-1" aria-label="One fewer ${item.name}, ${v.label}"${off(disabled)}>−</button>
             <output aria-live="polite">0</output>
-            <button type="button" data-step="1" aria-label="One more ${item.name}, ${v.label}"${disabled ? ' disabled' : ''}>+</button>
+            <button type="button" data-step="1" aria-label="One more ${item.name}, ${v.label}"${off(disabled)}>+</button>
           </div>`}
     </div>`)}`;
 }
@@ -415,6 +431,16 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
     deliveryMin,
     servedAreas,
     ownerContact: settings.get('owner_contact'),
+    /* What to say when somebody taps a stepper on a day that cannot take the
+       order. The banner at the top of the page says this at length, but by the
+       time a thumb reaches the dish that banner is several hundred pixels off
+       the screen — which is how a closed day comes to look like a broken app.
+       Empty on a day that is open, and the handler stays out of the way. */
+    shutNote: past
+      ? `${dayLabel} has already passed, so nothing on it can be ordered.`
+      : shut
+        ? `Ordering has closed for ${dayLabel}.`
+        : '',
   };
 
   return L.page({
