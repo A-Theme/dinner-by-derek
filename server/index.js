@@ -18,7 +18,7 @@ const multer = require('multer');
 const config = require('./config');
 const auth = require('./auth');
 const images = require('./images');
-const { db } = require('./db');
+const { db, settings } = require('./db');
 
 /* The base preparations, re-applied on boot so a later release reaches a
  * database that already exists. Edited recipes are left alone. Seeding lives
@@ -421,6 +421,17 @@ function warnAboutExposure() {
     notes.push('TRUST_PROXY is off. Behind nginx set TRUST_PROXY=1, or every '
       + 'visitor shares one rate-limit bucket.');
   }
+  /* Both of these lose mail silently. An order still records and the customer
+     still sees the confirmation screen, so nothing looks wrong from either end
+     — which is precisely why they belong in a list nobody can miss at boot. */
+  if (config.isProd && !config.smtp.host) {
+    notes.push('SMTP_HOST is unset, so no customer ever receives a confirmation '
+      + 'and no order alert reaches you. Orders are still recorded.');
+  }
+  if (config.isProd && !settings.get('notify_email', '')) {
+    notes.push('No alert address is set, so an order arriving tells you nothing. '
+      + 'Set "Where to send alerts" on the Settings screen.');
+  }
   if (!notes.length) return;
   console.log('  Worth fixing before this is public:');
   for (const n of notes) console.log(`    - ${n}`);
@@ -435,7 +446,16 @@ const server = app.listen(config.port, () => {
   console.log(`  Uploads:    ${config.uploadDir}`);
   console.log(`  Payments:   ${mailbox.configured()
     ? `reading ${config.imap.user} every ${mailbox.POLL_MS / 60000} minutes`
-    : 'mailbox polling off (IMAP_HOST unset) — paste on the Payments screen'}\n`);
+    : 'mailbox polling off (IMAP_HOST unset) — paste on the Payments screen'}`);
+  /* Incoming mail has said whether it is on since the poller was built. Outgoing
+     never did, and outgoing is the half a customer notices: two real orders went
+     out with no confirmation and the only trace was one line in the journal,
+     read days later. Both directions report themselves now. */
+  console.log(`  Sending:    ${config.smtp.host
+    ? `${config.smtp.from || config.smtp.user || '(no From address set)'} via ${config.smtp.host}`
+    : 'off (SMTP_HOST unset) — no confirmation or alert will be sent'}`);
+  console.log(`  Alerts to:  ${settings.get('notify_email', '')
+    || '(nobody — set "Where to send alerts" in Settings)'}\n`);
   warnAboutExposure();
   checkTokenExpiry();
   setInterval(checkTokenExpiry, 60 * 60 * 1000).unref();
