@@ -130,11 +130,32 @@
       '<span><button type="button" class="btn btn--secondary" data-install>Install app</button> ' +
       '<button type="button" class="btn btn--secondary" data-dismiss aria-label="Dismiss">✕</button></span>'
     );
-    el.querySelector('[data-install]').addEventListener('click', function () {
-      el.remove();
-      deferred.prompt();
+    var installBtn = el.querySelector('[data-install]');
+    installBtn.addEventListener('click', function () {
+      var evt = deferred;
       deferred = null;
+      if (!evt) return;
+      /* The bar stays up until the browser says what happened. It used to go
+         the instant this was tapped, so on a phone the offer vanished while
+         the install sheet was still opening and the app was still arriving —
+         which reads as the thing having failed rather than started. */
+      installBtn.disabled = true;
+      evt.prompt();
+      Promise.resolve(evt.userChoice).then(function (choice) {
+        // Accepted: appinstalled takes the bar away when the app is really there.
+        if (choice && choice.outcome === 'accepted') return;
+        // Declined. This event cannot be prompted twice, so the offer is spent;
+        // the browser makes it again on a later visit and a new bar replaces it.
+        el.remove();
+      }).catch(function () { el.remove(); });
     });
+  });
+
+  /* Installed for real — the only moment the offer has actually been answered,
+     and the one that takes it off the screen. */
+  window.addEventListener('appinstalled', function () {
+    var open = slot.querySelector('.installbar');
+    if (open) open.remove();
   });
 
   /* --- iOS Safari ------------------------------------------------------

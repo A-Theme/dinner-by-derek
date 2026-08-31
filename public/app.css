@@ -336,7 +336,13 @@ a { color: var(--dbd-olive-deep); }
   border: 1px solid var(--dbd-olive); border-radius: var(--dbd-radius-sm);
   cursor: pointer;
 }
-.qty button:hover { background: var(--dbd-ochre); }
+.qty button:not(:disabled):hover { background: var(--dbd-ochre); }
+/* A + that cannot add has to look like one. These are disabled on any day whose
+   ordering has closed, and with no style of their own they sat at full contrast
+   with a pointer cursor over them — tapping a dish on today's page did nothing
+   at all and looked like it should have. The banner above says ordering has
+   closed; these now agree with it. */
+.qty button:disabled { opacity: 0.5; cursor: not-allowed; }
 .qty output { min-width: 2ch; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* --- Forms -------------------------------------------------------------- */

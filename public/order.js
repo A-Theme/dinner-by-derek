@@ -338,20 +338,66 @@
     cartBody.innerHTML = h;
   }
 
-  if (cartDlg && elBar) {
+  /* Opening it. showModal() is the version worth having — focus trap, backdrop,
+     Escape — but it also throws: on a dialog that is somehow already open, and
+     in a browser that exposes the method without honouring it. A throw here
+     used to leave the tap doing nothing whatsoever, which from the outside is
+     a dead button, which is the one thing this bar must never be. So the plain
+     `open` attribute is the fallback for a refusal, not only for its absence. */
+  function openCart() {
+    try {
+      if (cartDlg.open) return;
+      if (cartDlg.showModal) { cartDlg.showModal(); return; }
+    } catch (err) { /* fall through to the inline dialog */ }
+    cartDlg.setAttribute('open', '');
+  }
+
+  /* Back to the part they still have to fill in. The order summary is a place
+     to look, not a place to finish from: the boxes that decide whether an order
+     can be sent are up in the form, and a dialog is drawn on top of all of
+     them. So leaving the summary means landing on the thing to do next —
+     the first unanswered box when something is missing, and the Review order
+     button when nothing is, so the next tap is the one they were reaching for.
+     A missing detail also has to mark its own box and take focus, which it
+     cannot do underneath an open dialog. So this runs immediately after the
+     close and not a tick later: closing hands focus back to the bar that
+     opened the summary, and a move deferred to the next frame or to the
+     dialog's own close event lands before that handover and is undone by it.
+     Measured in a browser, both ways, rather than reasoned about. */
+  function toDetails() {
+    var problems = findProblems();
+    if (problems.length) { showProblems(problems); return; }
+    showProblems([]);
+    /* Nothing is missing, so there is no box to point at — but the summary is
+       still not where this order gets sent from. Land on the details they
+       gave, which is the same place a missing one would have taken them, with
+       Review order focused underneath so the next tap or key carries on.
+       Focused without scrolling to it on purpose: that button sits under the
+       sticky bar at the foot of the page, and being sent to a control you
+       cannot see is the same dead end as a bar that does nothing. */
+    var name = document.getElementById('cname');
+    var sec = (name && name.closest ? name.closest('fieldset') : null)
+      || document.getElementById('fulfil');
+    var btn = document.getElementById('submitbtn');
+    if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (btn) btn.focus({ preventScroll: true });
+  }
+
+  if (elBar) {
     elBar.addEventListener('click', function () {
-      renderCart();
-      if (cartDlg.showModal) cartDlg.showModal(); else cartDlg.setAttribute('open', '');
+      /* A summary that fails to build must not take the tap down with it:
+         whatever happens here, the order still opens. */
+      if (!cartDlg) { toDetails(); return; }
+      try { renderCart(); } catch (err) { cartBody.innerHTML = ''; }
+      openCart();
     });
+  }
+
+  if (cartDlg && elBar) {
     document.getElementById('cart-back').addEventListener('click', function () { cartDlg.close(); });
-    /* Completing from here is the ordinary Review order path, not a shortcut
-       past it: the same validation runs, and a missing detail has to be able
-       to mark its own box and take focus — which it cannot do underneath an
-       open dialog. So this closes first and then asks the form to submit. */
     document.getElementById('cart-complete').addEventListener('click', function () {
       cartDlg.close();
-      var btn = document.getElementById('submitbtn');
-      if (form.requestSubmit) form.requestSubmit(btn); else btn.click();
+      toDetails();
     });
   }
 
