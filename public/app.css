@@ -356,6 +356,20 @@ a { color: var(--dbd-olive-deep); }
 }
 /* Said where the tap happened, because the banner that says it properly is off
    the top of the screen by the time anyone is reaching for a +. */
+/* --- What happens after the order is placed ------------------------------ */
+/* Body size, not the muted small print the reference used to be set in: on an
+   order with no email address this is the only copy that survives closing the
+   page, and the people ordering are not helped by small grey type. */
+.confirm__sent { font-size: var(--dbd-step-0); }
+.confirm__norecord { font-size: var(--dbd-step-0); }
+/* Big enough to copy onto paper from a phone held at arm's length. */
+.confirm__ref {
+  display: block; margin: var(--dbd-sp-3) 0;
+  font-family: var(--dbd-display); font-size: var(--dbd-step-4);
+  font-variant-numeric: tabular-nums; letter-spacing: 0.06em;
+  color: var(--dbd-danger);
+}
+
 /* The loud telling, after two taps. Deliberately not styled like the quiet
    notices further up the page — those are what went unread. Full-width on a
    phone, a warm-dark heading rule across the top so it reads as a stop rather

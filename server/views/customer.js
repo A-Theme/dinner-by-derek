@@ -365,7 +365,12 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
           <input type="tel" id="cphone" name="phone" autocomplete="tel" required
             aria-describedby="err-cphone">
           <p class="field-err" id="err-cphone" hidden></p>
-          <label for="cemail">Email <span class="variant__label">(optional — for your confirmation)</span></label>
+          <!-- "for your confirmation" described what the box was for. It did not
+               say what skipping it costs, which is the only part worth knowing
+               while deciding whether to bother. -->
+          <label for="cemail">Email
+            <span class="variant__label">Optional — but without it we can't send you
+              anything to keep</span></label>
           <input type="email" id="cemail" name="email" autocomplete="email"
             aria-describedby="err-cemail">
           <p class="field-err" id="err-cemail" hidden></p>
@@ -496,7 +501,21 @@ function confirmationView({ order, lines, late }) {
             <p>Thanks ${order.name} — you're on the list for
             <strong>${T.fmtDayLong(order.service_date, tz())}</strong>.</p>`}
 
-      <p class="variant__label">Reference ${order.ref}</p>
+      <!-- Whether anything is coming, said on the one screen where the customer
+           is still looking. Without this, an order placed with no email address
+           ends at "Order confirmed" and then silence — and the reference, which
+           is the only record that survives closing the page, was the smallest
+           muted line on it. -->
+      ${order.email
+        ? html`<p class="confirm__sent">A copy is on its way to
+            <strong>${order.email}</strong>. Your reference is
+            <strong>${order.ref}</strong>.</p>`
+        : html`<div class="notice notice--strong confirm__norecord">
+            <strong>This page is your only record.</strong>
+            You didn't give an email address, so there is nothing for us to send.
+            Please write this reference down or take a photo of this screen:
+            <span class="confirm__ref">${order.ref}</span>
+            ${settings.get('owner_contact')}</div>`}
 
       <h3 class="subhead">Your order</h3>
       ${lines.map((l) => html`
