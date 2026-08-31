@@ -84,6 +84,9 @@
           lines[id] = {
             key: box.dataset.key, variant: box.dataset.variant, qty: next,
             unit_price: Number(box.dataset.price), name: box.dataset.name,
+            // Carried so the order list can say which size was chosen. Two
+            // sizes of the same dish are otherwise two identical rows.
+            label: box.dataset.label,
           };
         }
         out.textContent = next;
@@ -295,6 +298,60 @@
       remember();
       document.getElementById('submitbtn').disabled = true;
       form.submit();                     // bypasses the listener below
+    });
+  }
+
+  /* --- The order, opened from the bar -------------------------------------
+     The bar shows a total on every screen; this is what is behind it. Built
+     from the same `lines` the bar counts, so the two can never disagree —
+     and deliberately not a second fetch of /api/quote, because a summary that
+     needs the network is a summary that can fail while someone is mid-order.
+     The server-priced check is still the review step, one tap further on. */
+
+  var cartDlg = document.getElementById('cart');
+  var cartBody = document.getElementById('cart-body');
+
+  function renderCart() {
+    var keys = Object.keys(lines);
+    if (!keys.length) {
+      cartBody.innerHTML = '<p class="variant__label">Nothing in your order yet.</p>';
+      return;
+    }
+    var sub = subtotal();
+    var deliveryFee = isDelivery() ? fee : 0;
+    var h = '';
+    keys.forEach(function (k) {
+      var l = lines[k];
+      h += '<div class="cartline"><span>' + esc(l.name)
+        + (l.label ? ' <span class="variant__label">' + esc(l.label) + '</span>' : '')
+        + '<br><span class="cartline__qty variant__label">' + l.qty + ' × '
+        + money(l.unit_price) + '</span></span>'
+        + '<span class="cartline__sum">' + money(l.unit_price * l.qty) + '</span></div>';
+    });
+    h += '<div class="totals" style="margin-top:var(--dbd-sp-4)">'
+      + '<div class="totals__row"><span>Food subtotal</span><span>' + money(sub) + '</span></div>';
+    if (deliveryFee) {
+      h += '<div class="totals__row"><span>Delivery</span><span>' + money(deliveryFee) + '</span></div>';
+    }
+    h += '<div class="totals__row totals__row--grand"><span>Total</span><span>'
+      + money(sub + deliveryFee) + '</span></div></div>';
+    cartBody.innerHTML = h;
+  }
+
+  if (cartDlg && elBar) {
+    elBar.addEventListener('click', function () {
+      renderCart();
+      if (cartDlg.showModal) cartDlg.showModal(); else cartDlg.setAttribute('open', '');
+    });
+    document.getElementById('cart-back').addEventListener('click', function () { cartDlg.close(); });
+    /* Completing from here is the ordinary Review order path, not a shortcut
+       past it: the same validation runs, and a missing detail has to be able
+       to mark its own box and take focus — which it cannot do underneath an
+       open dialog. So this closes first and then asks the form to submit. */
+    document.getElementById('cart-complete').addEventListener('click', function () {
+      cartDlg.close();
+      var btn = document.getElementById('submitbtn');
+      if (form.requestSubmit) form.requestSubmit(btn); else btn.click();
     });
   }
 

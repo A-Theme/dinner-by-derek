@@ -335,10 +335,35 @@ function dayView({ week, day, menu, locations, deliveryFee, deliveryMin, servedA
       </div>
     </form>
 
-    <div class="orderbar" id="orderbar" hidden>
+    <!-- The bar is the button. It sat at the bottom of every screen showing a
+         running total and did nothing when tapped, which is the one thing a
+         running total invites you to do. It says so now, because a control
+         that only looks tappable to the person who wrote it is not a control. -->
+    <button type="button" class="orderbar" id="orderbar" hidden
+            aria-haspopup="dialog" aria-controls="cart">
       <span id="bar-count">0 items</span>
-      <span class="orderbar__total" id="bar-total">$0.00</span>
-    </div>
+      <span class="orderbar__right">
+        <span class="orderbar__cue">View order</span>
+        <span class="orderbar__total" id="bar-total">$0.00</span>
+      </span>
+    </button>
+
+    <!-- What's in the order, without leaving the page to find out. Priced from
+         the same figures the bar shows; the binding check against the server
+         is still the review step, which is where Place order lives. -->
+    <dialog class="review" id="cart" aria-labelledby="cart-title">
+      <form method="dialog" class="review__close">
+        <button class="btn btn--secondary" value="cancel" aria-label="Close">✕</button>
+      </form>
+      <h2 id="cart-title">Your order</h2>
+      <div id="cart-body"></div>
+      <div class="review__actions">
+        <button type="button" class="btn btn--secondary" id="cart-back">Keep adding</button>
+        <button type="button" class="btn btn--primary" id="cart-complete">
+          ${late ? 'Complete request' : 'Complete order'}
+        </button>
+      </div>
+    </dialog>
 
     <!-- The review step. A <dialog> so the browser handles the focus trap, the
          backdrop and Escape — behaviour that is tedious and easy to get subtly

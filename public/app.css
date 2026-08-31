@@ -2,6 +2,14 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* The browser hides [hidden] with `display: none` from its own stylesheet, and
+   any author rule setting display beats it — so every component with a display
+   of its own quietly stopped being hideable. The order bar was the visible
+   one: it carried `hidden` at zero items and showed "0 items $0.00" anyway.
+   One rule here rather than a :not([hidden]) on each, so the next component
+   with a display does not have to remember. */
+[hidden] { display: none !important; }
+
 html { -webkit-text-size-adjust: 100%; }
 
 body {
@@ -358,8 +366,24 @@ input[aria-invalid="true"], select[aria-invalid="true"], textarea[aria-invalid="
   padding: var(--dbd-sp-3) var(--dbd-sp-4);
   padding-bottom: calc(var(--dbd-sp-3) + env(safe-area-inset-bottom));
   display: flex; align-items: center; justify-content: space-between; gap: var(--dbd-sp-3);
+  /* It is a <button> now: undo the parts of that which would fight the bar. */
+  width: 100%; border-left: 0; border-right: 0; border-bottom: 0;
+  font: inherit; font-size: var(--dbd-step-0); text-align: left;
+  cursor: pointer; -webkit-appearance: none; appearance: none;
 }
+.orderbar:hover { background: var(--dbd-olive-deep); }
+.orderbar:focus-visible { outline: 3px solid var(--dbd-parchment); outline-offset: -6px; }
+.orderbar__right { display: flex; align-items: center; gap: var(--dbd-sp-3); }
+/* Says what the tap does. Underlined rather than coloured, because the bar is
+   already a solid colour and a second one on top of it reads as a warning. */
+.orderbar__cue { text-decoration: underline; text-underline-offset: 3px; opacity: 0.9; }
 .orderbar__total { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* --- The order, as a list ------------------------------------------------ */
+.cartline { display: flex; justify-content: space-between; gap: var(--dbd-sp-3); padding: var(--dbd-sp-2) 0; }
+.cartline + .cartline { border-top: 1px solid var(--dbd-rule-tan); }
+.cartline__qty { font-variant-numeric: tabular-nums; }
+.cartline__sum { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .totals { border-top: 1px solid var(--dbd-rule-tan); padding-top: var(--dbd-sp-3); }
 .totals__row { display: flex; justify-content: space-between; padding: var(--dbd-sp-1) 0; }
