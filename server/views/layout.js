@@ -67,6 +67,22 @@ ${body}
     <p>${settings.get('owner_contact')}</p>
   </div>
 </footer>
+
+<!-- The bigger picture. Lives in the shell rather than the day view because
+     photos are on closed and past days too, where order.js returns early and
+     would never wire it up. Empty until something is tapped; without
+     JavaScript it never opens and the page is exactly as it was. -->
+<dialog class="lightbox" id="lightbox" aria-labelledby="lightbox-name">
+  <form method="dialog" class="lightbox__close">
+    <button class="btn btn--secondary" value="close" aria-label="Close picture">✕</button>
+  </form>
+  <img class="lightbox__img" id="lightbox-img" alt="">
+  <div class="lightbox__body">
+    <h2 class="lightbox__name" id="lightbox-name"></h2>
+    <p class="lightbox__desc" id="lightbox-desc"></p>
+  </div>
+</dialog>
+
 <script src="/app.js" defer></script>
 ${scripts || ''}
 </body>

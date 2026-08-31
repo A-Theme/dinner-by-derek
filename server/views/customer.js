@@ -133,7 +133,7 @@ function featuredBlock(item, cap, readOnly, eyebrow = 'Featured tonight') {
       : '';
   return html`
   <section class="featured">
-    ${item.photo ? html`<img class="featured__photo" src="/uploads/${item.photo}" alt="${item.name}">` : ''}
+    ${item.photo ? zoomablePhoto(item, 'featured__photo') : ''}
     <div class="featured__body">
       <p class="featured__eyebrow">${eyebrow}</p>
       <h2 class="featured__name">${item.name}</h2>
@@ -146,10 +146,33 @@ function featuredBlock(item, cap, readOnly, eyebrow = 'Featured tonight') {
   </section>`;
 }
 
+/**
+ * The dish photo, and a way into the big one.
+ *
+ * Both sizes are already on disk: store() writes a 1400px web copy for the
+ * page and keeps the full-resolution original beside it. So the card carries
+ * the small file and the tap loads the original -- nothing new is generated
+ * and nothing large is downloaded until somebody asks for it.
+ *
+ * data-web is the fallback. Every photo the app has ever stored has an
+ * original, but a missing one should show the picture the page already has
+ * rather than a broken frame.
+ */
+function zoomablePhoto(item, cls) {
+  const original = item.photo.replace(/\.jpg$/, '-original.jpg');
+  return html`
+    <button type="button" class="photozoom photozoom--${cls}" data-zoom
+            data-full="/uploads/${original}" data-web="/uploads/${item.photo}"
+            data-name="${item.name}" data-desc="${item.description || ''}"
+            aria-label="See a bigger picture of ${item.name}">
+      <img class="${cls}" src="/uploads/${item.photo}" alt="${item.name}">
+    </button>`;
+}
+
 function optionCard(item, readOnly) {
   return html`
   <article class="optioncard">
-    ${item.photo ? html`<img class="optioncard__photo" src="/uploads/${item.photo}" alt="${item.name}">` : ''}
+    ${item.photo ? zoomablePhoto(item, 'optioncard__photo') : ''}
     <div style="flex:1">
       <div class="optioncard__name">${item.name}</div>
       ${item.halal ? html`<p style="margin:var(--dbd-sp-1) 0">${L.halalBadge(true)}</p>` : ''}

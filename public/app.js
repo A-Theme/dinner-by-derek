@@ -15,6 +15,58 @@
     else if (e.target.closest('[data-back]')) history.back();
   });
 
+  /* --- The bigger picture -------------------------------------------------
+     Tapping a dish photo opens the full-resolution original with the item's
+     name and description beside it — the description repeated here on purpose,
+     because the point of looking closer is deciding what to eat, and sending
+     someone back to the card to re-read it defeats that.
+
+     Delegated from the document, so it covers the featured dish and every
+     option card without walking the page, and keeps working if anything is
+     ever rendered after load. A <dialog> so the browser owns the focus trap,
+     the backdrop and Escape. */
+  (function () {
+    var dlg = document.getElementById('lightbox');
+    if (!dlg || !dlg.showModal) return;      // no dialog support: photos stay ordinary images
+    var img = document.getElementById('lightbox-img');
+    var nameEl = document.getElementById('lightbox-name');
+    var descEl = document.getElementById('lightbox-desc');
+    var opener = null;
+
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('[data-zoom]');
+      if (!btn) return;
+      opener = btn;
+
+      /* Show the page's own copy first so there is something to look at while
+         the original arrives — on a phone that is the difference between an
+         instant response and a second of blank box. The full file replaces it
+         when it has loaded, and if it never does, the small one stays. */
+      img.src = btn.getAttribute('data-web');
+      img.alt = btn.getAttribute('data-name') || '';
+      var full = new Image();
+      full.onload = function () { img.src = full.src; };
+      full.src = btn.getAttribute('data-full');
+
+      nameEl.textContent = btn.getAttribute('data-name') || '';
+      var desc = btn.getAttribute('data-desc') || '';
+      descEl.textContent = desc;
+      descEl.hidden = !desc;
+
+      dlg.showModal();
+    });
+
+    /* Tapping the picture itself closes it, which is what a full-screen image
+       invites. The body is left alone so the description can be selected. */
+    img.addEventListener('click', function () { dlg.close(); });
+
+    // Focus goes back where it came from, or the page loses the reader's place.
+    dlg.addEventListener('close', function () {
+      if (opener && opener.isConnected) opener.focus();
+      opener = null;
+    });
+  })();
+
   /* --- Service worker --------------------------------------------------- */
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {

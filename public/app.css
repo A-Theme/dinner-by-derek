@@ -265,6 +265,47 @@ a { color: var(--dbd-olive-deep); }
   margin-bottom: var(--dbd-sp-3);
 }
 .optioncard__photo { width: 76px; height: 76px; object-fit: cover; border-radius: var(--dbd-radius-sm); flex: none; }
+
+/* --- Tap a dish photo for the big one ----------------------------------- */
+/* The button carries none of its own look — it exists to be a button, and the
+   image inside it keeps the size and shape it already had. line-height:0 so
+   the inline image contributes no descender gap under it. */
+.photozoom {
+  padding: 0; border: 0; background: none; font: inherit; color: inherit;
+  line-height: 0; cursor: zoom-in; -webkit-appearance: none; appearance: none;
+}
+.photozoom:focus-visible { outline: 3px solid var(--dbd-olive); outline-offset: 2px; }
+/* The featured photo is full-bleed across the card; the option card's is a
+   fixed thumbnail in a flex row. The button has to be told which it is, or it
+   shrink-wraps the first and stretches the second. */
+.photozoom--featured__photo { display: block; width: 100%; }
+/* align-self, or the flex row stretches the button to the full card height and
+   the tappable area runs on well below the picture — 76px of photo with 62px
+   of nothing under it, all of it opening the lightbox. */
+.photozoom--optioncard__photo { flex: none; align-self: flex-start; }
+
+/* The box takes the shape of the picture rather than the picture being letter-
+   boxed into a fixed box: Derek shoots on a phone, so most of these are taller
+   than they are wide, and a portrait photo in a 4:3 frame is mostly empty
+   background. width:max-content lets the dialog shrink to the image, with a
+   floor so the caption under a very narrow one still has a line to sit on. */
+.lightbox {
+  border: 0; padding: 0;
+  width: max-content; min-width: min(280px, 88vw); max-width: min(92vw, 1100px);
+  max-height: 90vh;
+  background: var(--dbd-surface-raised); color: var(--dbd-ink);
+  border-radius: var(--dbd-radius); overflow: auto;
+}
+.lightbox::backdrop { background: var(--dbd-scrim); }
+.lightbox__img {
+  display: block; width: auto; max-width: 100%; max-height: 74vh;
+  margin: 0 auto; background: var(--dbd-surface-sunk);
+}
+.lightbox__body { padding: var(--dbd-sp-4) var(--dbd-sp-5) var(--dbd-sp-5); }
+.lightbox__name { font-size: var(--dbd-step-2); margin-bottom: var(--dbd-sp-2); }
+.lightbox__desc { margin: 0; }
+.lightbox__close { position: absolute; top: var(--dbd-sp-3); right: var(--dbd-sp-3); margin: 0; }
+.lightbox__close .btn { min-width: 44px; padding: var(--dbd-sp-2); }
 .optioncard__name { font-family: var(--dbd-display); font-size: var(--dbd-step-1); color: var(--dbd-heading); }
 .optioncard__desc { font-size: var(--dbd-step--1); }
 
