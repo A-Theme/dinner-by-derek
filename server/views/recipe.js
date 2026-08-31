@@ -33,6 +33,34 @@ function yieldOf(r) {
   return `${shown}${r.yield_unit ? ` ${r.yield_unit}` : ''}`;
 }
 
+/**
+ * "Makes 4 portions", "Makes 1000 g · 4 portions" — one line, said once.
+ *
+ * The yield and the portion count are separate columns, and on 127 of the
+ * imported recipes they are the same fact: yield_unit is already "portions",
+ * so appending the portion count printed "8 portions · 8 portions". The second
+ * clause is only worth its space when it says something the first did not.
+ */
+function makesLine(r) {
+  const y = yieldOf(r);
+  const alreadyPortions = /\bportions?\b/i.test(y);
+  const extra = r.portions && !alreadyPortions ? ` · ${r.portions} portions` : '';
+  return `${y || 'unspecified'}${extra}`;
+}
+
+/**
+ * The scale, named the way the buttons name it. The printed sheet has to say
+ * which one it is in words: "x2" at the top of a page of quantities invites
+ * the reading that they still need doubling.
+ */
+function scaleLabel(factor) {
+  const f = Number(factor);
+  if (f === 0.5) return 'Half batch';
+  if (f === 2) return 'Double batch';
+  if (f === 3) return 'Triple batch';
+  return `Scaled ${f}×`;
+}
+
 function ingredientLine(i) {
   const qty = i.qty == null ? '' : (Number.isInteger(i.qty) ? i.qty : Math.round(i.qty * 100) / 100);
   return html`${[qty, i.unit, i.item].filter((x) => x !== '' && x != null).join(' ')}${i.prep ? html`<span class="variant__label">, ${i.prep}</span>` : ''}${i.optional ? html` <span class="variant__label">(optional)</span>` : ''}`;
@@ -154,9 +182,19 @@ function detail({ recipe, scaled, factor, kids, suggestions }) {
       class="btn btn--secondary" style="margin-right:var(--dbd-sp-2)"
       href="/admin/recipes?tag=${t}">${tagLabel(t)}</a>`)}</p>` : ''}
 
+    <!-- What the screen keeps to itself but a printout cannot do without: how
+         much this makes, and whether the quantities below are the ones written
+         or a multiple of them. The controls card is hidden when printing, so
+         without this line a doubled recipe prints as an ordinary one and the
+         cook has no way to tell from the paper in their hand. -->
+    <p class="print-only recipe-print-meta">
+      <strong>Makes</strong> ${makesLine(r)}${
+        Number(factor) !== 1 ? html` · <strong>${scaleLabel(factor)}</strong> — quantities scaled, times and seasoning as written` : ''}
+    </p>
+
     <div class="card no-print">
       <div class="dl-row">
-        <span><strong>Makes</strong> ${yieldOf(r) || 'unspecified'}${r.portions ? ` · ${r.portions} portions` : ''}</span>
+        <span><strong>Makes</strong> ${makesLine(r)}</span>
         ${recipe.dish_name ? html`<span><strong>On the menu as</strong>
           <a href="/admin/dishes?kind=${recipe.dish_kind || ''}">${recipe.dish_name}</a></span>` : ''}
       </div>
@@ -165,6 +203,11 @@ function detail({ recipe, scaled, factor, kids, suggestions }) {
         ${scaleBtn(1, 'As written')}
         ${scaleBtn(2, 'Double')}
         ${scaleBtn(3, 'Triple')}
+      </div>
+      <!-- Beside the scale buttons on purpose: this is where you decide which
+           version you are printing, so it is where the print control belongs. -->
+      <div class="dl-row" style="margin-top:var(--dbd-sp-3)">
+        <button type="button" class="btn btn--primary" data-print>Print this recipe</button>
       </div>
       ${r.scaling_caveat ? html`<p class="variant__label" style="margin-top:var(--dbd-sp-2)">
         Quantities are scaled. Times are not, and seasoning is left as written — a doubled

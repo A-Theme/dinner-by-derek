@@ -214,10 +214,26 @@ details.daycard-edit > summary { cursor: pointer; font-family: var(--dbd-display
   margin: var(--dbd-sp-2) 0 var(--dbd-sp-2);
 }
 
+/* Written for the printer and kept off the screen. The counterpart of
+   .no-print: some things only make sense on paper, where the controls that
+   would have told you the same thing are gone. */
+.print-only { display: none; }
+
 @media print {
   .admin-nav, .no-print, #toasts, .btn { display: none !important; }
+  .print-only { display: block; }
   body { background: none; font-size: 12pt; }
   .admin-wrap { max-width: none; padding: 0; }
+
+  /* A recipe is read standing up with wet hands, so the paper gets the words
+     and none of the furniture: no card borders, no fills, no rounded corners
+     bleeding ink. Ingredients and method are kept off a page break where they
+     fit, because half a list on each side of a fold is how a step is missed. */
+  .card { border: 0; background: none; padding: 0; margin: 0 0 10pt; border-radius: 0; }
+  .card h2 { font-size: 14pt; margin: 10pt 0 4pt; border-bottom: 1px solid var(--dbd-espresso-2); }
+  .card ul, .card ol { page-break-inside: avoid; }
+  .card li { page-break-inside: avoid; margin-bottom: 2pt; }
+  .recipe-print-meta { margin: 0 0 10pt; font-size: 12pt; }
   .sheet { page-break-inside: avoid; }
   .sheet h1 { font-size: 20pt; margin: 0 0 8pt; }
   .sheet h2 { font-size: 14pt; margin: 10pt 0 4pt; border-bottom: 1px solid var(--dbd-espresso-2); }
