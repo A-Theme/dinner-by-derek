@@ -16,8 +16,13 @@ const { reviewState } = require('./allergens');
  * with the same fulfillment terms. The split is an authoring concern.
  */
 
-// Desserts sit last, where a menu puts them.
-const SUBCATEGORY_ORDER = ['Soups', 'Salads', 'Mains', 'Desserts'];
+/* Soup, salad and dessert change every week; the mains under Other Options do
+   not. So the three that change come first, together, where a returning
+   customer scrolling a familiar list will actually see what is new this week.
+   Desserts used to sit last, where a menu puts them -- which is the right
+   place on a menu you read once and the wrong one on a list most people have
+   already read. */
+const SUBCATEGORY_ORDER = ['Soups', 'Salads', 'Desserts', 'Mains'];
 
 /** Shared shape for an item from any level. */
 function toRenderItem(row, { level, refTable, subcategory, name, serviceDate }) {
