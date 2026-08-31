@@ -18,7 +18,7 @@
  * so nobody stays on the previous build once a new one is live.
  */
 
-var CACHE_VERSION = 'dbd-shell-1e60c52445';
+var CACHE_VERSION = 'dbd-shell-c5ac7cebb8';
 var SHELL = [
   '/theme.css',
   '/app.css',

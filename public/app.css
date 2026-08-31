@@ -38,18 +38,52 @@ a { color: var(--dbd-olive-deep); }
 .wrap { max-width: 720px; margin: 0 auto; padding: 0 var(--dbd-sp-4); }
 
 /* --- Header / footer ---------------------------------------------------- */
+/* The header is the repository's banner (docs/banner.svg, drawn by
+   readme-art.js) rendered in CSS: olive band, a warm bloom behind the mark,
+   a tan hairline top and bottom, and the lockup centred over a spaced tagline.
+   The two are meant to be recognisably one thing, so if you move one, move the
+   other — the banner's geometry is in scripts/readme-art.js. What is not
+   carried across is the banner's motion (steam, a travelling shine) and its
+   second line of copy: a README is looked at once, and a header is passed
+   every time somebody orders. */
 .site-header {
+  position: relative;
+  overflow: hidden;
   background: var(--dbd-olive);
   color: var(--dbd-parchment);
-  padding: var(--dbd-sp-4) 0;
+  padding: var(--dbd-sp-5) 0;
   border-bottom: 3px solid var(--dbd-umber);
+  text-align: center;
 }
-.site-header .wrap { display: flex; align-items: center; gap: var(--dbd-sp-4); }
+/* The bloom behind the mark — the oven door opening, roughly. */
+.site-header::before {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  width: min(660px, 96%); aspect-ratio: 2.2;
+  transform: translate(-50%, -60%);
+  background: radial-gradient(ellipse at center,
+    var(--dbd-bloom) 0%, transparent 70%);
+  pointer-events: none;
+}
+/* The pair of hairlines, inset from the band's edges as they are in the SVG. */
+.site-header::after {
+  content: '';
+  position: absolute;
+  inset: var(--dbd-sp-3) 0;
+  border-top: 3px solid var(--dbd-rule-tan-dark);
+  border-bottom: 3px solid var(--dbd-rule-tan-dark);
+  pointer-events: none;
+}
+.site-header .wrap { position: relative; z-index: 1; }
 .site-header a { color: var(--dbd-parchment); text-decoration: none; }
+.site-lockup {
+  display: inline-flex; flex-direction: column; align-items: center;
+  gap: var(--dbd-sp-2);
+}
 .brandmark {
   width: 84px; height: 84px; border-radius: 50%;
   object-fit: contain; flex: none;
-  box-shadow: 0 2px 8px var(--dbd-shadow);
 }
 .site-title {
   font-family: var(--dbd-display);
@@ -58,6 +92,8 @@ a { color: var(--dbd-olive-deep); }
   margin: 0; line-height: 1.1;
 }
 .site-tag {
+  display: block;
+  margin: var(--dbd-sp-2) 0 0;
   font-size: var(--dbd-step--1);
   color: var(--dbd-tan-lift);
   letter-spacing: 0.08em; text-transform: uppercase;
@@ -280,6 +316,24 @@ legend { font-weight: 700; font-size: var(--dbd-step--1); padding: 0 var(--dbd-s
 }
 .radio-card input { margin: 0; }
 .radio-card:has(input:checked) { background: var(--dbd-tan); color: var(--dbd-espresso); border-color: var(--dbd-umber); }
+
+/* --- Fields that need fixing --------------------------------------------
+   Colour alone never carries this: the box is doubled in weight and sunk a
+   shade, and the reason is spelled out in words directly under it. */
+[aria-invalid="true"] {
+  border-color: var(--dbd-danger);
+  box-shadow: inset 0 0 0 1px var(--dbd-danger);
+  background: var(--dbd-parchment-2);
+}
+.field-err {
+  margin: calc(-1 * var(--dbd-sp-2)) 0 var(--dbd-sp-3);
+  color: var(--dbd-danger);
+  font-size: var(--dbd-step--1);
+  font-weight: 600;
+}
+.field-err::before { content: "⚠︎"; margin-right: var(--dbd-sp-1); }
+#formerror ul { margin: var(--dbd-sp-2) 0 0; padding-left: var(--dbd-sp-5); }
+#formerror li { margin-bottom: var(--dbd-sp-1); }
 
 /* --- Notices ------------------------------------------------------------ */
 .notice {

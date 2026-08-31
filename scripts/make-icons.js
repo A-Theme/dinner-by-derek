@@ -7,8 +7,9 @@
  * Source of truth is brand/logo-lineart.png — the black line-art mark, which
  * is the highest-resolution version available and the one that survives being
  * shrunk to 48px on a home screen. The leather medallion (brand/logo-medallion.jpg)
- * is kept for artwork and social posts, but its usable area is only ~206px
- * across, so upscaling it to 512 would be visibly soft.
+ * is kept as brand artwork but is no longer drawn by anything: its usable area
+ * is only ~206px across, so upscaling it to 512 would be visibly soft, and the
+ * site header mark it used to supply is cut from this line art now too.
  *
  * That source carries real transparency, and the thresholds below are written
  * for ink on paper, so it is flattened onto white once at the top and every
@@ -32,7 +33,6 @@ const brandmark = require('./brandmark');
 
 const root = path.join(__dirname, '..');
 const SOURCE = path.join(root, 'brand', 'logo-lineart.png');
-const MEDALLION_SOURCE = path.join(root, 'brand', 'logo-medallion.jpg');
 const OUT = path.join(root, 'public', 'icons');
 
 /* Paper. Written as a channel triple rather than a hex string because theme.css
@@ -182,24 +182,26 @@ async function icon(file, size, inset, bg, ink) {
 }
 
 /**
- * The header mark is a different job from the PWA icons above: it's a
- * full-colour photo of a leather medallion, not black ink on white, so there
- * is no threshold to stencil — just a crop to the badge and a circular clip.
+ * The header mark is the profile picture, cut round: the gold lockup on an
+ * olive disc, which is the same image the Facebook page shows. It used to be a
+ * photograph of the leather medallion, and the swap is the reason this is now
+ * cut from the same line art as everything above it — a photographed object
+ * carries detail that a 84px circle throws away, where the line art was drawn
+ * to survive exactly that.
  *
- * That crop lives in brandmark.js, shared with the business card so both find
- * the badge's edge the same way.
+ * The arrangement lives in brandmark.js so the header and social.js cannot
+ * drift into two versions of one picture.
  *
  * 252px is three times the 84px it is displayed at, which is what a phone
- * wants. The source holds a badge about 950px across, so that is a downscale,
- * not a stretch — it was 240px against a 210px source before, and looked it.
+ * wants, and it is a downscale from the line art rather than a stretch.
  *
- * Quantised to a palette on the way out. The badge is one hue in a few dozen
- * shades, so there is nothing for 24-bit colour to hold that survives being
- * drawn at 84px — and this is the largest thing the customer page loads: 155KB
- * as truecolour, 44KB quantised. The card seal is deliberately NOT quantised;
- * that one is printed at 300 DPI, where the banding this hides would show.
+ * Quantised to a palette on the way out. Olive, and a gold gradient across a
+ * thin mark, is a handful of colours — there is nothing for 24-bit to hold
+ * that survives being drawn at 84px, and this is the largest thing the
+ * customer page loads. The card seal is deliberately NOT quantised; that one
+ * is printed at 300 DPI, where the banding this hides would show.
  */
-const headerMark = async (size) => sharp(await brandmark.circle(size, MEDALLION_SOURCE))
+const headerMark = async (size) => sharp(await brandmark.disc(size))
   .png({ palette: true, quality: 100, effort: 10 })
   .toBuffer();
 
@@ -249,12 +251,10 @@ const headerMark = async (size) => sharp(await brandmark.circle(size, MEDALLION_
   // Browser tab.
   await icon('favicon-32.png', 32, 0.92, palette.parchment, palette.espresso);
 
-  // Site header — the full-colour leather medallion, not the line-art stencil.
-  if (fs.existsSync(MEDALLION_SOURCE)) {
-    console.log('\nGenerating header mark from brand/logo-medallion.jpg');
-    fs.writeFileSync(path.join(OUT, 'header-mark.png'), await headerMark(252));
-    console.log(`  header-mark.png             252×252`);
-  }
+  // Site header — the profile picture: the gold lockup on an olive disc.
+  console.log('\nGenerating header mark from brand/logo-lineart.png');
+  fs.writeFileSync(path.join(OUT, 'header-mark.png'), await headerMark(252));
+  console.log(`  header-mark.png             252×252`);
 
   console.log('\nDone. Icons are in public/icons/.\n');
 })().catch((e) => {

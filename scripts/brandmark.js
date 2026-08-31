@@ -1,16 +1,26 @@
 'use strict';
 /**
- * The two ways this app draws its own logo, from two source files that are
- * only ever READ:
- *
- *   circle()    the leather medallion, cropped to its edge and clipped round.
- *               Used at the two small sizes where a photographed object beats
- *               thin lines: the 84px site header mark, and the 96px seal on
- *               the back of the business card.
+ * The four ways this app draws its own logo, from two source files that are
+ * only ever READ. Three of them are the same line art with something different
+ * poured through it; the fourth is the photographed badge.
  *
  *   wordmark()  the line-art badge, filled with the brand's gold. Used
  *               everywhere the mark is shown large — the card front, the five
  *               social graphics, the README banner.
+ *
+ *   disc()      that same gold lockup centred on an olive disc: the profile
+ *               picture, cut round. Used for the site header mark.
+ *
+ *   stamp()     the line art in one flat colour. For the pale half of a page,
+ *               where the gold gradient has nothing to sit on — the seal on
+ *               the back of the business card.
+ *
+ *   circle()    the leather medallion, cropped to its edge and clipped round.
+ *               Kept because the medallion is still brand artwork and this
+ *               crop is the only thing that finds its edge, but nothing in the
+ *               app draws it now: the header mark and the card seal both moved
+ *               to the line art, which survives being shrunk in a way a
+ *               photographed object does not.
  *
  * The app icons are cut from the same line art by make-icons.js, in ink rather
  * than gold, which is why the ink threshold is defined here and read there.
@@ -139,15 +149,18 @@ function goldFill(width, height) {
     <rect width="${width}" height="${height}" fill="url(#g)"/></svg>`);
 }
 
-let masterPromise = null;
+let alphaPromise = null;
 
-function master() {
-  if (!masterPromise) {
-    masterPromise = (async () => {
-      // Built at the source's own size and resized once, on the way out, so a
-      // caller asking for 296px gets one interpolation rather than an upscale
-      // to some master size and a downscale back again.
-      const alpha = await sharp(LINEART)
+/**
+ * The line art as a bare alpha channel — ink opaque, paper gone — at the
+ * source's own size. Every treatment below is this mask with something
+ * different poured through it, which is what keeps one threshold tuning them
+ * all rather than three that drift apart.
+ */
+function alpha() {
+  if (!alphaPromise) {
+    alphaPromise = (async () => {
+      const buf = await sharp(LINEART)
         .flatten({ background: { r: 255, g: 255, b: 255 } })
         .greyscale()
         .negate()                      // ink becomes bright
@@ -155,18 +168,41 @@ function master() {
         .toColourspace('b-w')
         .png()
         .toBuffer();
-      const { width, height } = await sharp(alpha).metadata();
+      const { width, height } = await sharp(buf).metadata();
+      return { buf, width, height };
+    })();
+  }
+  return alphaPromise;
+}
 
-      // removeAlpha before joining: the rasterised gradient already carries an
-      // alpha channel, and joining onto four channels makes a fifth that sharp
-      // keeps as a band rather than as transparency — a fully opaque rectangle.
-      const fill = await sharp(goldFill(width, height)).removeAlpha().png().toBuffer();
-      const cut = await sharp(fill).joinChannel(alpha).png().toBuffer();
+/**
+ * Pour `paint` — a rasterised image the size of the line art — through that
+ * mask, and trim to the ink.
+ *
+ * removeAlpha before joining: a rasterised SVG already carries an alpha
+ * channel, and joining onto four channels makes a fifth that sharp keeps as a
+ * band rather than as transparency — a fully opaque rectangle.
+ *
+ * Trimmed in a second pass: trim inspects the pipeline's input, so chaining it
+ * onto joinChannel would test the opaque paint and find nothing to cut.
+ */
+async function pour(paint) {
+  const { buf } = await alpha();
+  const fill = await sharp(paint).removeAlpha().png().toBuffer();
+  const cut = await sharp(fill).joinChannel(buf).png().toBuffer();
+  return sharp(cut).trim({ threshold: 10 }).png({ compressionLevel: 9 }).toBuffer();
+}
 
-      // Trimmed in a second pass: trim inspects the pipeline's input, so
-      // chaining it onto joinChannel would test the opaque gradient and find
-      // nothing to cut.
-      return sharp(cut).trim({ threshold: 10 }).png({ compressionLevel: 9 }).toBuffer();
+let masterPromise = null;
+
+/** Built at the source's own size and resized once, on the way out, so a caller
+ *  asking for 296px gets one interpolation rather than an upscale to some
+ *  master size and a downscale back again. */
+function master() {
+  if (!masterPromise) {
+    masterPromise = (async () => {
+      const { width, height } = await alpha();
+      return pour(goldFill(width, height));
     })();
   }
   return masterPromise;
@@ -186,4 +222,70 @@ async function wordmark({ width, height }) {
   return { data: out, width: meta.width, height: meta.height };
 }
 
-module.exports = { SOURCE, LINEART, INK_GAIN, INK_BIAS, bounds, circle, wordmark };
+/**
+ * The profile picture, cut round: the gold lockup centred on an olive disc.
+ *
+ * MARK_ON_DISC mirrors social.js — 760px of mark in a 1080px square — because
+ * that is the proportion Facebook's circular mask was chosen against, and the
+ * outer ring clearing that cut is the whole reason the number is what it is.
+ * Reusing it means the site header and the Facebook page show the same
+ * picture, rather than two arrangements of the same parts.
+ *
+ * The disc is olive, so against the olive header band the ground disappears
+ * and what reads is the gold. That is intended: one image that works both on
+ * the band and anywhere else a round copy of the mark is wanted.
+ */
+const MARK_ON_DISC = 760 / 1080;
+
+async function disc(size) {
+  const mark = await wordmark({ width: Math.round(size * MARK_ON_DISC) });
+  const cut = Buffer.from(
+    `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`
+  );
+  return sharp({ create: { width: size, height: size, channels: 4, background: palette.olive } })
+    .composite([
+      {
+        input: mark.data,
+        top: Math.round((size - mark.height) / 2),
+        left: Math.round((size - mark.width) / 2),
+      },
+      { input: cut, blend: 'dest-in' },
+    ])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+/**
+ * The lockup in one flat colour, on a transparent ground.
+ *
+ * Dark artwork, for the pale half of a page. The gold above is a gradient built
+ * to sit on olive or espresso; on parchment it has nothing to be lighter than
+ * and reads as a smudge. This is the same line art the stickers print, in
+ * whatever single colour the surface can carry — one mark, one shape, a
+ * different ink.
+ *
+ * Memoised per colour, like the gold master, so a caller asking for two sizes
+ * of the same seal thresholds the source once.
+ */
+const stampMasters = new Map();
+
+async function stamp({ width, height, colour = palette.espresso }) {
+  if (!stampMasters.has(colour)) {
+    stampMasters.set(colour, (async () => {
+      const a = await alpha();
+      return pour(Buffer.from(
+        `<svg width="${a.width}" height="${a.height}"><rect width="${a.width}" height="${a.height}" fill="${colour}"/></svg>`
+      ));
+    })());
+  }
+  const out = await sharp(await stampMasters.get(colour))
+    .resize(width ? { width } : { height })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  const meta = await sharp(out).metadata();
+  return { data: out, width: meta.width, height: meta.height };
+}
+
+module.exports = {
+  SOURCE, LINEART, INK_GAIN, INK_BIAS, bounds, circle, wordmark, disc, stamp,
+};

@@ -51,11 +51,11 @@ ${extraHead || ''}
 <div id="install-slot"></div>
 <header class="site-header">
   <div class="wrap">
-    <a href="/"><img src="/icons/header-mark.png" alt="" class="brandmark"></a>
-    <div>
-      <p class="site-title"><a href="/">${name}</a></p>
-      <span class="site-tag">Kitchener &amp; Waterloo</span>
-    </div>
+    <a href="/" class="site-lockup">
+      <img src="/icons/header-mark.png" alt="" class="brandmark">
+      <p class="site-title">${name}</p>
+    </a>
+    <p class="site-tag">Supper club &middot; Kitchener &amp; Waterloo</p>
   </div>
 </header>
 <main class="wrap" id="main">

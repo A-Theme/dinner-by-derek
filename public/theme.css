@@ -32,8 +32,15 @@
 
   /* Alpha derivatives for hairlines and scrims */
   --dbd-rule-tan:    rgba(190, 129, 70, 0.28);
+  /* The banner hairline: the same tan, carried far enough to read on olive.
+     0.28 is tuned against parchment and all but vanishes on the header band. */
+  --dbd-rule-tan-dark: rgba(190, 129, 70, 0.40);
   --dbd-rule-olive:  rgba(90, 102, 67, 0.24);
   --dbd-scrim:       rgba(44, 30, 24, 0.55);
+  /* Warm Ochre, faded: the bloom behind the header mark. The banner pulses the
+     same colour between 0.35 and 0.85; a header that breathes at somebody all
+     day would be a different thing, so this sits at the resting value. */
+  --dbd-bloom:       rgba(216, 146, 74, 0.35);
   --dbd-shadow:      rgba(44, 30, 24, 0.10);
 
   /* Semantic roles — state colours derive from the palette, never stock RGB */

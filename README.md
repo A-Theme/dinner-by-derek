@@ -743,19 +743,22 @@ can be unreadable on a phone in a bright kitchen.
 Source artwork is in `brand/`:
 
 - `logo-lineart.png` — the black line-art mark, transparent, 646×664. **This is
-  what everything carrying the logo is built from**: the icons, and the gold
-  lockup on the business card, the social graphics and the README banner. The
+  what everything carrying the logo is built from**: the icons, the site header
+  mark, the seal on the back of the business card, and the gold lockup on the
+  card front, the social graphics and the README banner. The
   lines are clean, the double ring is unbroken, and the transparency is real,
   so the shape is taken from here and only the colour is applied — a gradient
   of palette stops, light at the top left and deepening to the bottom right.
 - `logo-lineart.jpg` — the same mark, flattened onto white. Superseded by the
   PNG above and kept only because it is what the first icons were cut from.
 - `logo-medallion.jpg` — the leather version, 1000×1027 with the badge about
-  950px across. **This is what the site header mark and the business card seal
-  are built from.** It is flattened against a checkerboard rather than
-  genuinely transparent, which is why `brandmark.js` finds the badge by colour
-  and clips 3% inside its edge. Replacing it with a larger export is the single
-  cheapest upgrade to both; nothing else needs changing.
+  950px across. **Nothing draws it any more.** It supplied the site header mark
+  and the seal on the back of the business card until both moved to the line
+  art: the header is the profile picture now, and the card seal is the same
+  mark the stickers print. `brandmark.circle()` still knows how to crop it —
+  it is flattened against a checkerboard rather than genuinely transparent, so
+  the badge is found by colour and clipped 3% inside its edge — and a larger
+  export would still be the cheapest way to bring it back.
 - `logo-wordmark.svg` — the gold lockup, vector. **Nothing reads it any more.**
   It is a trace of a soft render: the strokes carry the original's blur, the
   outer ring is broken, and it arrives on a charcoal ground that has to be
@@ -786,7 +789,9 @@ filled square.
 
 The line art is used rather than the medallion because it is the higher
 resolution of the two — the medallion's artwork is only about 206 pixels across,
-so a 512-pixel icon made from it would look soft.
+so a 512-pixel icon made from it would look soft. The same argument took the
+84px header mark off the medallion: a photographed object carries detail that a
+small circle throws away, where line art was drawn to survive being shrunk.
 
 ---
 
@@ -858,7 +863,7 @@ Writes two faces to `GRAPHICS_DIR/print/`, ready for a printer:
 | File | What's on it |
 |---|---|
 | `card-front.png` | The gold lockup on olive, with one line saying what this is and where |
-| `card-back.png` | The medallion, the pickup window, the delivery area, the cutoff, your contact line, and a QR that opens the site |
+| `card-back.png` | The mark in espresso, the pickup window, the delivery area, the cutoff, your contact line, and a QR that opens the site |
 
 Both are **1126 × 676 pixels**: a 3.5 × 2 inch card at 300 DPI plus an eighth
 of an inch of bleed on every side. The DPI is written into the file, so a print

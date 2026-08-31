@@ -189,7 +189,10 @@ async function front() {
  * them to ask. Parchment, because a card that gets written on gets kept.
  */
 async function back(d, url) {
-  const seal = await brandmark.circle(96);
+  // The mark in espresso rather than the leather badge: this half is parchment,
+  // and the gold lockup on the front is a gradient that needs a dark ground to
+  // be lighter than. Same line art the stickers print, one flat colour.
+  const seal = await brandmark.stamp({ width: 96 });
   const code = await qrImage(url, 300);
 
   const left = SAFE;
@@ -234,7 +237,7 @@ async function back(d, url) {
   ].join('');
 
   const file = await render('card-back.png', palette.parchment, body, [
-    { input: seal, top: 128, left },
+    { input: seal.data, top: 128, left },
     { input: code.data, top: qrTop, left: qrLeft },
   ]);
 
@@ -243,7 +246,8 @@ async function back(d, url) {
 
 /* --- Run ------------------------------------------------------------------ */
 async function generate() {
-  for (const f of [brandmark.LINEART, brandmark.SOURCE]) {
+  // Both faces are cut from the line art now, so that is the only file to check.
+  for (const f of [brandmark.LINEART]) {
     if (!fs.existsSync(f)) throw new Error(`Missing brand artwork: ${f}`);
   }
   fs.mkdirSync(OUT, { recursive: true });
