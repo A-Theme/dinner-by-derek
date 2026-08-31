@@ -350,8 +350,18 @@
         var fill = bar.querySelector('div');
         var msg = drop.querySelector('.dz-msg');
 
-        function setPhoto(name) {
+        /* Assigning .value from script fires nothing. Autosave listens for
+           events, so without this dispatch the filename sits in the form and
+           is never posted: the photo shows on screen, the flag says Saved, and
+           the column stays NULL. Every write to this field goes through here
+           for that reason. */
+        function setPhotoValue(name) {
           photo.value = name;
+          photo.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        function setPhoto(name) {
+          setPhotoValue(name);
           var img = drop.querySelector('img') || document.createElement('img');
           img.src = '/uploads/' + name;
           img.alt = '';
@@ -450,7 +460,7 @@
         if (take) take.addEventListener('click', function () { cam.click(); });
         if (choose) choose.addEventListener('click', function () { file.click(); });
         if (clear) clear.addEventListener('click', function () {
-          photo.value = '';
+          setPhotoValue('');
           var img = drop.querySelector('img');
           if (img) img.remove();
           toast('Photo removed.', 'ok');
@@ -501,12 +511,19 @@
             if (flag) flag.textContent = 'Not saved — check your connection';
           });
       }
-      form.addEventListener('input', function () {
+      form.addEventListener('input', function (e) {
+        if (e.target && e.target.type === 'file') return;   // see the change handler below
         if (flag) flag.textContent = 'Unsaved changes';
         clearTimeout(timer);
         timer = setTimeout(save, 1200);
       });
-      form.addEventListener('change', function () {
+      form.addEventListener('change', function (e) {
+        /* Choosing a photo is not an edit — it starts an upload, and the
+           filename only exists once that finishes. Saving on this event posted
+           the still-empty hidden field and wrote NULL over the column ~400ms
+           before the upload could fill it, then never fired again. The upload
+           dispatches its own change when the value actually lands. */
+        if (e.target && e.target.type === 'file') return;
         clearTimeout(timer);
         timer = setTimeout(save, 400);
       });
