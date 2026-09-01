@@ -640,7 +640,7 @@ router.get('/locations', (req, res) => {
         <form method="post" action="/admin/locations/${l.id}" style="border-bottom:1px solid var(--dbd-rule-olive);padding-bottom:var(--dbd-sp-3);margin-bottom:var(--dbd-sp-3)">
           <input type="text" name="name" value="${l.name}" placeholder="Name">
           <input type="text" name="address" value="${l.address}" placeholder="Full address">
-          <input type="text" name="notes" value="${l.notes}" placeholder="Notes, e.g. side door, ring bell">
+          <input type="text" name="notes" value="${l.notes}" placeholder="Notes, e.g. side door, ring bell" data-proof>
           <button class="btn btn--secondary" type="submit">Save</button>
           ${V.confirmForm({
             action: `/admin/locations/${l.id}/toggle`,
@@ -655,7 +655,7 @@ router.get('/locations', (req, res) => {
         <h3 class="subhead">Add a location</h3>
         <input type="text" name="name" placeholder="Name" required>
         <input type="text" name="address" placeholder="Full address">
-        <input type="text" name="notes" placeholder="Notes">
+        <input type="text" name="notes" placeholder="Notes" data-proof>
         <button class="btn btn--primary" type="submit">Add location</button>
       </form>
     </div>
@@ -852,7 +852,7 @@ router.get('/settings', (req, res) => {
         <p class="also">After this, nothing at all is taken for that day — the order form comes off
           the page and the server refuses it. Set it to when the shopping is done.</p>
         <label for="pay">Payment instructions shown to customers</label>
-        <textarea id="pay" name="payment_instructions" rows="3">${settings.get('payment_instructions')}</textarea>
+        <textarea id="pay" name="payment_instructions" rows="3" data-proof>${settings.get('payment_instructions')}</textarea>
         <label for="oc">How customers reach you</label>
         <input type="text" id="oc" name="owner_contact" value="${settings.get('owner_contact')}">
         <label for="ne">Where new orders are emailed</label>

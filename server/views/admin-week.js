@@ -85,7 +85,7 @@ function weekPage({ week, days, items, hasPrevious }) {
         <label for="wdesc">Description</label>
         <p class="also">A short blurb for customers. A good place for reminders — that Chili, Pulled Pork,
           BBQ Brisket and Pulled Chicken are always available under Other Options, for instance.</p>
-        <textarea id="wdesc" name="description" rows="3">${week.description}</textarea>
+        <textarea id="wdesc" name="description" rows="3" data-proof>${week.description}</textarea>
         <input type="hidden" name="week_image" value="${week.image || ''}">
         <button class="btn btn--secondary" type="submit">Save description</button>
         <span class="saveflag" data-saveflag></span>
@@ -159,7 +159,7 @@ function weekPage({ week, days, items, hasPrevious }) {
                       closed and can order nothing on it, not even the standing Other Options.</span>
                   </label>
                   <label for="cn_${wd}">Note for customers (optional)</label>
-                  <input type="text" id="cn_${wd}" name="${wd}_closed_note" maxlength="200"
+                  <input type="text" id="cn_${wd}" name="${wd}_closed_note" maxlength="200" data-proof
                     value="${item.closed_note || ''}" placeholder="e.g. Back on Thursday">
                 </fieldset>
                 <label for="cap_${wd}">How many this day (both sizes together)</label>
@@ -353,7 +353,7 @@ function weekPage({ week, days, items, hasPrevious }) {
         <p><span class="flag flag--stop">Closed — this week is shut</span></p>` : ''}
       <form method="post" action="/admin/week/${week.id}/closed">
         <label for="wclosednote">Note for customers (optional)</label>
-        <input type="text" id="wclosednote" name="closed_note" maxlength="200"
+        <input type="text" id="wclosednote" name="closed_note" maxlength="200" data-proof
           value="${week.closed_note || ''}" placeholder="e.g. Away for a wedding — back the following Monday">
         ${week.closed
           ? html`<button class="btn btn--primary" type="submit" name="closed" value="0">Reopen this week</button>

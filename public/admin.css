@@ -86,6 +86,31 @@
        margin: var(--dbd-sp-1) var(--dbd-sp-1) 0 0; font-size: var(--dbd-step--1); font-weight: 600; }
 .tag button { background: none; border: none; color: var(--dbd-parchment); cursor: pointer; font-size: var(--dbd-step-0); min-width: 28px; min-height: 28px; }
 
+/* --- The proofreader ------------------------------------------------------
+   Same furniture as the allergen suggestions above, deliberately: they sit in
+   the same editor and do the same job, so a chip should read the same way
+   whichever of the two put it there. The one difference is colour, and it
+   carries meaning — a typo is worth a stronger mark than a preference. */
+/* The buttons sit BESIDE the wording, not under it. Wrapped, eight findings on
+   a correctable description filled a phone screen on their own and pushed the
+   allergen review below the fold — the one control on this editor that must
+   not be easy to miss. */
+/* A rounded rectangle, not a pill. .sugg is a pill because an allergen chip is
+   one short word; a proofreading chip carries a sentence of reasoning and wraps
+   to three lines on a phone, where a 999px radius eats the first and last
+   words of every one of them. */
+.proof .sugg { align-items: center; max-width: 100%; border-radius: var(--dbd-radius-sm);
+               padding: var(--dbd-sp-2) var(--dbd-sp-3); display: flex; width: 100%; }
+.proof .sugg > span:first-child { flex: 1 1 auto; min-width: 0; }
+.proof .sugg button { flex: none; }
+.proof .sugg s { opacity: .7; text-decoration-thickness: 1px; }
+.proof .sugg strong { font-weight: 700; }
+.proof .sugg__why { display: block; opacity: .75; font-size: var(--dbd-step--1); }
+.sugg--spelling { border-color: var(--dbd-umber); }
+.sugg--grammar  { border-color: var(--dbd-umber); }
+.sugg--spacing  { border-style: dashed; }
+.sugg--style    { border-style: dashed; opacity: .9; }
+
 .ackbox { border: 2px solid var(--dbd-umber); border-radius: var(--dbd-radius-sm); padding: var(--dbd-sp-3); background: var(--dbd-parchment); margin-bottom: var(--dbd-sp-3); }
 .ackbox label { display: flex; gap: var(--dbd-sp-3); align-items: flex-start; font-weight: 600; margin: 0; font-size: var(--dbd-step-0); }
 .ackbox input { width: 24px; height: 24px; flex: none; margin: 0; }

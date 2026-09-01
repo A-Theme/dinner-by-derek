@@ -908,6 +908,185 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   ok('and a ratatouille does too', A.detect('Ratatouille').length === 0);
 }
 
+/* --- The proofreader --------------------------------------------------------
+   Two questions, and the second one matters more.
+
+   Does it catch what it claims to? Easy to check and easy to pass.
+
+   Does it stay quiet on correct writing? That is the one that decides whether
+   the panel gets read at all. These chips sit directly above the allergen
+   chips in the same editor, and a checker that flags a correct sentence
+   teaches the owner to sweep the whole box away without looking — allergen
+   suggestions included. So the clean cases below are the real test, and a new
+   rule that lights any of them up is a rule that does not ship.
+
+   Nothing here can change a dish. check() returns spans and suggestions; the
+   dashboard draws them; the owner taps one or does not. */
+{
+  const PR = require('../server/proofread');
+  const found = (text) => PR.check(text).map((f) => `${f.found}->${f.suggestion}`);
+  const flags = (text, wanted) => PR.check(text)
+    .some((f) => `${f.found}->${f.suggestion}` === wanted);
+
+  /* Correct menu prose, and the panel must be empty for every line of it.
+     Written the way the dishes on this site are actually written: accents,
+     hyphenated compounds, kitchen loanwords, an abbreviation with a full stop
+     inside it, and a price. */
+  const clean = [
+    'Braised lamb shoulder with gremolata, soft polenta and roasted root vegetables.',
+    'Buttermilk-brined fried chicken, honey hot sauce, buttered biscuits and slaw.',
+    'Sourdough croutons, shaved Parmesan and anchovy dressing. Add grilled chicken.',
+    'A rich seafood chowder with smoked haddock, potato, leek and cream.',
+    'Wild mushroom risotto finished with mascarpone and truffle oil.',
+    'Chickpea and spinach curry with coconut milk, ginger and coriander.',
+    'Slow-roasted pork shoulder with apple slaw on a brioche bun.',
+    'Ordering closes at 10 p.m. the night before. Delivery is Tuesday and Thursday.',
+    'Reheat at 350 F for 20 min. covered, then five minutes uncovered to crisp the top.',
+    'Contains milk, eggs and wheat. Made in a kitchen that also handles peanuts.',
+    'Full size is $34.00 and a meal for one is $18.00. Order at dinnerbyderek.ca.',
+    'Everything is cooked fresh that morning and packed cold for you to reheat.',
+  ];
+  for (const line of clean) {
+    ok(`quiet on: ${JSON.stringify(line.slice(0, 44))}`,
+      PR.check(line).length === 0, found(line).join(', '));
+  }
+
+  /* An ingredients box is a list of lines, not a paragraph, and it must not be
+     asked to capitalise every one of them. Twelve chips on a correct recipe is
+     the same failure as one chip on a correct sentence, twelve times over. */
+  ok('an ingredient list raises nothing',
+    PR.check('500 g onion, peeled\n2 tbsp butter, clarified\n1 bay leaf\nsalt (optional)')
+      .length === 0);
+
+  /* And the things it is here for. */
+  ok('a kitchen misspelling', flags('Slow-braised beef brisquet', 'brisquet->brisket'));
+  ok('an ordinary one', flags('definately worth it', 'definately->definitely'));
+  ok('a doubled word', flags('The the soup is on', 'The the->The'));
+  ok('could of', flags('I could of made more', 'could of->could have'));
+  ok('a missing apostrophe', flags('dont miss it', 'dont->don\'t'));
+  ok('a space before a comma', flags('handed down , with love', ' ,->,'));
+  {
+    /* Two spaces read as nothing at all in a chip, so the panel names them —
+       but the finding itself is still the literal run of spaces, because that
+       is what gets spliced out of the field. */
+    const f = PR.check('onions.  Serve hot')[0];
+    ok('a double space is found as the spaces themselves', f && f.found === '  ');
+    ok('and replaced by one', f && f.suggestion === ' ');
+  }
+  ok('a real word in the wrong place',
+    flags('Sever with crusty bread', 'Sever->Serve'));
+  ok('and the same word left alone where it is right',
+    PR.check('Sever the tendon at the joint.').length === 0);
+  /* The span covers the neighbour that decides it, so the chip reads
+     "for desert → for dessert" rather than asking the owner to trust a
+     bare word swap. "Desert" on its own is a real word and stays one. */
+  ok('desert, when it is pudding',
+    flags('and a lemon tart for desert', 'for desert->for dessert'));
+  ok('and the sand kind is left alone', PR.check('Dry as a desert.').length === 0);
+  ok('a lower-case sentence start',
+    flags('Cooked fresh. dont reheat twice', 'dont->don\'t')
+      || flags('Cooked fresh. reheat once only', 'reheat->Reheat'));
+  ok('a lone i', flags('i will have more tomorrow', 'i->I'));
+
+  /* Canadian spelling is offered as a preference and says so — never as an
+     error, because both spellings are correct English. */
+  {
+    const f = PR.check('our favorite flavor')[0];
+    ok('an American spelling is offered', f && f.suggestion === 'favourite');
+    ok('as style, not as a mistake', f && f.kind === 'style');
+  }
+
+  /* An accent is not a typo either: "sauteed" is a keyboard without an option
+     key, and the owner may want it left plain in a dish name. */
+  {
+    const f = PR.check('sauteed mushrooms')[0];
+    ok('a missing accent is offered', f && f.suggestion === 'sautéed');
+    ok('and marked as style too', f && f.kind === 'style');
+  }
+
+  /* The spans have to be exact, because the dashboard applies a fix by
+     splicing them. An offset a character out eats the wrong letters and there
+     is nothing on screen to say so. */
+  {
+    const text = 'Roasted cauliflour with tahini.';
+    const f = PR.check(text)[0];
+    ok('a finding points at the word it names',
+      f && text.slice(f.start, f.end) === f.found, JSON.stringify(f));
+    ok('and splicing it produces the corrected sentence',
+      f && text.slice(0, f.start) + f.suggestion + text.slice(f.end)
+        === 'Roasted cauliflower with tahini.');
+  }
+
+  /* Overlapping findings would move the text under each other. */
+  ok('findings never overlap', (() => {
+    const fs = PR.check('Our favorite chiken pot pie. Its a family recipe , handed down. dont!!');
+    for (let i = 1; i < fs.length; i++) if (fs[i].start < fs[i - 1].end) return false;
+    return fs.length > 0;
+  })());
+
+  /* Case is carried across, so a correction never shouts or whispers. */
+  ok('a capitalised typo stays capitalised', flags('Chiken pot pie', 'Chiken->Chicken'));
+  ok('and one in capitals stays in capitals', flags('CHIKEN POT PIE', 'CHIKEN->CHICKEN'));
+
+  /* Menu writing here is mostly hyphens — slow-roasted, pan-fried, hand-cut,
+     beer-battered — and a compound is one word to the matcher. Each half is
+     checked as well as the whole, and the span covers only the half that is
+     wrong, so accepting the chip leaves the rest of the compound alone. */
+  {
+    const text = 'Slow-braized beef with apple slaw';
+    const f = PR.check(text)[0];
+    ok('half a hyphenated compound is checked', f && f.found === 'braized');
+    ok('and only that half is replaced',
+      f && text.slice(0, f.start) + f.suggestion + text.slice(f.end)
+        === 'Slow-braised beef with apple slaw');
+    ok('a correct compound stays quiet',
+      PR.check('Beer-battered haddock, hand-cut chips and mushy peas.').length === 0);
+  }
+
+  /* The near-miss layer, which is the part that can be wrong in the most
+     annoying way. It reads the kitchen's own vocabulary: a word written in a
+     dish name is known, and a word one keystroke from it is offered back. */
+  {
+    db.prepare(`INSERT INTO saved_dishes (kind, name, description, used_count)
+                VALUES ('main', 'Gochujang Pork Belly', 'Braised pork belly, sesame, scallion.', 6)`).run();
+    PR.forgetVocabulary();
+    ok('a word from the dish library is a word here',
+      PR.check('Gochujang-glazed pork belly').length === 0);
+    ok('and one letter off it is offered back',
+      flags('Gochjang pork belly', 'Gochjang->Gochujang'));
+    ok('but an ordinary word one letter from another is left alone',
+      PR.check('Shaved fennel and orange salad.').length === 0);
+  }
+
+  /* Length is capped before any regular expression sees it. */
+  ok('a very long paste is truncated rather than chewed on',
+    PR.check('x'.repeat(PR.MAX_TEXT * 2)).length === 0);
+  ok('empty text is no findings', PR.check('').length === 0 && PR.check(null).length === 0);
+
+  /* The fields it is wired to. Every box the owner writes prose into carries
+     data-proof, and the dashboard script hangs both the panel and the
+     browser's own spellcheck off that one attribute — so a field added later
+     without it gets neither, silently. */
+  {
+    const read = (p) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
+    const wired = ['server/views/admin.js', 'server/views/admin-week.js',
+      'server/views/recipe.js', 'server/routes/admin2.js'];
+    for (const f of wired) ok(`${f} marks its prose fields`, /data-proof/.test(read(f)));
+    ok('the item description is one of them',
+      /data-description data-proof/.test(read('server/views/admin.js')));
+    const adminJs = read('public/admin.js');
+    ok('the browser spell checker is turned on with them',
+      /setAttribute\("spellcheck", "true"\)/.test(adminJs));
+    ok('in Canadian English', /setAttribute\("lang", "en-CA"\)/.test(adminJs));
+    ok('and the dashboard shell says so too',
+      /html lang="en-CA"/.test(read('server/views/admin.js')));
+    ok('applying a fix raises an input event, so the allergen review reopens',
+      /dispatchEvent\(new Event\("input", \{ bubbles: true \}\)\)/.test(adminJs));
+    ok('and a stale span is refused rather than spliced',
+      /text\.slice\(f\.start, f\.end\) !== f\.found/.test(adminJs));
+  }
+}
+
 /* --- A dictionary fix has to reach a database that already exists ----------
    The checks above passed for months while the live dictionary raised nothing
    for "cheesecake". The seed ran only when allergen_terms was empty, so a word
@@ -1827,9 +2006,10 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     /toast\(name \+ \" isn/.test(adminJs));
 
   const names = [...adminJs.matchAll(/^  section\(\"([^\"]+)\"/gm)].map((m) => m[1]);
-  check('every part of the dashboard runs inside one', names.length, 10);
+  check('every part of the dashboard runs inside one', names.length, 11);
   ok('including the two that have already broken once',
     names.includes('The confirmation step') && names.includes('Autosave'), names.join(' | '));
+  ok('the proofreader is one of them', names.includes('The proofreader'), names.join(' | '));
   ok('and nothing is left outside them',
     !/^  document\.querySelectorAll/m.test(adminJs), 'a top-level querySelectorAll is unguarded');
 }

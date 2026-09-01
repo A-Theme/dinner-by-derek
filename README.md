@@ -36,6 +36,7 @@ website that installs to a home screen and works like an app.
 - 🚪 [Pickup window and locations](#pickup-window-and-locations)
 - 🚗 [Delivery area](#delivery-area)
 - ⚠️ [Allergens](#allergens)
+- ✏️ [Spelling and grammar](#spelling-and-grammar)
 - 💵 [Payment instructions](#payment-instructions)
 - 🎨 [Colours and the theme file](#colours-and-the-theme-file)
 - 📱 [Icons](#icons)
@@ -570,6 +571,78 @@ trigger butter. It leans toward suggesting too much rather than too little: a
 wrong suggestion costs you one tap, a missed one reaches someone with an allergy.
 
 The halal badge is worded as your own declaration, not a certification.
+
+---
+
+## Spelling and grammar
+
+> [!IMPORTANT]
+> **The proofreader makes suggestions. It does not change your writing.**
+> Nothing moves until you tap a chip, and the box saves exactly as you typed it
+> whether the panel is empty or twenty long.
+
+Every box you write prose into — dish names and descriptions, the week's blurb,
+a closure note, the payment instructions, delivery notes, and the whole recipe
+editor — gets checked as you type, and a panel appears under it listing what it
+found. Tap **✓** to make the change, **✕** to leave it alone.
+
+Two things are working, and they do different jobs.
+
+### The red squiggles
+
+The dashboard tells your browser these boxes are Canadian English, so your
+phone or laptop underlines misspellings in red using its own dictionary — the
+one you can add words to. That is the better tool for ordinary English, and the
+app does not try to replace it. If a word you use often keeps getting
+underlined, add it to your device's dictionary and it will stop.
+
+### The panel
+
+Underneath, the app checks the things a red squiggle cannot see:
+
+- **Kitchen spellings.** "vinagrette", "proscuitto", "brisquet", "gochjang" —
+  the words a menu writer gets wrong and a general dictionary is worst at. It
+  reads hyphenated compounds a half at a time, so "slow-braized" is caught and
+  only that half is replaced.
+- **Real words in the wrong place.** "Sever with crusty bread" and "a tart for
+  desert" are both spelled correctly. No browser marks either.
+- **Grammar.** A doubled "the", "could of", "your welcome", a missing
+  apostrophe in "dont".
+- **Spacing and punctuation.** Two spaces, a space before a comma, a full stop
+  with nothing after it. Invisible in a four-row box on a phone; obvious set in
+  the menu's display face.
+- **Words you have written before.** The dish library, your recipes and the
+  allergen dictionary make a vocabulary nobody else has. "Gochujang" is a word
+  here because you have used it, and "gochjang" is offered back as a typo
+  because it is one keystroke away from a word you use.
+
+Canadian spellings and missing accents are offered as **preferences**, not
+errors, and the chip says so: "flavor" and "flavour" are both correct English,
+and so is "sauteed".
+
+There is no AI and no external service. It is word lists and pattern matching
+held in [server/proofread.js](server/proofread.js), so the same paragraph
+always produces the same list, and you can read the rules that produced it.
+
+### Where it stays quiet
+
+An ingredients box is a list of lines, not a paragraph, so it is not asked to
+capitalise every one of them. "10 p.m. the night before" and "1 tbsp. salt" are
+left alone. A word it has never seen is only questioned when there is exactly
+one word in your own vocabulary one letter away — otherwise it says nothing and
+lets the red squiggle do its job.
+
+That restraint is the point. These chips sit directly above the allergen chips
+in the same editor, and a checker that argues with correct writing teaches you
+to sweep the whole box away without reading it — **including the allergen
+suggestions.**
+
+### It does not touch the allergen review
+
+Accepting a spelling fix rewrites the description, and rewriting a description
+cancels its allergen acknowledgement, exactly as typing in it does. Fixing
+"carmelized" on a reviewed dish unticks the box and you review it again. That
+is deliberate: the review is against the words, and the words changed.
 
 ---
 

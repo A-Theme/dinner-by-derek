@@ -280,10 +280,10 @@ function editor({ recipe, error, dishes = [] }) {
 
     <form method="post" action="${isNew ? '/admin/recipes' : `/admin/recipes/${r.id}`}" class="card">
       <label>Name
-        <input type="text" name="name" value="${r.name || ''}" required maxlength="120">
+        <input type="text" name="name" value="${r.name || ''}" required maxlength="120" data-proof>
       </label>
       <label>One line about it
-        <input type="text" name="summary" value="${r.summary || ''}" maxlength="240">
+        <input type="text" name="summary" value="${r.summary || ''}" maxlength="240" data-proof>
       </label>
       <div class="dl-row">
         <label style="flex:1 1 180px">Kind
@@ -318,7 +318,7 @@ function editor({ recipe, error, dishes = [] }) {
         checked a dish for the menu it is going on. Those stay separate.</p>
 
       <label>Ingredients — one per line
-        <textarea name="ingredients" rows="10" placeholder="500 g onion, peeled
+        <textarea name="ingredients" rows="10" data-proof placeholder="500 g onion, peeled
 2 tbsp butter, clarified
 1 bay leaf
 salt (optional)">${R.asLines(r)}</textarea>
@@ -328,11 +328,11 @@ salt (optional)">${R.asLines(r)}</textarea>
         it just will not scale with the rest.</p>
 
       <label>Method — leave a blank line between steps
-        <textarea name="steps" rows="12">${(r.steps || []).map((s) => s.text).join('\n\n')}</textarea>
+        <textarea name="steps" rows="12" data-proof>${(r.steps || []).map((s) => s.text).join('\n\n')}</textarea>
       </label>
 
       <label>Notes
-        <textarea name="notes" rows="3">${r.notes || ''}</textarea>
+        <textarea name="notes" rows="3" data-proof>${r.notes || ''}</textarea>
       </label>
 
       <div class="dl-row">

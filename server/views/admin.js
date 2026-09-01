@@ -25,8 +25,12 @@ function shell({ title, body, current = '', extraHead = null, scripts = null }) 
      passing `current` correctly the whole time. */
   const here = (key) => (current === key ? raw(' aria-current="page"') : '');
 
+  /* en-CA, not en. This is the language the browser's own spell checker picks
+     its dictionary from, and it is the difference between "flavour" being
+     underlined in red on every dish description and not. server/proofread.js
+     offers the same preference for the words a dictionary treats as equal. */
   return html`<!doctype html>
-<html lang="en"><head>
+<html lang="en-CA"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${title} — Dashboard</title>
@@ -116,12 +120,12 @@ function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWee
     <div class="ie-basics">
       ${showName ? html`
         <label for="${prefix}_name">${nameLabel}</label>
-        <input type="text" id="${prefix}_name" name="${prefix}_name" data-item-name
+        <input type="text" id="${prefix}_name" name="${prefix}_name" data-item-name data-proof
           value="${item.name || item.dish_name || ''}">` : ''}
 
       <label for="${prefix}_description">Description</label>
       <textarea id="${prefix}_description" name="${prefix}_description" rows="4"
-        data-description data-ack-of="${item.ack_of || ''}">${item.description || ''}</textarea>
+        data-description data-proof data-ack-of="${item.ack_of || ''}">${item.description || ''}</textarea>
     </div>
 
     <div class="ie-allergens">

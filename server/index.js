@@ -223,6 +223,7 @@ const adminRoutes = require('./routes/admin');
 const adminRoutes2 = require('./routes/admin2');
 const adminRoutes3 = require('./routes/admin3');
 const recipeRoutes = require('./routes/recipes');
+const proofread = require('./proofread');
 
 /* Mount order matters. admin.js applies `auth.required` to everything passing
  * through it, which redirects to the login page — right for a dashboard page,
@@ -230,6 +231,21 @@ const recipeRoutes = require('./routes/recipes');
  * body. Those routes live in admin3's `strict` router, which carries no blanket
  * middleware of its own and so can safely go first: requests it doesn't match
  * fall straight through to the routers below. */
+/* The proofreader's word list is built from the dish library, the recipes and
+ * the allergen dictionary, and cached — rebuilding it on every keystroke would
+ * read half the database. Any write through the dashboard can add a word to
+ * it, so any write drops it, and the next check rebuilds.
+ *
+ * Here rather than in the routes that write, because there are four of those
+ * routers and a fifth will be added by someone who has never read this file.
+ * The cost of being wrong is a word the owner just invented being offered back
+ * to him as a typo, which is precisely the failure the checker is built to
+ * avoid. */
+app.use('/admin', (req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') proofread.forgetVocabulary();
+  next();
+});
+
 app.use('/admin', adminRoutes3.strict);
 app.use('/admin', adminRoutes);
 app.use('/admin', adminRoutes2.router);

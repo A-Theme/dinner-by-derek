@@ -6,6 +6,7 @@ const auth = require('../auth');
 const T = require('../time');
 const M = require('../menu');
 const A = require('../allergens');
+const PROOF = require('../proofread');
 const O = require('../orders');
 const P = require('../publish');
 const DISH = require('../dishes');
@@ -163,6 +164,21 @@ router.post('/api/suggest', (req, res) => {
   res.json({
     pending: A.pendingFor(A.reviewedText({ name, description }), accepted, dismissed),
   });
+});
+
+/* --- Proofreading API ----------------------------------------------------
+ * Advisory, like /api/suggest above it and for the same reason: nothing it
+ * returns has any effect until the owner taps a chip, and the field saves
+ * exactly as typed either way.
+ *
+ * Rate limited even though it is behind the session guard, because it is the
+ * one dashboard endpoint a keystroke can call. The debounce in admin.js keeps
+ * ordinary typing to a few requests a minute; this is the ceiling for a stuck
+ * key or a second tab, and 240 a minute is far above anything a person types.
+ */
+router.post('/api/proofread', rateLimit('proofread', 240, 60_000), (req, res) => {
+  const findings = PROOF.check(String((req.body && req.body.text) || ''));
+  res.json({ findings, summary: PROOF.summarize(findings) });
 });
 
 /* --- Upload -------------------------------------------------------------- */

@@ -648,4 +648,207 @@
       }
     }
   });
+  section("The proofreader", function () {
+    /* --- Spelling and grammar ---------------------------------------------
+     * Every field the owner writes prose into carries data-proof. Two things
+     * hang off it, and they are different tools doing different jobs.
+     *
+     * First: spellcheck="true" and lang="en-CA", set here rather than in the
+     * templates so a field added later cannot quietly miss it. That is the
+     * browser's own dictionary — the long tail of English, underlined in red,
+     * with whatever words the owner has added to it. Nothing beats it and this
+     * file does not try.
+     *
+     * Second: a panel under the field listing what the browser cannot see —
+     * "sever with crusty bread", a doubled "the", two spaces, a comma with a
+     * space in front of it, and the kitchen's own vocabulary. server/
+     * proofread.js says what each rule is and why it is safe.
+     *
+     * Advisory, exactly like the allergen chips above it. Nothing is applied
+     * until a chip is tapped, and the field saves as typed either way.
+     */
+    var fields = document.querySelectorAll("[data-proof]");
+    if (!fields.length) return;
+
+    /* A finding about whitespace has nothing to show: "  " and "" are the same
+       chip to a reader. The invisible ones get named instead. */
+    function visible(s, kind) {
+      if (s === "") return "nothing";
+      if (kind !== "spacing") return s;
+      /* A spacing chip is otherwise unreadable: " ," and "," are the same two
+         characters to a reader, and the first draft of this panel really did
+         show "  , → ,". Every space in a spacing finding is drawn. */
+      return s.replace(/[ \t]/g, "␣");
+    }
+
+    /* What the ✓ button announces. The glyph above is right for the eye and
+       useless in a screen reader, which reads it as an open box or nothing at
+       all — so whitespace gets counted out in words instead. */
+    function spoken(s, kind) {
+      if (s === "") return "nothing";
+      /* Only spacing findings get their whitespace counted out. Doing it to
+         every finding turns "for desert" into "for a space desert". */
+      if (kind !== "spacing") return s;
+      var out = s.replace(/[ \t]+/g, function (run) {
+        return run.length === 1 ? " a space " : " " + run.length + " spaces ";
+      }).replace(/\s+/g, " ").trim();
+      return out || "nothing";
+    }
+
+    fields.forEach(function (field) {
+      field.setAttribute("spellcheck", "true");
+      field.setAttribute("lang", "en-CA");
+
+      /* Built here rather than in the templates. Six views hold a field worth
+         checking and one of them is generated per weekday, so a markup block
+         to keep in step with this code in each of them is a block that goes
+         out of step. */
+      var box = document.createElement("div");
+      box.className = "suggestions proof";
+      box.hidden = true;
+      var head = document.createElement("div");
+      head.className = "suggestions__label";
+      box.appendChild(head);
+      var list = document.createElement("div");
+      box.appendChild(list);
+
+      /* After the field, or after the label that wraps it — the recipe editor
+         puts its textareas inside <label>, and inserting between a label and
+         its own control would put the panel above the box it describes. */
+      var anchor = field.parentNode && field.parentNode.tagName === "LABEL"
+        ? field.parentNode : field;
+      anchor.parentNode.insertBefore(box, anchor.nextSibling);
+
+      var timer = null;
+      var ignored = {};        // chips waved away, for this page load
+      var inFlight = false;
+      var again = false;
+
+      function keyOf(f) { return f.kind + "|" + f.found + "|" + f.suggestion; }
+
+      function apply(f) {
+        var text = field.value;
+        /* The span is checked before it is spliced. The findings were computed
+           against the text as it was, and the owner can carry on typing while
+           the panel is on screen — applying a stale offset would eat the wrong
+           letters, and there would be nothing on screen to say so. */
+        if (text.slice(f.start, f.end) !== f.found) {
+          toast("That bit has changed since it was flagged — have another look.", "bad");
+          check();
+          return;
+        }
+        var caret = f.start + f.suggestion.length;
+        field.value = text.slice(0, f.start) + f.suggestion + text.slice(f.end);
+        /* Fired, not assumed. The allergen review, the autosave and the dish
+           name mirror are all listening for input on this field, and a value
+           set from script raises no event of its own. Without this line an
+           accepted fix rewrites a reviewed description and leaves the tick in
+           place — the exact stale acknowledgement the publish gate exists to
+           prevent. */
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        if (field.setSelectionRange && document.activeElement === field) {
+          try { field.setSelectionRange(caret, caret); } catch (e) { /* not a text box */ }
+        }
+        check();
+      }
+
+      function draw(findings) {
+        list.innerHTML = "";
+        var shown = findings.filter(function (f) { return !ignored[keyOf(f)]; });
+        box.hidden = !shown.length;
+        if (!shown.length) return;
+        head.textContent = shown.length === 1
+          ? "1 thing to look at — nothing changes until you tap it"
+          : shown.length + " things to look at — nothing changes until you tap one";
+
+        shown.forEach(function (f) {
+          var w = document.createElement("span");
+          w.className = "sugg sugg--" + f.kind;
+          w.title = f.message;
+
+          /* Nodes, not a string. The words in a finding come from the owner's
+             own text and from a dictionary he edits, so they are content, and
+             content goes in through textContent. */
+          var chip = document.createElement("span");
+          var from = document.createElement("s");
+          from.textContent = visible(f.found, f.kind);
+          var to = document.createElement("strong");
+          to.textContent = visible(f.suggestion, f.kind);
+          chip.appendChild(from);
+          chip.appendChild(document.createTextNode(" → "));
+          chip.appendChild(to);
+          var why = document.createElement("span");
+          why.className = "sugg__why";
+          why.textContent = f.message;
+          chip.appendChild(why);
+          w.appendChild(chip);
+
+          var yes = document.createElement("button");
+          yes.type = "button";
+          yes.dataset.accept = "1";
+          yes.textContent = "✓";
+          yes.setAttribute("aria-label", "Change " + spoken(f.found, f.kind)
+            + " to " + spoken(f.suggestion, f.kind));
+          yes.addEventListener("click", function () { apply(f); });
+
+          var no = document.createElement("button");
+          no.type = "button";
+          no.textContent = "✕";
+          no.setAttribute("aria-label", "Leave " + spoken(f.found, f.kind) + " as it is");
+          no.addEventListener("click", function () { ignored[keyOf(f)] = true; check(); });
+
+          w.appendChild(yes);
+          w.appendChild(no);
+          list.appendChild(w);
+        });
+      }
+
+      function check() {
+        /* An empty box has nothing to say about it, and asking costs a round
+           trip. This Week carries twenty-three of these — a name and a
+           description for each of seven days, the week blurb and the closure
+           notes — and almost all of them are empty almost all of the time. It
+           opened with twenty-three requests before this line, on a phone, to
+           be told twenty-three times that nothing was wrong. */
+        if (!field.value.trim()) { box.hidden = true; list.innerHTML = ""; return; }
+        /* One request at a time per field, with the latest text winning. A
+           chip accepted three times quickly used to put three overlapping
+           checks in the air, and whichever answered last drew the panel —
+           sometimes the one computed before the fix. */
+        if (inFlight) { again = true; return; }
+        inFlight = true;
+        fetch("/admin/api/proofread", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: field.value }),
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          /* Anything that is not a list of findings is not a list of findings.
+             An expired session answers {error:...}, and reading .filter off
+             that throws inside the promise — which is how a panel stops
+             appearing with nothing said and nothing in a console anybody has
+             open. */
+          if (!d || !Array.isArray(d.findings)) { box.hidden = true; return; }
+          draw(d.findings);
+        }).catch(function () {
+          /* Proofreading is advisory: a dropped request costs a suggestion,
+             which is not worth a message. */
+        }).then(function () {
+          inFlight = false;
+          if (again) { again = false; check(); }
+        });
+      }
+
+      field.addEventListener("input", function () {
+        clearTimeout(timer);
+        /* Longer than the allergen debounce on purpose. Allergens want to keep
+           up with a dish name being typed; a spelling chip appearing in the
+           middle of a half-typed word is only noise, so this waits for a
+           pause. */
+        timer = setTimeout(check, 700);
+      });
+      field.addEventListener("blur", function () { clearTimeout(timer); check(); });
+      check();
+    });
+  });
+
 })();

@@ -116,6 +116,47 @@ boot output on the 30th say so; the rest are as they were.
 
 ---
 
+## What changed on 31 August
+
+### A spelling and grammar checker on everything the owner writes — uncommitted
+
+Every box the owner writes prose into now carries `data-proof`: dish names and
+descriptions (the item editor, so all three menu levels at once), the week
+blurb, both closure notes, the payment instructions, delivery notes, and the
+five fields of the recipe editor.
+
+Two layers, doing different jobs.
+
+The dashboard shell is `lang="en-CA"` and `public/admin.js` sets
+`spellcheck="true"` on every `[data-proof]` field, so the browser's own
+dictionary underlines ordinary misspellings in Canadian English. That is the
+better tool for the long tail and the new code does not try to replace it.
+
+`server/proofread.js` covers what a red squiggle cannot: real words in the
+wrong place ("sever with crusty bread"), doubled words, missing apostrophes,
+spacing and punctuation, missing accents, American spellings offered as a
+Canadian preference — and the kitchen's own vocabulary, read out of the dish
+library, the recipe tables and the allergen dictionary, so "gochujang" is a
+word here and "gochjang" is offered back as a typo. Hyphenated compounds are
+checked a half at a time. `POST /admin/api/proofread` answers; the panel is
+built by `admin.js` and styled as `.proof` in `admin.css`.
+
+**Suggestion-only, on the allergens.js model.** Nothing is applied until a chip
+is tapped, and applying one fires an `input` event on the field, so accepting a
+fix on a reviewed description takes the allergen tick back off exactly as
+typing in it does. Verified in the browser: eight chips on a deliberately bad
+description, ✓ rewrote only the flagged word, and the acknowledgement unticked.
+
+Suites: **840 acceptance, 439 flow**, green. The new acceptance block leads
+with twelve correct menu sentences that must produce zero findings — that is
+the check that matters, and it already caught two false positives during the
+build ("shaved" → "shared", and "a desert" being read as pudding).
+
+**Not committed.** The working tree was already carrying about seventy modified
+files from other sessions when this was written, so nothing was staged.
+
+---
+
 ## What changed on 30 August
 
 ### It went live, and then it was audited — `c4e484f`
@@ -396,6 +437,28 @@ to something else.
 
 **Never tick an allergen box on the owner's behalf.** Say which items are
 unreviewed and leave them.
+
+**The proofreader's word list is cached, and a write drops it.** `proofread.js`
+builds its vocabulary from `saved_dishes`, `week_items`, `standing_items`, the
+recipe tables and `allergen_terms`, then holds it. Any non-GET through `/admin`
+calls `forgetVocabulary()` (`index.js`, above the route mounts) so a word the
+owner has just invented is not offered straight back to him as a typo. A new
+write path that bypasses `/admin` would need to drop it too.
+
+**The near-miss layer is the one that can be annoying.** It reads dish and
+recipe *names*, ingredient lines and the allergen dictionary as correction
+candidates, and everything else — descriptions, method steps, notes — only as
+"words this kitchen knows". That split is deliberate and was arrived at by
+failure: with one combined list it read "shaved Parmesan" as a typo for
+"shared". Raising recall here means widening the candidate pool, which is
+exactly the change that makes it wrong.
+
+**A rule that lights up correct prose does not ship.** The proofreader's chips
+sit directly above the allergen chips in the same editor. A checker that argues
+with correct writing teaches the owner to sweep the whole box away without
+reading it — allergen suggestions included. `scripts/acceptance.js` holds a
+block of clean menu sentences that must produce zero findings; treat a failure
+there as blocking, not as a threshold to adjust.
 
 **The recipe seed runs on boot, not on deploy.** `seedRecipes()` is called once
 in `index.js` at startup. A running server keeps serving whatever it loaded when
