@@ -83,8 +83,14 @@ router.get('/w/:slug/:date', (req, res) => {
   if (!week || week.status !== 'published') {
     return res.status(404).type('html').send(String(V.emptyView('That menu isn\'t available.')));
   }
-  /* Through the same filter the week page is built from, so a date it does not
-     list cannot be reached by typing it into the address bar either. */
+  /* The week-range filter, which is what keeps a straggling date attached to
+     this week by id from being reachable here.
+
+     It is no longer the whole of what the week page shows. That page drops a
+     day with no headline dish as well, so a dishless date IS still reachable
+     by typing it in or following a link somebody was already sent — it just
+     is not offered. Deliberate: an old link keeps working, and the page says
+     for itself that no dish is set. */
   const day = M.serviceDayOn(week.id, req.params.date);
   if (!day) {
     return res.status(404).type('html').send(String(V.emptyView('That day isn\'t on the menu.')));

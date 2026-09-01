@@ -35,6 +35,29 @@ function stateLine(st, cutoff, lateCutoff) {
 
 /* --- Week / day selector ------------------------------------------------ */
 function weekView({ week, days }) {
+  /* Every day, with its menu worked out once — the card and the filter below
+     both need it, and menuForDay is not free.
+
+     A day with no headline dish is not listed at all. It used to appear with
+     "Menu coming soon" on it, which is a promise the kitchen has not made:
+     the dish is either not chosen yet or still waiting on its allergen
+     review, and neither is something to advertise a date for. Removing the
+     card removes the promise.
+
+     Two things are deliberately still shown. A day the owner marked **closed**
+     stays, reading "Not cooking" — that is a decision he made and wants said
+     out loud, not an empty slot. And a day whose only headline is the meatless
+     main is a day with a dish on it, so `meatless` counts here as much as
+     `featured` does; testing only `featured` would have hidden Monday.
+
+     The cost, accepted knowingly: the standing Other Options are orderable on
+     a dishless day, and hiding the card is the only route to them gone. Nobody
+     can order Chili on that Friday now. The day page itself still answers, so
+     a link already sent to somebody keeps working. */
+  const cards = days
+    .map((day) => ({ day, menu: M.menuForDay(week, day) }))
+    .filter(({ menu }) => menu.closed || menu.featured || menu.meatless);
+
   // A closed week is published like any other and says so plainly. The day
   // list is not shown at all: there is nothing to pick between.
   const body = week.closed ? html`
@@ -50,10 +73,10 @@ function weekView({ week, days }) {
     <h1>${week.title || 'This week'}</h1>
     ${week.description ? html`<p>${week.description}</p>` : ''}
 
+    ${cards.length ? html`
     <div class="section-rule"><h2>Pick a day</h2></div>
     <ul class="daylist">
-      ${days.map((d) => {
-        const menu = M.menuForDay(week, d);
+      ${cards.map(({ day: d, menu }) => {
         if (menu.closed) {
           return html`<li>
             <div class="daycard daycard--shut">
@@ -69,7 +92,11 @@ function weekView({ week, days }) {
         return html`<li>
           <a class="daycard" href="/w/${week.slug}/${d.service_date}">
             <div class="daycard__date">${T.fmtDayLong(d.service_date, tz())}</div>
-            <div class="daycard__dish">${menu.featured ? menu.featured.name : 'Menu coming soon'}</div>
+            <!-- Dropped rather than emptied. Past the filter above, a card
+                 with no featured dish is one whose headline is the meatless
+                 main, and an empty div still occupies its line — a blank gap
+                 above the dish that is actually on. -->
+            ${menu.featured ? html`<div class="daycard__dish">${menu.featured.name}</div>` : ''}
             ${menu.meatless ? html`<div class="daycard__alt"><span>${menu.meatless.level}</span>${menu.meatless.name}</div>` : ''}
             <div class="daycard__meta">
               <span class="state state--${menu.state}">${STATE_LABEL[menu.state]}</span>
@@ -80,7 +107,12 @@ function weekView({ week, days }) {
           </a>
         </li>`;
       })}
-    </ul>
+    </ul>`
+    /* Every day filtered out. The week is published and open, so this is not
+       the closed-week message above — it is "nothing is up yet", and it has to
+       say so rather than leave a heading over an empty list. */
+    : html`<p>The menu for these dates isn't up yet. Check back shortly.</p>
+      <p>${settings.get('owner_contact')}</p>`}
     ${L.allergenDisclaimer()}`;
 
   return L.page({

@@ -464,6 +464,102 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   db.prepare('DELETE FROM weeks WHERE id = ?').run(weekId);
 }
 
+/* --- A day with nothing on it is not advertised ----------------------------
+   The week page used to list every service day, and a day with no headline
+   dish carried the words "Menu coming soon". That is a promise the kitchen has
+   not made — the dish is either not chosen yet or still held back by its
+   allergen review — and a date attached to it invites somebody to come back
+   and look.
+
+   The poster and the Facebook post had both already decided this: social.js
+   selects `TRIM(dish_name) != '' OR closed = 1` under a comment saying blank
+   days are the ones nobody decided, and buildPostText skips on
+   `!featured && !meatless`. The website was the only surface still offering
+   one. These checks are what keeps the three of them agreeing.
+
+   Two things stay listed on purpose, and both are asserted below: a day the
+   owner marked closed, because that is a decision he wants said out loud, and
+   a day whose only headline is the meatless main, because that is a day with
+   a dish on it. */
+{
+  const M = require('../server/menu');
+  const CV = require('../server/views/customer');
+
+  const weekId = db.prepare(`INSERT INTO weeks (slug, title, status, week_start)
+    VALUES ('blank-day-test','Blank day test','published','2026-08-24')`).run().lastInsertRowid;
+  const insDay = db.prepare(`INSERT INTO service_days
+    (week_id, service_date, dish_name, description, ack, ack_of, full_on, full_price)
+    VALUES (?,?,?,'',?,?,1,5000)`);
+  const reviewed = (name) => A.reviewedText({ name, description: '' });
+  insDay.run(weekId, '2026-08-24', 'Roast Chicken', 1, reviewed('Roast Chicken'));
+  insDay.run(weekId, '2026-08-25', '', 0, '');                 // nothing decided
+  insDay.run(weekId, '2026-08-26', 'Pork Souvlaki', 1, reviewed('Pork Souvlaki'));
+
+  const wk = () => db.prepare('SELECT * FROM weeks WHERE id = ?').get(weekId);
+  const render = () => String(CV.weekView({ week: wk(), days: M.serviceDaysOf(weekId) }));
+
+  {
+    const page = render();
+    ok('the two days with dishes are listed',
+      /Roast Chicken/.test(page) && /Pork Souvlaki/.test(page));
+    ok('the blank day is not', !/2026-08-25/.test(page));
+    ok('and nothing links to it', !/href="\/w\/blank-day-test\/2026-08-25"/.test(page));
+    ok('the words are gone from the page entirely', !/coming soon/i.test(page));
+  }
+
+  /* Marked closed, the same date comes back — with the owner's own note. */
+  db.prepare(`UPDATE service_days SET closed = 1, closed_note = 'Back Thursday'
+              WHERE week_id = ? AND service_date = '2026-08-25'`).run(weekId);
+  {
+    const page = render();
+    ok('a closed day is listed rather than hidden', /Not cooking/.test(page));
+    ok('with its note', /Back Thursday/.test(page));
+    ok('and still is not a link', !/href="\/w\/blank-day-test\/2026-08-25"/.test(page));
+  }
+
+  /* A blank day carrying the meatless main is a day with a dish on it. This is
+     the case that a filter written as `!menu.featured` alone would have got
+     wrong, and it would have taken Monday down with it. */
+  db.prepare(`UPDATE service_days SET closed = 0, closed_note = ''
+              WHERE week_id = ? AND service_date = '2026-08-25'`).run(weekId);
+  db.prepare(`INSERT INTO week_items
+    (week_id, kind, name, description, weekdays, ack, ack_of, full_on, full_price)
+    VALUES (?,'meatless','Chana Masala','','["tue"]',1,?,1,4500)`)
+    .run(weekId, A.reviewedText({ name: 'Chana Masala', description: '' }));
+  {
+    const page = render();
+    ok('a day whose only headline is the meatless main is listed',
+      /Chana Masala/.test(page) && /href="\/w\/blank-day-test\/2026-08-25"/.test(page));
+  }
+
+  /* A dish that is set but has not passed its allergen review does not count.
+     The gate is already withholding it, and a date advertised for a dish
+     nobody can order is the same empty promise by another route. */
+  db.prepare('DELETE FROM week_items WHERE week_id = ?').run(weekId);
+  db.prepare(`UPDATE service_days SET dish_name = 'Beef Wellington', ack = 0, ack_of = ''
+              WHERE week_id = ? AND service_date = '2026-08-25'`).run(weekId);
+  {
+    const page = render();
+    ok('an unreviewed dish does not put its day back on the list',
+      !/Beef Wellington/.test(page) && !/href="\/w\/blank-day-test\/2026-08-25"/.test(page));
+  }
+
+  /* Every day filtered out. A heading over an empty list reads as broken, so
+     the page has to say what is actually true — which is not the closed-week
+     message, because the kitchen has not said it is shut. */
+  db.prepare(`UPDATE service_days SET dish_name = '', ack = 0, ack_of = '' WHERE week_id = ?`)
+    .run(weekId);
+  {
+    const page = render();
+    ok('a week with nothing on any day says so', /isn&#39;t up yet|isn't up yet/.test(page));
+    ok('rather than heading an empty list', !/Pick a day/.test(page));
+    ok('and it is not the closed-week wording', !/kitchen is closed this week/i.test(page));
+  }
+
+  db.prepare('DELETE FROM service_days WHERE week_id = ?').run(weekId);
+  db.prepare('DELETE FROM weeks WHERE id = ?').run(weekId);
+}
+
 /* --- Standing items are seeded and persist -------------------------------- */
 {
   const names = db.prepare('SELECT name FROM standing_items ORDER BY sort').all().map((r) => r.name);
@@ -1742,7 +1838,12 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   const posterDates = loadWeek().days.map((d) => d.service_date);
   check('the poster draws only the dates the week covers',
     posterDates, ['2026-08-24', '2026-08-27']);
-  check('which is exactly what the customer week view shows',
+  /* serviceDaysOf, not the week view, and the difference is worth naming: the
+     customer page now filters this list again and drops any day with no
+     headline dish. Both agree about which dates a WEEK covers, which is what
+     this check is for; they differ on which of those dates get advertised, and
+     the poster makes the same cut in SQL (`TRIM(dish_name) != ''`). */
+  check('which is the same set of dates the customer week view starts from',
     posterDates, M.serviceDaysOf(weekId).map((d) => d.service_date));
   ok('so a day from the week before is not advertised',
     !posterDates.includes('2026-08-18'));
