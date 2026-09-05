@@ -1041,6 +1041,64 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     'Contains milk, eggs and wheat. Made in a kitchen that also handles peanuts.',
     'Full size is $34.00 and a meal for one is $18.00. Order at dinnerbyderek.ca.',
     'Everything is cooked fresh that morning and packed cold for you to reheat.',
+
+    /* Everything below this line was a chip on a correct sentence until the
+       rules were audited. They are kept as prose, not as a list of rule names,
+       because that is how they turned up: read out of four thousand rows of
+       the dish library and the recipe book, or written the way a recipe is
+       written and handed to the checker.
+
+       A word that is also a word. */
+    'Allot twenty minutes for the dough to rest.',
+    'Add a spoon of the cooking water to thin the sauce.',
+    'Transfer to cold water to stop the cooking.',
+    'Add to hot stock a ladle at a time, and cook it down to thick jam.',
+    'Fold the parsley through to sweet potato mash.',
+    'Give it its time in the pan.',
+    'Its all-butter pastry, made that morning.',
+    'A loose coat is what lets it puff away from the crumb.',
+    'Keep the cooking liquid. It is what lets you loosen them later.',
+    'Use your in-season vegetables and whatever is on your on-hand list.',
+
+    /* A recipe's shorthand. The abbreviation list was simply short, so a full
+       stop after "hrs" started a new sentence and the next word was asked to
+       stand up straight. */
+    'Refrigerate 2 hrs. then bake.',
+    'Rest 40 mins. then carve.',
+    'Chill 30 sec. before slicing.',
+    'Bake Mon. through Fri. and rest Sunday.',
+
+    /* A name that repeats itself. Half a spice rack is spelled this way, and
+       the fix on offer would have cut each one in half. */
+    'agar agar, 1% for a sliceable gel',
+    'Peri Peri Chicken with baked sweet potatoes and creamy coleslaw',
+    'Gado Gado (peanut)',
+    'Mahi Mahi with lime and coriander.',
+
+    /* A word list pointing at itself: "bruschetta" was mapped to
+       "bruschetta", so five correct dish names were told they were typos. */
+    'Bruschetta stuffed portobello mushroom caps, quinoa pilaf and green salad',
+
+    /* Two accents a word list cannot decide. "Pate Brisee" is pâte, the dough;
+       a terrine is pâté. Creole is the English spelling of the gumbo. */
+    'Pate Brisee',
+    'Pate a Choux',
+    'Creole Gumbo',
+
+    /* Matters of taste, which this file says it does not do. How many
+       exclamation marks go on a supper club's own news is not a mistake. */
+    'Back by popular demand!!',
+    'Sold out again?? Order early.',
+
+    /* Canadian, not British: the -ll- words keep both l's here, and the sign
+       over the counter says donut. */
+    'We fulfill every order and the first installment is due Friday.',
+    'Coffee and a donut on the side.',
+
+    /* Spellings a dictionary lists, and one somebody chose. */
+    'Sauce bolognaise, slow cooked.',
+    'Clam Chowda, the Boston way.',
+    'Kimchee and rice.',
   ];
   for (const line of clean) {
     ok(`quiet on: ${JSON.stringify(line.slice(0, 44))}`,
@@ -1152,6 +1210,41 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
       flags('Gochjang pork belly', 'Gochjang->Gochujang'));
     ok('but an ordinary word one letter from another is left alone',
       PR.check('Shaved fennel and orange salad.').length === 0);
+
+    /* A word is not a typo for itself in the other number. "crumbs" is in the
+       allergen dictionary three times over, so "crumb" — one letter away, and
+       in no list of its own — was being offered its own plural on every field
+       it appeared in. The near-miss layer ran the typed word through stemsOf()
+       but never the candidate, so nothing was watching this direction. */
+    ok('a singular is not corrected into its own plural',
+      PR.check('a fresh crumb on top').length === 0,
+      JSON.stringify(found('a fresh crumb on top')));
+    ok('and the plural is not corrected back',
+      PR.check('toasted crumbs and parsley').length === 0);
+  }
+
+  /* The accent list, which was the single loudest thing on the site:
+     forty-three chips across the dish library and the recipe book, every one
+     of them telling this kitchen to write a mark it has never once typed.
+
+     It defers now. A plain spelling he has already written is the spelling
+     here — and a word he has only ever written accented still gets the chip,
+     which is the case the list was for. */
+  {
+    ok('an accent is offered on a word this kitchen has not written plain',
+      flags('a veloute finished with cream', 'veloute->velouté'));
+
+    db.prepare(`INSERT INTO saved_dishes (kind, name, description, used_count)
+                VALUES ('main', 'Chicken Veloute', 'Poached chicken in a veloute.', 3)`).run();
+    PR.forgetVocabulary();
+
+    ok('and dropped once he has written it plain himself',
+      PR.check('a veloute finished with cream').length === 0);
+    ok('inflections of the same habit go quiet too',
+      PR.check('two velvet velvety veloutes').length === 0
+      || !flags('two velvet velvety veloutes', 'veloutes->veloutés'));
+    ok('but a different word he has never written plain still gets its chip',
+      flags('sauteed mushrooms on toast', 'sauteed->sautéed'));
   }
 
   /* Length is capped before any regular expression sees it. */
@@ -1180,6 +1273,39 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
       /dispatchEvent\(new Event\("input", \{ bubbles: true \}\)\)/.test(adminJs));
     ok('and a stale span is refused rather than spliced',
       /text\.slice\(f\.start, f\.end\) !== f\.found/.test(adminJs));
+
+    /* The panel, which the owner called clunky before the rules were even
+       looked at. Two boxes that looked alike, stacked, and the decorative one
+       drawn first and bigger than the allergen review that gates a publish. */
+    const adminCss = read('public/admin.css');
+    ok('the proofreader does not wear the allergen panel\'s fill',
+      /\.proof \{[^}]*background: none/.test(adminCss));
+    ok('nor its border', /\.proof \{[^}]*border: none/.test(adminCss));
+    ok('nor its uppercase label',
+      /\.proof \.suggestions__label \{[^}]*text-transform: none/.test(adminCss));
+    ok('and the allergen panel keeps all three',
+      /^\.suggestions \{[^}]*background: var\(--dbd-surface-sunk\)[^}]*border: 1px dashed/m
+        .test(adminCss));
+
+    /* Fewer things stacked under one box: three rows, then a button. The
+       heading still counts them all, so nothing is hidden from the total. */
+    ok('the list is capped', /var LIMIT = 3;/.test(adminJs));
+    ok('and the rest go behind a button', /sugg__more/.test(adminJs));
+    ok('the count above the list is the true one, not the drawn one',
+      /head\.textContent = shown\.length === 1/.test(adminJs)
+      && /var rows = expanded \? shown : shown\.slice\(0, LIMIT\);/.test(adminJs));
+
+    /* A row names its finding in two or three words instead of carrying the
+       whole sentence of reasoning. The sentence still reaches a screen
+       reader, which is the reader that cannot see the strikethrough. */
+    ok('a row is labelled, not narrated', /kind\.textContent = f\.label;/.test(adminJs));
+    ok('the reasoning is off the stack but not gone',
+      /why\.className = "visually-hidden";/.test(adminJs)
+      && /why\.textContent = f\.message;/.test(adminJs));
+    ok('and the ✓ button points at it',
+      /yes\.setAttribute\("aria-describedby", why\.id\)/.test(adminJs));
+    ok('with an id that is unique across every panel on the page',
+      /"proof-why-" \+ \(\+\+whySeq\)/.test(adminJs));
   }
 }
 

@@ -670,6 +670,14 @@
     var fields = document.querySelectorAll("[data-proof]");
     if (!fields.length) return;
 
+    /* Findings are described to a screen reader through an element the ✓
+       button points at, and the id has to be unique across every panel on the
+       page — This Week draws twenty-three of them. */
+    var whySeq = 0;
+
+    /* At most this many rows are drawn before the rest go behind a button. */
+    var LIMIT = 3;
+
     /* A finding about whitespace has nothing to show: "  " and "" are the same
        chip to a reader. The invisible ones get named instead. */
     function visible(s, kind) {
@@ -721,6 +729,7 @@
 
       var timer = null;
       var ignored = {};        // chips waved away, for this page load
+      var expanded = false;    // "show N more" tapped, until the panel empties
       var inFlight = false;
       var again = false;
 
@@ -752,55 +761,100 @@
         check();
       }
 
+      /* One finding, on one line. */
+      function row(f) {
+        var w = document.createElement("span");
+        w.className = "sugg sugg--" + f.kind;
+        w.title = f.message;
+
+        /* Nodes, not a string. The words in a finding come from the owner's
+           own text and from a dictionary he edits, so they are content, and
+           content goes in through textContent. */
+        var chip = document.createElement("span");
+        chip.className = "sugg__text";
+        var from = document.createElement("s");
+        from.textContent = visible(f.found, f.kind);
+        var to = document.createElement("strong");
+        to.textContent = visible(f.suggestion, f.kind);
+        chip.appendChild(from);
+        chip.appendChild(document.createTextNode(" → "));
+        chip.appendChild(to);
+
+        /* What kind of thing it is, in the two or three words the finding
+           already uses to name itself: "doubled word", "space before ','",
+           "desert / dessert".
+
+           This is what replaced the reasoning. Every row used to carry its
+           whole sentence on a line of its own — "One 's' is the Sahara;
+           pudding takes two" — which is a good sentence, and three lines of it
+           on a phone, on every row, under a box that already had the allergen
+           review to get to. */
+        var kind = document.createElement("span");
+        kind.className = "sugg__kind";
+        kind.textContent = f.label;
+        chip.appendChild(kind);
+        w.appendChild(chip);
+
+        /* The sentence is not gone, only off the stack: on the row as a title
+           for a pointer, and named by the ✓ button for a screen reader, which
+           is the reader that cannot see the strikethrough do its explaining. */
+        var why = document.createElement("span");
+        why.className = "visually-hidden";
+        why.id = "proof-why-" + (++whySeq);
+        why.textContent = f.message;
+        w.appendChild(why);
+
+        var yes = document.createElement("button");
+        yes.type = "button";
+        yes.dataset.accept = "1";
+        yes.textContent = "✓";
+        yes.setAttribute("aria-label", "Change " + spoken(f.found, f.kind)
+          + " to " + spoken(f.suggestion, f.kind));
+        yes.setAttribute("aria-describedby", why.id);
+        yes.addEventListener("click", function () { apply(f); });
+
+        var no = document.createElement("button");
+        no.type = "button";
+        no.textContent = "✕";
+        no.setAttribute("aria-label", "Leave " + spoken(f.found, f.kind) + " as it is");
+        no.addEventListener("click", function () { ignored[keyOf(f)] = true; check(); });
+
+        w.appendChild(yes);
+        w.appendChild(no);
+        return w;
+      }
+
       function draw(findings) {
         list.innerHTML = "";
         var shown = findings.filter(function (f) { return !ignored[keyOf(f)]; });
         box.hidden = !shown.length;
-        if (!shown.length) return;
+        /* Nothing left to show is also the end of whatever was expanded, so the
+           next paragraph starts short again. */
+        if (!shown.length) { expanded = false; return; }
         head.textContent = shown.length === 1
           ? "1 thing to look at — nothing changes until you tap it"
           : shown.length + " things to look at — nothing changes until you tap one";
 
-        shown.forEach(function (f) {
-          var w = document.createElement("span");
-          w.className = "sugg sugg--" + f.kind;
-          w.title = f.message;
+        /* Three rows, and a button for the rest.
 
-          /* Nodes, not a string. The words in a finding come from the owner's
-             own text and from a dictionary he edits, so they are content, and
-             content goes in through textContent. */
-          var chip = document.createElement("span");
-          var from = document.createElement("s");
-          from.textContent = visible(f.found, f.kind);
-          var to = document.createElement("strong");
-          to.textContent = visible(f.suggestion, f.kind);
-          chip.appendChild(from);
-          chip.appendChild(document.createTextNode(" → "));
-          chip.appendChild(to);
-          var why = document.createElement("span");
-          why.className = "sugg__why";
-          why.textContent = f.message;
-          chip.appendChild(why);
-          w.appendChild(chip);
+           This panel is drawn between the description and the allergen review,
+           so every row it adds pushes the one control in this editor that must
+           not be missed further down the phone. A pasted paragraph could fill
+           the screen with chips on its own.
 
-          var yes = document.createElement("button");
-          yes.type = "button";
-          yes.dataset.accept = "1";
-          yes.textContent = "✓";
-          yes.setAttribute("aria-label", "Change " + spoken(f.found, f.kind)
-            + " to " + spoken(f.suggestion, f.kind));
-          yes.addEventListener("click", function () { apply(f); });
+           The count above is still the true one. Nothing is hidden from the
+           total — only from the stack. */
+        var rows = expanded ? shown : shown.slice(0, LIMIT);
+        rows.forEach(function (f) { list.appendChild(row(f)); });
 
-          var no = document.createElement("button");
-          no.type = "button";
-          no.textContent = "✕";
-          no.setAttribute("aria-label", "Leave " + spoken(f.found, f.kind) + " as it is");
-          no.addEventListener("click", function () { ignored[keyOf(f)] = true; check(); });
-
-          w.appendChild(yes);
-          w.appendChild(no);
-          list.appendChild(w);
-        });
+        if (shown.length > rows.length) {
+          var more = document.createElement("button");
+          more.type = "button";
+          more.className = "sugg__more";
+          more.textContent = "Show " + (shown.length - rows.length) + " more";
+          more.addEventListener("click", function () { expanded = true; draw(findings); });
+          list.appendChild(more);
+        }
       }
 
       function check() {

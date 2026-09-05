@@ -65,6 +65,23 @@ const flatten = (s) => String(s == null ? '' : s).toLowerCase().replace(/[‘’
  * Two halves. The kitchen vocabulary is the half that earns its keep here:
  * "vinagrette" and "proscuitto" are exactly the words a menu writer gets wrong
  * and a general dictionary is worst at.
+ *
+ * Three kinds of entry have been taken back out, because none of them met the
+ * bar and every one of them argued with a word that was already right:
+ *
+ *   A word that is also a word. "allot" was mapped to "a lot", so "Allot
+ *   twenty minutes for the dough to rest" was offered a correction that is not
+ *   English.
+ *
+ *   A variant a dictionary lists. "hummous", "hommus", "kimchee", "flakey" and
+ *   "bolognaise" are all spellings you can look up. A transliteration out of a
+ *   script that is not Latin has no single right answer to be wrong about.
+ *
+ *   A spelling somebody chose. "chowda" is a voice, not a slip.
+ *
+ * And one entry mapped a word to itself: "bruschetta" sat in here pointing at
+ * "bruschetta", so five correct dish names in the library were told they
+ * looked like typos and offered themselves back.
  */
 const MISSPELLINGS = {
   /* Kitchen and menu */
@@ -74,7 +91,7 @@ const MISSPELLINGS = {
   brocolli: 'broccoli', brocoli: 'broccoli', broccolli: 'broccoli',
   tomatoe: 'tomato', tomatos: 'tomatoes', potatoe: 'potato', potatos: 'potatoes',
   avacado: 'avocado', avocodo: 'avocado', avacodo: 'avocado', advacado: 'avocado',
-  bruchetta: 'bruschetta', brushetta: 'bruschetta', bruschetta: 'bruschetta',
+  bruchetta: 'bruschetta', brushetta: 'bruschetta',
   ceasar: 'Caesar', caeser: 'Caesar', casear: 'Caesar', ceaser: 'Caesar',
   chipolte: 'chipotle', chipoltle: 'chipotle', chiplote: 'chipotle',
   guacomole: 'guacamole', guacamoli: 'guacamole', guacmole: 'guacamole',
@@ -86,8 +103,8 @@ const MISSPELLINGS = {
   fettucine: 'fettuccine', fettucini: 'fettuccine', fetuccine: 'fettuccine',
   rissoto: 'risotto', risoto: 'risotto', rissotto: 'risotto',
   tirimisu: 'tiramisu', tiramasu: 'tiramisu', tiramissu: 'tiramisu',
-  bearnaise: 'béarnaise', bernaise: 'béarnaise', holandaise: 'hollandaise',
-  hollandaisse: 'hollandaise', bolognaise: 'bolognese', bolagnese: 'bolognese',
+  bernaise: 'bearnaise', holandaise: 'hollandaise',
+  hollandaisse: 'hollandaise', bolagnese: 'bolognese',
   bolonaise: 'bolognese', bolegnese: 'bolognese',
   chorrizo: 'chorizo', chourizo: 'chorizo', chorico: 'chorizo',
   cilentro: 'cilantro', cilanto: 'cilantro', corriander: 'coriander',
@@ -117,12 +134,12 @@ const MISSPELLINGS = {
   gochjang: 'gochujang', gochuchang: 'gochujang', gouchujang: 'gochujang',
   srirachia: 'sriracha', siracha: 'sriracha', sriacha: 'sriracha',
   tzaziki: 'tzatziki', tzatzki: 'tzatziki', tatziki: 'tzatziki',
-  hummous: 'hummus', hommus: 'hummus', falafal: 'falafel', fallafel: 'falafel',
+  falafal: 'falafel', fallafel: 'falafel',
   tahinni: 'tahini', harrisa: 'harissa', chimmichurri: 'chimichurri',
-  chimichuri: 'chimichurri', kimchee: 'kimchi', misso: 'miso',
+  chimichuri: 'chimichurri', misso: 'miso',
   teryaki: 'teriyaki', teriyakki: 'teriyaki', wasabe: 'wasabi',
   tempora: 'tempura', ramin: 'ramen',
-  poutin: 'poutine', poutene: 'poutine', peirogi: 'perogies',
+  poutin: 'poutine', poutene: 'poutine', peirogi: 'pierogi',
   cabage: 'cabbage', casarole: 'casserole', casserol: 'casserole',
   cassarole: 'casserole', marinera: 'marinara', alfreado: 'Alfredo',
   carbonarra: 'carbonara', carbonera: 'carbonara', pestoe: 'pesto',
@@ -140,7 +157,7 @@ const MISSPELLINGS = {
   grilld: 'grilled', grillled: 'grilled', poched: 'poached',
   simmerd: 'simmered', seasonned: 'seasoned', seasoing: 'seasoning',
   shreded: 'shredded', shreadded: 'shredded', pulld: 'pulled',
-  crispey: 'crispy', flakey: 'flaky', creemy: 'creamy',
+  crispey: 'crispy', creemy: 'creamy',
   delicous: 'delicious', delisious: 'delicious', delicius: 'delicious',
   scrumptous: 'scrumptious',
   homade: 'homemade', homeade: 'homemade', fresly: 'freshly', freshy: 'freshly',
@@ -165,7 +182,7 @@ const MISSPELLINGS = {
   foccacia: 'focaccia', tortila: 'tortilla', tortillia: 'tortilla',
   quesadila: 'quesadilla', enchalada: 'enchilada', burritto: 'burrito',
   empenada: 'empanada',
-  gazpatcho: 'gazpacho', minestroni: 'minestrone', chowda: 'chowder',
+  gazpatcho: 'gazpacho', minestroni: 'minestrone',
   chowdar: 'chowder', bisqu: 'bisque', bouillion: 'bouillon',
   stroganof: 'stroganoff', goulish: 'goulash', goulasch: 'goulash',
   jambalya: 'jambalaya', paela: 'paella', paellia: 'paella',
@@ -195,7 +212,7 @@ const MISSPELLINGS = {
   recomended: 'recommended', reccomended: 'recommended',
   availabe: 'available', availible: 'available', avalable: 'available',
   avaliable: 'available', availble: 'available', avaialbe: 'available',
-  untill: 'until', alot: 'a lot', allot: 'a lot',
+  untill: 'until', alot: 'a lot',
   tommorow: 'tomorrow', tommorrow: 'tomorrow', tomorow: 'tomorrow',
   yesteday: 'yesterday', wendsday: 'Wednesday', wensday: 'Wednesday',
   wedensday: 'Wednesday', thursady: 'Thursday', thurday: 'Thursday',
@@ -239,6 +256,27 @@ const MISSPELLINGS = {
  * Correctly spelled, missing their mark. Kept apart from MISSPELLINGS so the
  * chip can say so — "sauteed" is not a typo, it is a keyboard without an
  * option key, and the owner may well want it left plain in a dish name.
+ *
+ * He does. Across four thousand rows of dish names, recipes and method steps
+ * this kitchen has written "creme", "puree", "veloute", "sauteed", "crepes",
+ * "gruyere", "jalapeno" and "tourtiere", and has never once typed the mark —
+ * and this list was the single largest source of chips on the site, forty-three
+ * of them, every one arguing with a settled habit.
+ *
+ * So the offer defers to the kitchen now: a plain spelling this kitchen has
+ * already written is a spelling here, and the accent is not raised against it.
+ * The chip is still there for a word he has only ever written accented, which
+ * is the case it was for. See plainByHabit() below.
+ *
+ * Two entries came out altogether, because deferring was not enough to make
+ * them right:
+ *
+ *   "pate", which a word list cannot decide. "Pate Brisee" and "pate sucree"
+ *   are pâte, the dough; a terrine is pâté. Both are in the recipe book, and
+ *   the chip offered pâté for all of them — a fix worse than what was typed.
+ *
+ *   "creole", which in English is Creole. Créole is the French word, and
+ *   "Creole Gumbo" is the dish.
  */
 const ACCENTS = {
   creme: 'crème', brulee: 'brûlée', souffle: 'soufflé', saute: 'sauté',
@@ -246,13 +284,19 @@ const ACCENTS = {
   puree: 'purée', pureed: 'puréed', purees: 'purées', entree: 'entrée',
   entrees: 'entrées', consomme: 'consommé', veloute: 'velouté',
   jalapeno: 'jalapeño', jalapenos: 'jalapeños', tourtiere: 'tourtière',
-  nicoise: 'niçoise', crepe: 'crêpe', crepes: 'crêpes', pate: 'pâté',
-  mache: 'mâche', gruyere: 'gruyère', creole: 'créole',
+  nicoise: 'niçoise', crepe: 'crêpe', crepes: 'crêpes',
+  mache: 'mâche', gruyere: 'gruyère', bearnaise: 'béarnaise',
 };
 
 /* --- 3. House style -------------------------------------------------------
  * Both spellings are correct English. This is a Canadian kitchen, so the
  * Canadian one is offered — worded as a preference, never as an error.
+ *
+ * Canadian, though, not British, and the two part company on more than -our
+ * and -re. "fulfill", "skillful", "enrollment" and "installment" keep the
+ * doubled l here and have come out of this list, which was offering the
+ * British form and calling it Canadian. "donut" went with them: it is what the
+ * sign over every Canadian counter says.
  */
 const HOUSE_STYLE = {
   color: 'colour', colors: 'colours', colored: 'coloured', coloring: 'colouring',
@@ -265,10 +309,8 @@ const HOUSE_STYLE = {
   center: 'centre', centers: 'centres', centered: 'centred',
   fiber: 'fibre', liter: 'litre', liters: 'litres', meter: 'metre',
   theater: 'theatre', caliber: 'calibre',
-  gray: 'grey', donut: 'doughnut', donuts: 'doughnuts', yoghurt: 'yogurt',
+  gray: 'grey', yoghurt: 'yogurt',
   mold: 'mould', molded: 'moulded', smolder: 'smoulder',
-  skillful: 'skilful', fulfill: 'fulfil', enrollment: 'enrolment',
-  installment: 'instalment',
 };
 
 const NAME_OF = {
@@ -290,13 +332,27 @@ const keepCase = (found, lower) => (found[0] === found[0].toUpperCase()
  * writing is one whose chips get ignored, including the chips that were right,
  * and the ones that matter here sit next to an allergen review.
  */
+/**
+ * Doublings that are a name, not a slip.
+ *
+ * The first row is the English ones, and "had had" is the only one of those
+ * that turns up in a recipe note. The rest is why this list is now worth
+ * having a name: a repeated word is how a great many dishes are spelled, and
+ * the rule was flagging every one of them in the library — Peri Peri Chicken,
+ * Gado Gado, and "agar agar" three times over in the ingredient lines, each
+ * one offered a fix that would have cut the name in half.
+ */
+const REDUPLICATED = new Set([
+  'had', 'that', 'no', 'so', 'very', 'ha',
+  'agar', 'peri', 'piri', 'gado', 'mahi', 'bang', 'dan', 'pil', 'chow',
+  'shabu', 'lomi', 'cha', 'beri',
+]);
+
 const GRAMMAR = [
   {
-    /* A doubled word. The span covers both copies so accepting it leaves one.
-       The exclusions are the doublings that are real English; "had had" is the
-       only one of them that turns up in a recipe note. */
+    /* A doubled word. The span covers both copies so accepting it leaves one. */
     re: /\b([A-Za-z]+)(\s+)\1\b/gi,
-    skip: (m) => ['had', 'that', 'no', 'so', 'very', 'ha'].includes(m[1].toLowerCase()),
+    skip: (m) => REDUPLICATED.has(m[1].toLowerCase()),
     fix: (m) => m[1],
     kind: 'grammar',
     label: () => 'doubled word',
@@ -310,7 +366,10 @@ const GRAMMAR = [
     why: (m) => `"${m[1]} of" is always "${m[1]} have".`,
   },
   {
-    re: /\byour\b(?=\s+(?:welcome|going|getting|looking|coming|the|a|not|in|on)\b)/gi,
+    /* "in" and "on" came out. A kitchen writes "your in-season vegetables"
+       and "your on-hand stock", and the word boundary reads the first half of
+       a hyphenated compound as the whole word. */
+    re: /\byour\b(?=\s+(?:welcome|going|getting|looking|coming|the|a|not)\b)/gi,
     fix: (m) => keepCase(m[0], "you're"),
     kind: 'grammar',
     label: () => 'your / you’re',
@@ -318,8 +377,12 @@ const GRAMMAR = [
   },
   {
     /* Case-insensitive, because the sentence start is exactly where this one
-       happens: "Its a family recipe" is the sentence somebody writes. */
-    re: /\bits\b(?=\s+(?:a|an|the|been|going|worth|not|time|all)\b)/gi,
+       happens: "Its a family recipe" is the sentence somebody writes.
+
+       "time" and "all" came out, because after those two the possessive is the
+       likelier reading and not the rarer one: "give it its time in the pan",
+       "its all-butter pastry". */
+    re: /\bits\b(?=\s+(?:a|an|the|been|going|worth|not)\b)/gi,
     fix: (m) => keepCase(m[0], "it's"),
     kind: 'grammar',
     label: () => 'its / it’s',
@@ -340,14 +403,21 @@ const GRAMMAR = [
     why: () => 'Belonging to them is "their".',
   },
   {
-    re: /\b(better|more|less|other|rather|no sooner rather)\s+then\b/gi,
+    re: /\b(better|more|less|other|rather)\s+then\b/gi,
     fix: (m) => `${m[1]} than`,
     kind: 'grammar',
     label: () => 'then / than',
     why: () => 'Comparing takes "than"; "then" is about time.',
   },
   {
-    re: /\bto\b(?=\s+(?:much|many|late|early|hot|cold|salty|sweet|thick|thin)\b)/gi,
+    /* Only the words that never follow "to" as a destination. "hot", "cold",
+       "thin", "thick" and "sweet" have all come out, because in this kitchen a
+       "to" in front of them is a preposition or an infinitive nearly every
+       time: "transfer to cold water", "add to hot stock", "a spoon of the
+       cooking water to thin the sauce", "cook it down to thick jam", "fold
+       through to sweet potato mash". Five correct sentences, five wrong
+       chips. */
+    re: /\bto\b(?=\s+(?:much|many|late|early|salty)\b)/gi,
     fix: (m) => keepCase(m[0], 'too'),
     kind: 'grammar',
     label: () => 'to / too',
@@ -357,12 +427,25 @@ const GRAMMAR = [
     /* Missing apostrophes. One rule, because they are one mistake: a phone
        keyboard that did not offer the contraction. */
     re: /\b(dont|doesnt|didnt|isnt|arent|wasnt|werent|hasnt|havent|hadnt|couldnt|wouldnt|shouldnt|wont|cant|thats|theres|wheres|whats|lets|youre|theyre|weve|youve|ive|id|im)\b/g,
-    skip: (m) => ['wont', 'cant', 'lets', 'id', 'im'].includes(m[1])
-      /* "wont", "cant", "lets", "id" and "im" are all real words or
-         abbreviations. Only offered when the next word makes the contraction
-         the only sensible reading. */
-      && !/^\s+(?:be|get|go|have|make|start|take|know|see|do|eat|try|talk|wait|the|a|an|it|you|we|us|sorry|going|coming|happy|afraid|not)\b/i
-        .test(m.input.slice(m.index + m[0].length)),
+    /* "wont", "cant", "lets", "id" and "im" are all real words or
+       abbreviations. Only offered when the next word makes the contraction the
+       only sensible reading. */
+    skip: (m) => {
+      const rest = m.input.slice(m.index + m[0].length);
+      /* "lets" needs its own list, and it is very nearly the opposite of the
+         other one. The verb takes an object, and its objects are exactly the
+         words that argue FOR the contraction everywhere else: "keep the
+         liquid, it is what lets you loosen them later", "a loose coat is what
+         lets it puff away from the crumb". Both of those are in the recipe
+         book and both were being told to write "let's". Only a bare verb after
+         it makes the contraction the reading. */
+      if (m[1] === 'lets') {
+        return !/^\s+(?:get|go|have|make|start|take|see|do|eat|try|talk|wait|call|say|keep)\b/i.test(rest);
+      }
+      if (!['wont', 'cant', 'id', 'im'].includes(m[1])) return false;
+      return !/^\s+(?:be|get|go|have|make|start|take|know|see|do|eat|try|talk|wait|the|a|an|it|you|we|us|sorry|going|coming|happy|afraid|not)\b/i
+        .test(rest);
+    },
     fix: (m) => {
       const APOS = {
         dont: "don't", doesnt: "doesn't", didnt: "didn't", isnt: "isn't",
@@ -461,27 +544,12 @@ const TYPOGRAPHY = [
     label: (m) => `no space after "${m[1]}"`,
     why: (m) => `Nothing after the ${NAME_OF[m[1]] || 'punctuation'}.`,
   },
-  {
-    re: /\.{4,}/g,
-    fix: () => '…',
-    kind: 'spacing',
-    label: () => 'too many dots',
-    why: () => 'More than three dots in a row.',
-  },
-  {
-    re: /!{2,}/g,
-    fix: () => '!',
-    kind: 'style',
-    label: () => 'repeated "!"',
-    why: () => 'One exclamation mark carries further than three.',
-  },
-  {
-    re: /\?{2,}/g,
-    fix: () => '?',
-    kind: 'style',
-    label: () => 'repeated "?"',
-    why: () => 'One question mark is enough.',
-  },
+  /* Three rules used to sit here — a run of four dots folded to an ellipsis,
+     and "!!" and "??" folded to a single mark. All three are gone. How many
+     exclamation marks a supper club puts on "Back by popular demand!!" is the
+     owner's business and not a mistake, and the bar this file sets itself is
+     that a chip is never a matter of taste. Folding "...." to "…" also quietly
+     swapped in a character he does not type anywhere else. */
   {
     /* A lower-case "i" standing on its own is always the pronoun. */
     re: /(?<![\w'’])i(?![\w'’])/g,
@@ -501,6 +569,15 @@ const TYPOGRAPHY = [
 const ABBREVIATIONS = new Set([
   'approx', 'etc', 'vs', 'no', 'dr', 'mr', 'mrs', 'ms', 'st', 'ave', 'rd',
   'min', 'max', 'oz', 'lb', 'lbs', 'tbsp', 'tsp', 'pkg', 'qty', 'temp',
+  /* The rest of a recipe's shorthand. "Refrigerate 2 hrs. then bake" and
+     "Rest 40 mins. then carve" were both being asked to capitalise "then",
+     which is the same wrong chip as capitalising after "1 tbsp." — the list
+     was simply short. Times, weights, measures, months, weekdays. */
+  'mins', 'hr', 'hrs', 'sec', 'secs', 'ml', 'cl', 'dl', 'kg', 'gm', 'gal',
+  'qt', 'pt', 'doz', 'ea', 'pc', 'pcs', 'deg', 'tbs', 'dsp', 'fl', 'in', 'ft',
+  'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct',
+  'nov', 'dec', 'mon', 'tue', 'tues', 'wed', 'weds', 'thu', 'thur', 'thurs',
+  'fri', 'sat', 'sun', 'dept', 'apt', 'blvd', 'jr', 'sr', 'prof',
 ]);
 
 function sentenceStarts(text, findings) {
@@ -688,6 +765,28 @@ function knownWord(word) {
   return stemsOf(word).some((s) => s.length >= 3 && (COMMON.has(s) || known.has(s)));
 }
 
+/**
+ * Has this kitchen settled on the plain spelling?
+ *
+ * The same question knownWord() asks, pointed at the accent list, and COMMON
+ * is deliberately not consulted: this is about what HE writes, not about what
+ * is English. "creme" is in eight recipe names, so creme is how this kitchen
+ * spells it and the chip has nothing to offer; a kitchen that had only ever
+ * written "crème" would still get the chip, which is the case the list is for.
+ *
+ * An accented word never reaches the vocabulary as one word — WORD_RE stops at
+ * the mark and "crème" is stored as "cr" and "me" — so a hit here really does
+ * mean he typed it plain, not that he typed it at all.
+ *
+ * Stems as well as the word itself, because he writes "puree" in the dish
+ * library and "purees" in a method step, and the habit is the same habit.
+ */
+function plainByHabit(word) {
+  const { known } = vocabulary();
+  if (known.has(word)) return true;
+  return stemsOf(word).some((st) => st.length >= 3 && known.has(st));
+}
+
 /** True when the two words are one insertion, deletion, substitution or swap apart. */
 function oneEditApart(a, b) {
   if (a === b) return false;
@@ -725,10 +824,24 @@ function nearestKnown(word) {
   for (const [candidate, count] of vocabulary().terms) {
     if (count < 3 || candidate.length < 5) continue;
     if (!oneEditApart(word, candidate)) continue;
+    /* The same word, in the other number or tense, is not a correction of
+       itself. "crumbs" is in the allergen dictionary three times over, and
+       "crumb" is one letter from it and in no list of its own — so a correct
+       singular was being offered its own plural, on every field it appeared
+       in. "onion" and "onions", "biscuit" and "biscuits" all sat one keystroke
+       apart the same way.
+       knownWord() already runs the typed word through stemsOf() before we get
+       here; this is the other direction, which nothing was checking. */
+    if (sameWord(word, candidate)) continue;
     if (hit) return null;          // two plausible words is a guess, not a fix
     hit = candidate;
   }
   return hit;
+}
+
+/** One is an inflection of the other, so there is nothing between them to fix. */
+function sameWord(a, b) {
+  return stemsOf(a).includes(b) || stemsOf(b).includes(a);
 }
 
 /* --- Running the whole thing ---------------------------------------------- */
@@ -799,8 +912,13 @@ function check(text, opts = {}) {
         push(at, text, MISSPELLINGS[lower], 'spelling', 'spelling', `"${text}" looks like a typo.`);
         matched = true;
       } else if (Object.prototype.hasOwnProperty.call(ACCENTS, lower)) {
-        push(at, text, ACCENTS[lower], 'style', 'accent',
-          `Spelled right — "${ACCENTS[lower]}" is the accented form.`);
+        /* Matched either way, so a word the kitchen spells plain is settled
+           here and does not fall through to the near-miss layer to be
+           second-guessed by a different rule. */
+        if (!useVocabulary || !plainByHabit(lower)) {
+          push(at, text, ACCENTS[lower], 'style', 'accent',
+            `Spelled right — "${ACCENTS[lower]}" is the accented form.`);
+        }
         matched = true;
       } else if (Object.prototype.hasOwnProperty.call(HOUSE_STYLE, lower)) {
         push(at, text, HOUSE_STYLE[lower], 'style', 'Canadian spelling',

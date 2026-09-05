@@ -87,29 +87,64 @@
 .tag button { background: none; border: none; color: var(--dbd-parchment); cursor: pointer; font-size: var(--dbd-step-0); min-width: 28px; min-height: 28px; }
 
 /* --- The proofreader ------------------------------------------------------
-   Same furniture as the allergen suggestions above, deliberately: they sit in
-   the same editor and do the same job, so a chip should read the same way
-   whichever of the two put it there. The one difference is colour, and it
-   carries meaning — a typo is worth a stronger mark than a preference. */
-/* The buttons sit BESIDE the wording, not under it. Wrapped, eight findings on
-   a correctable description filled a phone screen on their own and pushed the
-   allergen review below the fold — the one control on this editor that must
-   not be easy to miss. */
-/* A rounded rectangle, not a pill. .sugg is a pill because an allergen chip is
-   one short word; a proofreading chip carries a sentence of reasoning and wraps
-   to three lines on a phone, where a 999px radius eats the first and last
-   words of every one of them. */
-.proof .sugg { align-items: center; max-width: 100%; border-radius: var(--dbd-radius-sm);
-               padding: var(--dbd-sp-2) var(--dbd-sp-3); display: flex; width: 100%; }
-.proof .sugg > span:first-child { flex: 1 1 auto; min-width: 0; }
+   NOT the same furniture as the allergen suggestions above, which is what this
+   was: the same sunk panel, the same dashed tan border, the same uppercase
+   label. The reasoning was that a chip should read the same way whichever of
+   the two raised it.
+
+   On a phone it read as one thing twice. Both panels are inside the item
+   editor and the proofreader is drawn first — after the name, then again after
+   the description, both of them above the allergen review — so the owner met
+   two identical dashed boxes before reaching the box that actually gates a
+   publish, and the two decorative ones were bigger.
+
+   So they are not alike any more. The allergen review keeps the panel, the
+   fill and the uppercase label, and is the only thing in the editor that looks
+   like that. The proofreader is a margin note: one rule down the left, no
+   fill, no border, a heading in the same sentence case as the prose it is
+   about. Same words, same suggestions, no longer shouting over the thing
+   underneath it. */
+.proof { background: none; border: none; border-radius: 0;
+         border-left: 3px solid var(--dbd-rule-tan-dark);
+         padding: var(--dbd-sp-2) 0 var(--dbd-sp-2) var(--dbd-sp-3); }
+.proof .suggestions__label { text-transform: none; letter-spacing: 0;
+                             font-weight: 600; color: var(--dbd-ink-muted); }
+
+/* A row, not a chip. A rule between findings rather than a box around each
+   one, and the buttons BESIDE the wording rather than under it — a pill or a
+   card per finding is what made eight of them fill a screen. */
+.proof .sugg { display: flex; align-items: center; gap: var(--dbd-sp-2);
+               width: 100%; max-width: 100%; margin: 0;
+               background: none; border: none; border-radius: 0;
+               border-top: 1px solid var(--dbd-rule-olive);
+               padding: var(--dbd-sp-2) 0; }
+.proof .sugg:first-child { border-top: none; }
+.proof .sugg__text { flex: 1 1 auto; min-width: 0; }
 .proof .sugg button { flex: none; }
 .proof .sugg s { opacity: .7; text-decoration-thickness: 1px; }
 .proof .sugg strong { font-weight: 700; }
-.proof .sugg__why { display: block; opacity: .75; font-size: var(--dbd-step--1); }
-.sugg--spelling { border-color: var(--dbd-umber); }
-.sugg--grammar  { border-color: var(--dbd-umber); }
-.sugg--spacing  { border-style: dashed; }
-.sugg--style    { border-style: dashed; opacity: .9; }
+
+/* What kind of thing it is, under the words it is about. This is the line that
+   replaced the sentence of reasoning; the sentence is on the row's title and
+   read out with the ✓. Italic where the finding is a preference rather than a
+   mistake — an accent or a Canadian spelling — which is the one distinction
+   the old border colours were carrying, now said in the label instead. */
+.proof .sugg__kind { display: block; font-size: var(--dbd-step--1);
+                     color: var(--dbd-ink-muted); }
+.proof .sugg--style .sugg__kind { font-style: italic; }
+
+/* The accept button is not filled in here. The solid tan circle belongs to
+   the allergen panel, and it should stay the one thing in this editor that
+   looks like a decision: accepting a comma is not the same act as accepting
+   "contains milk". It keeps the darker rim so it is still the findable one of
+   the two. */
+.proof .sugg button[data-accept] { background: var(--dbd-parchment);
+                                   border-color: var(--dbd-umber); }
+
+.proof .sugg__more { display: block; margin-top: var(--dbd-sp-2); padding: 0;
+                     min-height: 32px; background: none; border: none;
+                     color: var(--dbd-umber); font-size: var(--dbd-step--1);
+                     font-weight: 600; text-decoration: underline; cursor: pointer; }
 
 .ackbox { border: 2px solid var(--dbd-umber); border-radius: var(--dbd-radius-sm); padding: var(--dbd-sp-3); background: var(--dbd-parchment); margin-bottom: var(--dbd-sp-3); }
 .ackbox label { display: flex; gap: var(--dbd-sp-3); align-items: flex-start; font-weight: 600; margin: 0; font-size: var(--dbd-step-0); }
