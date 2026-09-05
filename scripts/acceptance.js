@@ -3254,6 +3254,215 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     R.list({ tag: 'german' }).length, GERMAN.length);
 }
 
+/* --- Reading a post Derek wrote --------------------------------------------
+ * The whole point of the paste box on the week page is that the menu can be
+ * carried across from a phone. These are the rules that make it safe to do
+ * that: it reads before it writes, it never invents an allergen tag, and what
+ * it leaves behind still cannot publish.
+ *
+ * The post below is Derek's own shorthand, in the Sunday-to-Wednesday shape he
+ * moved to at the end of August 2026 — day lines, a Single Select heading that
+ * restarts the days underneath at a one-plate price, a choice of two soups, a
+ * choice of two salads, and a dessert.
+ */
+{
+  const PASTE = require('../server/paste');
+  const PUB = require('../server/publish');
+  const MENU = require('../server/menu');
+
+  const POST = [
+    'Menu - August 30th to September 2nd',
+    'Soup will be ready on Tuesday and is $12 a litre. This week’s features are '
+      + 'roasted tomato and dill or sweet corn chowder.',
+    'Salads selections are, roasted red potato with bacon and chives or orecchiette '
+      + 'and bocconcini pasta, each salad $12.',
+    'Sunday - braised beef short ribs with mashed potatoes and vegetables $50',
+    'Meatless Monday - chickpea chana with basmati rice and naan $40',
+    'Monday - chicken satay(peanuts) with rice noodles and Thai coleslaw $50',
+    'Taco Tuesday - beef birria tacos, with Spanish rice, and black bean and cowboy '
+      + 'corn salad $50',
+    'Wednesday - pork schnitzel with a side of hunter sauce, mashed spuds and veggies $50',
+    'Single Select Dinner $25ea',
+    'Wednesday - maple glazed chicken supreme with mashed potatoes and roasted root veg',
+    'Dessert - chai rice pudding cups $4ea',
+  ].join('\n');
+
+  const newWeek = (slug, start) => {
+    const id = db.prepare('INSERT INTO weeks (slug, title, week_start) VALUES (?,?,?)')
+      .run(slug, 'Paste week', start).lastInsertRowid;
+    return db.prepare('SELECT * FROM weeks WHERE id = ?').get(id);
+  };
+
+  const week = newWeek('paste-week', '2026-08-31');
+  const rows = PASTE.read(POST, week);
+  const at = (slot) => rows.find((r) => r.slot === slot && r.use);
+
+  /* Reading writes nothing. Said first because everything else here is about
+     what lands, and the one thing that must not happen is that it lands
+     without the owner having looked at it. */
+  check('reading a post puts nothing on the week',
+    MENU.serviceDaysOf(week.id).length, 0);
+  check('and fills none of its week items',
+    db.prepare('SELECT COUNT(*) n FROM week_items WHERE week_id = ?').get(week.id).n, 0);
+
+  /* Four days, each on the box it names. "Taco Tuesday" and "Meatless Monday"
+     are the weekday they contain, not names this app has never heard of. */
+  check('the four day lines are read onto four days',
+    rows.filter((r) => r.use && PASTE.isDaySlot(r.slot)).map((r) => r.slot),
+    ['sun', 'mon', 'tue', 'wed']);
+  check('Taco Tuesday is Tuesday', PASTE.weekdayKeyOf('taco tuesday'), 'tue');
+  check('and a bare Meatless is Monday', PASTE.weekdayKeyOf('meatless'), 'mon');
+
+  /* The sides go on the week, never on a day: a $12 litre of soup filed as
+     Tuesday's featured dinner is the mistake this separation exists to stop. */
+  check('the meatless dish is a week item, not Monday\'s dinner', at('meatless').name, 'Chickpea Chana');
+  check('the soup is the week\'s soup', at('soup').name, 'Roasted Tomato and Dill');
+  check('the dessert is the week\'s dessert', at('dessert').name, 'Chai Rice Pudding Cups');
+
+  /* Derek offers a choice of two soups most weeks and the week holds one. Both
+     are shown; the second arrives switched off with the reason on it, rather
+     than being dropped where nobody can see it was there. */
+  const soups = rows.filter((r) => r.slot === 'soup');
+  check('both soups in the post are shown', soups.length, 2);
+  check('but only the first is ticked', soups.filter((r) => r.use).length, 1);
+  ok('and the second says why it is not', /more than one soup/.test(soups[1].note));
+
+  /* A Single Select is a second plate on a day that already has a dinner, and
+     this menu has one featured dish a day. It is read and shown switched off. */
+  const select = rows.find((r) => r.kind === 'single_select');
+  ok('a Single Select line is read rather than dropped', !!select);
+  check('but not ticked', select.use, false);
+  check('and its $25 is a price for one, not a family dinner', select.single_price, 2500);
+  check('with no family price invented for it', select.full_price, null);
+
+  /* The prices the posts have carried for three years, and the names title-cased
+     the way the menu shows them rather than the way a Facebook post types them. */
+  check('a family dinner keeps the price on the line', at('mon').full_price, 5000);
+  check('and also sells as the $12.50 plate for one', at('mon').single_price, 1250);
+  check('soup is $12 a litre', at('soup').full_price, 1200);
+  check('and a dessert is $4', at('dessert').full_price, 400);
+  check('names come out of a post title-cased', at('wed').name, 'Pork Schnitzel');
+
+  /* --- and now the write --- */
+  const result = PASTE.apply(week, rows);
+  check('everything ticked lands', result.done.length, 8);
+  check('and nothing is quietly skipped', result.skipped, []);
+
+  const days = MENU.serviceDaysOf(week.id);
+  const items = MENU.weekItemsOf(week.id);
+  const landed = [...days, items.meatless, items.soup, items.salad, items.dessert];
+
+  check('four days were written', days.length, 4);
+  check('Monday got the dish the post put on Monday',
+    days.find((d) => d.service_date === '2026-08-31').dish_name, 'Chicken Satay');
+
+  /* THE RULE. The post says "chicken satay(peanuts)" and the dictionary in
+     allergens.js would find the peanuts. It is not asked, and nothing arrives
+     wearing a tag: a tag that arrives already accepted is a tag nobody read. */
+  check('nothing lands with an allergen tag on it',
+    landed.map((x) => x.allergens), Array(8).fill('[]'));
+  check('nothing lands with a dismissal on it either',
+    landed.map((x) => x.dismissed), Array(8).fill('[]'));
+  check('and nothing lands reviewed', landed.map((x) => x.ack), Array(8).fill(0));
+  const satay = days.find((d) => d.service_date === '2026-08-31');
+  ok('the peanuts are in the words the owner will read', /peanuts/.test(satay.description));
+  ok('and the dictionary can see them',
+    A.detect(satay.description).some((d) => d.allergen === 'peanuts'));
+  check('but nothing put them on the dish', JSON.parse(satay.allergens), []);
+
+  /* Which means the gate is still shut. Eight things landed, and every one of
+     them is a sentence in the owner's way before this week can go out. */
+  const stopped = PUB.blockers(week.id);
+  check('a pasted week cannot publish', stopped.length, 8);
+  ok('and every blocker asks for the same tick',
+    stopped.every((b) => /allergen review/.test(b)));
+
+  /* A photo and a halal flag belong to the dish that was in the box, not to the
+     one replacing it — last week's brisket photographed over this week's
+     schnitzel is the same class of mistake as last week's tags on it. */
+  {
+    const w2 = newWeek('paste-over', '2026-08-31');
+    db.prepare(`INSERT INTO service_days (week_id, service_date, dish_name, description,
+        photo, halal, allergens, ack, ack_of, daily_cap)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`)
+      .run(w2.id, '2026-08-31', 'Last Week\'s Brisket', 'smoked brisket with milk gravy',
+        'brisket.jpg', 1, '["milk"]', 1, A.reviewedText({ name: 'Last Week\'s Brisket', description: 'smoked brisket with milk gravy' }), 12);
+    PASTE.apply(w2, PASTE.read(POST, w2));
+    const mon = MENU.serviceDaysOf(w2.id).find((d) => d.service_date === '2026-08-31');
+    check('replacing a day replaces its dish', mon.dish_name, 'Chicken Satay');
+    check('and takes the old photo off it', mon.photo, null);
+    check('and the old halal declaration', mon.halal, 0);
+    check('and the old tags', mon.allergens, '[]');
+    check('and the review that went with them', mon.ack, 0);
+    check('but leaves how many to make alone', mon.daily_cap, 12);
+  }
+
+  /* A closed day is a decision the owner made out loud. A paste does not undo
+     it quietly — the row is refused and says so. */
+  {
+    const w3 = newWeek('paste-closed', '2026-08-31');
+    db.prepare('INSERT INTO service_days (week_id, service_date, closed) VALUES (?,?,1)')
+      .run(w3.id, '2026-08-31');
+    const r = PASTE.apply(w3, PASTE.read(POST, w3));
+    check('a closed day is not written over', r.done.length, 7);
+    ok('and the owner is told which one', r.skipped.some((m) => /marked closed/.test(m)));
+    check('the day stays shut',
+      db.prepare('SELECT closed, dish_name FROM service_days WHERE week_id = ? AND service_date = ?')
+        .get(w3.id, '2026-08-31').dish_name, '');
+  }
+
+  /* Two rows aimed at one slot is refused rather than resolved. Left to the
+     insert order the second would overwrite the first, and the owner would be
+     looking at a soup they did not pick with nothing on the page saying so. */
+  {
+    const w4 = newWeek('paste-clash', '2026-08-31');
+    const both = PASTE.read(POST, w4).filter((r) => r.slot === 'soup')
+      .map((r) => ({ ...r, use: true }));
+    const r = PASTE.apply(w4, both);
+    check('only the first of two rows aimed at one slot is used', r.done.length, 1);
+    ok('and the second is reported, not swallowed',
+      r.skipped.some((m) => /already taken/.test(m)));
+    check('the week holds the first one',
+      MENU.weekItemsOf(w4.id).soup.name, 'Roasted Tomato and Dill');
+  }
+
+  /* Nothing recognisable in the box is not an error and must not be a write.
+     A post pasted as one unbroken paragraph has no day lines to find. */
+  {
+    const w5 = newWeek('paste-nothing', '2026-08-31');
+    check('a paste with no menu in it reads as nothing',
+      PASTE.read('Thanks everyone, see you Sunday!', w5).length, 0);
+    check('and writes nothing', PASTE.apply(w5, []).done, []);
+    check('leaving the week alone', MENU.serviceDaysOf(w5.id).length, 0);
+  }
+
+  /* The form comes back as one indexed group per row. Parallel arrays would
+     come back short wherever a box was unticked, and every row after the first
+     untick would be paired with somebody else's name. */
+  {
+    const body = {
+      rows: '2',
+      r0_use: '1', r0_slot: 'tue', r0_name: 'Corrected Name', r0_description: 'a description',
+      r0_full_price: '$45.00', r0_full_label: 'Full size',
+      r0_single_price: '', r0_single_label: 'Meal for one',
+      /* r1_use absent — the browser sends nothing for an unticked box. */
+      r1_slot: 'wed', r1_name: 'Left Off', r1_description: '',
+    };
+    const back = PASTE.rowsFromBody(body);
+    check('an unticked row still comes back in its own place', back.length, 2);
+    check('the ticked one keeps its own name', back[0].name, 'Corrected Name');
+    check('and the unticked one keeps its own', back[1].name, 'Left Off');
+    check('the unticked one is off', back[1].use, false);
+    check('a price typed with a dollar sign is read', back[0].full_price, 4500);
+    check('and an empty price box leaves that size off', back[0].single_price, null);
+
+    /* A slot is a name this app knows, never a string off a form. `slot` ends
+       up choosing a table and a date. */
+    check('a slot nobody has heard of is dropped',
+      PASTE.rowsFromBody({ rows: '1', r1_use: '1', r0_slot: 'constructor', r0_name: 'x' })[0].slot, '');
+  }
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {

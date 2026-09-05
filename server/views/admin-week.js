@@ -60,6 +60,26 @@ function weekPage({ week, days, items, hasPrevious }) {
         : 'Once published, customers will be told the kitchen is shut for these dates.'}
       Anything filled in below is kept, but none of it is shown. Reopen it at the bottom of this page.</div>` : ''}
 
+    <!-- 0. Derek's post, pasted.
+         First on the page because it is the fastest way to fill the whole
+         week, and because it is the only one of these that works standing in a
+         kitchen with a phone. Everything below it still does what it did. -->
+    <div class="card">
+      <h2>Paste Derek's post</h2>
+      <p class="also">Hold your finger on the menu post on Facebook, copy it, and paste the whole
+        thing in here. The next page shows what it read — days, prices, soup, salad and dessert —
+        for you to correct before any of it goes on the week. <strong>Nothing is written until you
+        say so on that page.</strong></p>
+      <form method="post" action="/admin/week/${week.id}/paste">
+        <label for="post">Derek's post</label>
+        <textarea id="post" name="post" rows="8"
+          placeholder="Menu - August 30th to September 2nd&#10;Soup ... $12 a litre ...&#10;Sunday - braised short ribs with mashed potatoes and vegetables $50&#10;Meatless Monday - ..."></textarea>
+        <button class="btn btn--primary btn--block" type="submit">Read it</button>
+      </form>
+      <p class="also">Dishes arrive with no allergen tags and no review, however they got here.
+        Roughly seven boxes still need ticking below before the week can publish.</p>
+    </div>
+
     ${hasPrevious ? html`
       <form method="post" action="/admin/week/duplicate" data-confirm="This copies last week's menu into a brand new draft with the dates moved forward seven days. Your standing Other Options are not touched. Closed days are not copied. Every dish will need its allergen review again before you can publish.">
         <button class="btn btn--primary btn--block" type="submit">Duplicate last week</button>

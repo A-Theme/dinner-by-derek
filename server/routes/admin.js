@@ -15,8 +15,10 @@ const S = require('../signin');
 const mail = require('../mailer');
 const images = require('../images');
 const IF = require('../itemform');
+const PASTE = require('../paste');
 const V = require('../views/admin');
 const W = require('../views/admin-week');
+const WP = require('../views/admin-paste');
 const { html, raw, money } = require('../html');
 const { rateLimit } = require('../ratelimit');
 
@@ -339,6 +341,41 @@ router.post('/week/:id/weekdays', (req, res) => {
   tx();
   if (req.get('X-Draft')) return res.json({ ok: true });
   back(res, req, 'This week\'s days saved.');
+});
+
+/* --- Derek's post, pasted -------------------------------------------------
+ * Two routes, and the split between them is the whole feature. The first reads
+ * and shows; only the second writes, and only what came back off the form the
+ * owner was looking at. server/paste.js has the reasoning.
+ *
+ * A POST rather than a GET for the reading half, because the post is a body and
+ * not a query string: it is a dozen lines long, it holds Derek's apostrophes and
+ * dollar signs, and a menu has no business sitting in a URL, a history entry or
+ * a server log.
+ */
+router.post('/week/:id/paste', (req, res) => {
+  const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(Number(req.params.id));
+  if (!week) return back(res, req, null, 'That week no longer exists.');
+  /* Long enough for the longest post in three years of them, several times
+     over, and short enough that a paste of something else is not a page with
+     four hundred cards on it. */
+  const text = String(req.body.post || '').slice(0, 20000);
+  res.type('html').send(String(WP.pastePage({ week, rows: PASTE.read(text, week), text })));
+});
+
+/* The write. Everything it puts on the week comes out of the form above --
+   nothing is re-parsed here, so a correction made on that page is the thing
+   that lands rather than the thing the reader first thought. */
+router.post('/week/:id/paste/apply', (req, res) => {
+  const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(Number(req.params.id));
+  if (!week) return back(res, req, null, 'That week no longer exists.');
+
+  const result = PASTE.apply(week, PASTE.rowsFromBody(req.body));
+  const said = PASTE.summary(result);
+  /* Not back(): the referer is the preview page, and re-showing a preview of
+     text that has now been written is how the same post gets pasted twice. */
+  res.redirect(303, `/admin/week?id=${week.id}`
+    + `&${result.done.length ? 'ok' : 'err'}=${encodeURIComponent(said)}`);
 });
 
 /* --- Saved dishes ---------------------------------------------------------

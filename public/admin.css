@@ -254,6 +254,26 @@ details.daycard-edit > summary { cursor: pointer; font-family: var(--dbd-display
   margin: var(--dbd-sp-2) 0 var(--dbd-sp-2);
 }
 
+/* The pasted post, read back.
+ *
+ * One card per line of the post, and the tick that decides whether the line
+ * lands is the first control inside it. On a phone a card is most of a screen,
+ * so a checkbox at the foot of one is found after the boxes it governs — and
+ * the whole point of this page is deciding what not to keep. It is drawn like
+ * the allergen acknowledgement because it is the same kind of control: a
+ * deliberate, thumb-sized yes. */
+.paste-row { margin-bottom: var(--dbd-sp-4); }
+.paste-use {
+  border: 2px solid var(--dbd-olive); border-radius: var(--dbd-radius-sm);
+  padding: var(--dbd-sp-3); background: var(--dbd-surface-sunk);
+  margin-bottom: var(--dbd-sp-3);
+}
+.paste-use label {
+  display: flex; gap: var(--dbd-sp-3); align-items: center;
+  margin: 0; font-size: var(--dbd-step-0); font-weight: 700;
+}
+.paste-use input { width: 24px; height: 24px; flex: none; margin: 0; }
+
 /* Written for the printer and kept off the screen. The counterpart of
    .no-print: some things only make sense on paper, where the controls that
    would have told you the same thing are gone. */

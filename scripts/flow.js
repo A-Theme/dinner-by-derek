@@ -2313,6 +2313,124 @@ const PAST_DATE = T.addDays(today, -2);
     ok('including the second one', /href="\/admin\/recipes\?tag=soups"/.test(detail.text));
   }
 
+  /* --- Pasting Derek's post ----------------------------------------------
+     Over HTTP, because the point of this feature is a phone: a box on the week
+     page, a page that shows what it read, and a button that writes. The unit
+     checks in acceptance.js prove the reading. These prove the two routes are
+     wired the way the two-step promise needs them to be — that the first one
+     writes nothing, and that the second writes what is on the form rather than
+     what the parser first thought.
+
+     Its own week, dated a fortnight out, so it cannot disturb the week the rest
+     of this file built and published. */
+  {
+    const { db } = require('../server/db');
+    const start = T.addDays(T.mondayOf(today), 14);
+    const pasteId = db.prepare('INSERT INTO weeks (slug, title, week_start) VALUES (?,?,?)')
+      .run(`paste-${start}`, 'Paste week', start).lastInsertRowid;
+
+    const POSTED = [
+      'Menu - August 30th to September 2nd',
+      'Soup will be ready on Tuesday and is $12 a litre. This week’s features are '
+        + 'roasted tomato and dill or sweet corn chowder.',
+      'Sunday - braised beef short ribs with mashed potatoes and vegetables $50',
+      'Meatless Monday - chickpea chana with basmati rice and naan $40',
+      'Monday - chicken satay(peanuts) with rice noodles and Thai coleslaw $50',
+      'Taco Tuesday - beef birria tacos, with Spanish rice, and black bean and cowboy '
+        + 'corn salad $50',
+      'Wednesday - pork schnitzel with a side of hunter sauce, mashed spuds and veggies $50',
+      'Dessert - chai rice pudding cups $4ea',
+    ].join('\n');
+
+    /* The box itself. A phone reaches this feature through one textarea and one
+       full-width button, and nothing else on the page has to be touched. */
+    const weekPage = await GET(`/admin/week?id=${pasteId}`);
+    ok('the week page carries a box for Derek\'s post',
+      new RegExp(`action="/admin/week/${pasteId}/paste"`).test(weekPage.text));
+    ok('with a textarea to paste it into', /name="post" rows="8"/.test(weekPage.text));
+    ok('and a button a thumb can hit',
+      /class="btn btn--primary btn--block" type="submit">Read it</.test(weekPage.text));
+
+    /* Step one reads and shows. It must not write. */
+    const preview = await POST(`/admin/week/${pasteId}/paste`, { post: POSTED });
+    check('pasting a post renders a preview', preview.status, 200);
+    ok('which says nothing has been written yet',
+      /Nothing has been written yet/.test(preview.text));
+    ok('and shows the dishes it found',
+      /Pork Schnitzel/.test(preview.text) && /Chickpea Chana/.test(preview.text)
+      && /Roasted Tomato and Dill/.test(preview.text));
+    ok('with the day it read them onto', /Tuesday, /.test(preview.text));
+    ok('and a box for each one to be corrected in', /name="r0_name"/.test(preview.text));
+    ok('behind a form that has to be submitted',
+      new RegExp(`action="/admin/week/${pasteId}/paste/apply"`).test(preview.text));
+    ok('nothing arrives ticked for review',
+      !/name="r0_ack"/.test(preview.text) && !/_allergens"/.test(preview.text));
+
+    check('and the week is still empty',
+      db.prepare('SELECT COUNT(*) n FROM service_days WHERE week_id = ?').get(pasteId).n, 0);
+    check('with nothing on it at week level',
+      db.prepare('SELECT COUNT(*) n FROM week_items WHERE week_id = ?').get(pasteId).n, 0);
+
+    /* Step two writes what the form says. The name below is NOT what the parser
+       produced — this is the correction the preview exists to allow, and the
+       corrected words are what has to reach the menu. */
+    const applied = await POST(`/admin/week/${pasteId}/paste/apply`, {
+      rows: '2',
+      r0_use: '1',
+      r0_kind: 'featured',
+      r0_slot: 'thu',
+      r0_name: 'Pork Schnitzel with Hunter Sauce',
+      r0_description: 'pork schnitzel with a side of hunter sauce, mashed spuds and veggies',
+      r0_full_label: 'Full size',
+      r0_full_price: '50.00',
+      r0_single_label: 'Meal for one',
+      r0_single_price: '12.50',
+      r1_use: '1',
+      r1_kind: 'soup',
+      r1_slot: 'soup',
+      r1_name: 'Roasted Tomato and Dill',
+      r1_description: '',
+      r1_full_label: 'Litre',
+      r1_full_price: '12.00',
+      r1_single_label: 'Meal for one',
+      r1_single_price: '',
+    });
+    check('confirming redirects back to the week', applied.status, 303);
+    ok('and lands on the week itself, not back on the preview',
+      String(applied.location).startsWith(`/admin/week?id=${pasteId}`), applied.location);
+    ok('saying an allergen review is still owed',
+      /allergen%20review/.test(String(applied.location)), applied.location);
+
+    const thursday = db.prepare(
+      'SELECT * FROM service_days WHERE week_id = ? AND service_date = ?')
+      .get(pasteId, T.addDays(start, 3));
+    ok('the day named on the form is the day written', !!thursday);
+    check('and it holds the corrected name, not the parsed one',
+      thursday.dish_name, 'Pork Schnitzel with Hunter Sauce');
+    check('with the price off the form', thursday.full_price, 5000);
+    check('and the plate for one beside it', thursday.single_price, 1250);
+    check('no allergen tag came with it', thursday.allergens, '[]');
+    check('and no review', thursday.ack, 0);
+
+    const soup = db.prepare('SELECT * FROM week_items WHERE week_id = ? AND kind = ?')
+      .get(pasteId, 'soup');
+    check('the soup went on the week, not on a day', soup.name, 'Roasted Tomato and Dill');
+    check('at its litre price', soup.full_price, 1200);
+    check('with no tags on it either', soup.allergens, '[]');
+
+    /* And the gate the whole feature has to leave standing. */
+    const after = await GET(`/admin/week?id=${pasteId}`);
+    ok('the week page now flags both as unreviewed',
+      (after.text.match(/Needs allergen review/g) || []).length >= 2);
+
+    const refused = await POST(`/admin/week/${pasteId}/publish`, {});
+    check('and publishing a pasted week is refused', refused.status, 303);
+    ok('over the allergen review, by name',
+      /err=.*allergen/.test(String(refused.location)), refused.location);
+    check('so it is still a draft',
+      db.prepare('SELECT status FROM weeks WHERE id = ?').get(pasteId).status, 'draft');
+  }
+
   /* --- Report -------------------------------------------------------------- */
   console.log('\nEnd-to-end flow — Dinner By Derek\n');
   if (failures.length) {

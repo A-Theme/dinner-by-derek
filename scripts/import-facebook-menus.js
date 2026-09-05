@@ -17,6 +17,14 @@
  * land on the week rather than on a day, so "cream of broccoli" comes back as
  * this week's soup at $12 a litre and can never turn up as a Tuesday main at a
  * family-dinner price.
+ *
+ * The reading half of this file is also the dashboard's. server/paste.js hands
+ * one pasted post to parsePost() and puts what comes back on the draft week, so
+ * Derek's Saturday post can be carried across from a phone. That is why the
+ * names, the prices and the shape of a side are exported rather than kept here:
+ * two readers of the same shorthand would drift apart, and the one that drifted
+ * is the one writing to a menu. The rule at the top of this comment holds on
+ * both paths — nothing that lands anywhere has an allergen tag on it.
  */
 
 const fs = require('fs');
@@ -454,4 +462,7 @@ function main() {
 }
 
 if (require.main === module) main();
-module.exports = { parsePost, rollUp, mergeForLibrary, nameOf, keyOf, priceOf, toSavedDish };
+module.exports = {
+  parsePost, rollUp, mergeForLibrary, nameOf, displayName, keyOf, priceOf,
+  toSavedDish, toSavedSide, MAIN_KINDS, SIDE_SHAPE, SINGLE_PORTION, SINGLE_SELECT_PRICE,
+};
