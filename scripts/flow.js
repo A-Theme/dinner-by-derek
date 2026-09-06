@@ -1919,6 +1919,77 @@ const PAST_DATE = T.addDays(today, -2);
     check('the soup lands on the week', wi && wi.name, 'Aardvark Bisque');
     check('unreviewed, as everything copied forward is', wi && wi.ack, 0);
 
+    /* --- The second soup ------------------------------------------------
+       Derek offers a choice of two, so the week holds two. The slot rides in
+       the body rather than the path, which is why every URL above still works
+       unchanged — and why it is worth proving that slot 2 actually reaches a
+       different row instead of overwriting slot 1. */
+    {
+      const rowsOf = (kind) => require('../server/db').db.prepare(
+        'SELECT name, slot, ack FROM week_items WHERE week_id = ? AND kind = ? ORDER BY slot')
+        .all(weekId, kind);
+
+      DISH.save({
+        kind: 'soup', name: 'Borscht', description: 'beetroot and dill',
+        full_on: 1, full_label: 'Litre', full_price: 1200, single_on: 0,
+        allergens: '[]', dismissed: '[]',
+      });
+      const second = DISH.all({ kind: 'soup' }).find((d) => d.name === 'Borscht');
+      ok('a second saved soup exists to put in the second slot', !!second);
+      await POST(`/admin/week/${weekId}/soup/use`, { dish_id: String(second.id), slot: '2' });
+
+      const soups = rowsOf('soup');
+      check('the week now holds two soups', soups.length, 2);
+      check('the first is untouched', soups[0].name, 'Aardvark Bisque');
+      check('and it is still slot 1', soups[0].slot, 1);
+      check('the second went into slot 2', soups[1].slot, 2);
+      ok('and is a different soup', soups[1].name !== soups[0].name);
+
+      /* A slot the kind does not have falls back to 1 rather than 500ing or
+         writing a row the menu will never look for. */
+      await POST(`/admin/week/${weekId}/dessert`, {
+        slot: '2', dessert_name: 'Nowhere Pudding', dessert_full_price: '4.00',
+      });
+      const desserts = rowsOf('dessert');
+      ok('a dessert has no slot 2, so it cannot make one',
+        desserts.every((d) => d.slot === 1));
+
+      /* The editor form writes through the same route, with soup2_ as the
+         field prefix — slot 1 keeps the bare `soup_`, so nothing that already
+         worked changed name underneath it. */
+      await POST(`/admin/week/${weekId}/soup`, {
+        slot: '2', soup2_name: 'Second Soup By Hand', soup2_description: 'a plain broth',
+        soup2_full_on: '1', soup2_full_label: 'Litre', soup2_full_price: '12.00',
+      });
+      check('the editor form writes slot 2 by its own prefix',
+        rowsOf('soup')[1].name, 'Second Soup By Hand');
+      check('and still leaves slot 1 alone', rowsOf('soup')[0].name, 'Aardvark Bisque');
+
+      const page = await GET(`/admin/week?id=${weekId}`);
+      ok('the week page draws a box for each soup',
+        /name="soup_name"/.test(page.text) && /name="soup2_name"/.test(page.text));
+      ok('and a box for each salad',
+        /name="salad_name"/.test(page.text) && /name="salad2_name"/.test(page.text));
+      ok('but not a second dessert', !/name="dessert2_name"/.test(page.text));
+
+      /* The gate is the point. An unreviewed second soup must stop the week
+         exactly as an unreviewed first one does — a slot the publish check
+         forgot to look at would be a hole in the one thing that must not
+         have one. */
+      const stopped = require('../server/publish').blockers(weekId);
+      ok('the publish gate names the unreviewed second soup',
+        stopped.some((b) => /Second Soup By Hand/.test(b)), stopped.join(' | '));
+
+      /* Put it back as it was, so nothing after this point sees a week the
+         rest of this file did not build. */
+      require('../server/db').db.prepare(
+        "DELETE FROM week_items WHERE week_id = ? AND kind = 'soup' AND slot = 2").run(weekId);
+      require('../server/db').db.prepare(
+        "DELETE FROM week_items WHERE week_id = ? AND kind = 'dessert'").run(weekId);
+      check('and the fixture is left as it was found', rowsOf('soup').length, 1);
+      check('with no dessert of ours left on it', rowsOf('dessert').length, 0);
+    }
+
     /* The meatless slot is the one that does not take its own kind. It takes a
        main, because that is what a meatless dish is filed as, and it must
        still refuse everything else. */

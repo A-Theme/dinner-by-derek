@@ -192,13 +192,45 @@ function everyServiceDayOf(weekId) {
     .all(weekId);
 }
 
+/**
+ * How many of each level-2 item a week can hold.
+ *
+ * Two soups and two salads, because that is what Derek offers: the posts have
+ * read "tomato and dill or sweet corn chowder" for three years and the second
+ * one used to be dropped on the way in. One dessert and one meatless main.
+ *
+ * The count lives here rather than in the schema. Storage enforces that a
+ * (kind, slot) pair is filled at most once — which is a fact about rows — and
+ * this is the menu's rule about how many of them there are, which is the kind
+ * of thing that changes when Derek changes what he cooks.
+ */
+const WEEK_SLOT_COUNTS = { meatless: 1, soup: 2, salad: 2, dessert: 1 };
+
+/** The slot numbers a kind has, [1] or [1, 2]. */
+const slotsOf = (kind) => Array.from(
+  { length: WEEK_SLOT_COUNTS[kind] || 1 }, (_, i) => i + 1,
+);
+
+/**
+ * The week's level-2 items.
+ *
+ * `soups` and `salads` are arrays in slot order and may be empty; `dessert` and
+ * `meatless` are the single item or null. The plurals are named that way on
+ * purpose — when the second soup was added, a caller left reading `.soup` would
+ * have gone on working and quietly ignored it, and one of those callers is the
+ * publish gate. `undefined` breaks loudly instead.
+ */
 function weekItemsOf(weekId) {
-  const rows = db.prepare('SELECT * FROM week_items WHERE week_id = ?').all(weekId);
+  const rows = db.prepare('SELECT * FROM week_items WHERE week_id = ? ORDER BY kind, slot')
+    .all(weekId);
+  const listOf = (kind) => rows
+    .filter((r) => r.kind === kind)
+    .sort((a, b) => (a.slot || 1) - (b.slot || 1));
   return {
-    soup: rows.find((r) => r.kind === 'soup') || null,
-    salad: rows.find((r) => r.kind === 'salad') || null,
-    dessert: rows.find((r) => r.kind === 'dessert') || null,
-    meatless: rows.find((r) => r.kind === 'meatless') || null,
+    soups: listOf('soup'),
+    salads: listOf('salad'),
+    dessert: listOf('dessert')[0] || null,
+    meatless: listOf('meatless')[0] || null,
   };
 }
 
@@ -302,7 +334,7 @@ function menuForDay(week, day) {
       ...T.dayState(day.service_date, clock()),
     };
   }
-  const { soup, salad, dessert, meatless } = weekItemsOf(week.id);
+  const { soups, salads, dessert, meatless } = weekItemsOf(week.id);
 
   const featured = reviewState(day).ok && day.dish_name.trim()
     ? toRenderItem(day, {
@@ -356,13 +388,17 @@ function menuForDay(week, day) {
 
   const others = [];
 
-  if (weekItemRunsOn(soup, weekday) && reviewState(soup).ok) {
+  /* Both soups and both salads, each its own orderable litre, in slot order.
+     A week that only has one of either reads exactly as it did before. */
+  for (const soup of soups) {
+    if (!weekItemRunsOn(soup, weekday) || !reviewState(soup).ok) continue;
     others.push(toRenderItem(soup, {
       level: 'Soup of the week', refTable: 'week_items',
       subcategory: 'Soups', name: soup.name, serviceDate: day.service_date,
     }));
   }
-  if (weekItemRunsOn(salad, weekday) && reviewState(salad).ok) {
+  for (const salad of salads) {
+    if (!weekItemRunsOn(salad, weekday) || !reviewState(salad).ok) continue;
     others.push(toRenderItem(salad, {
       level: 'Salad of the week', refTable: 'week_items',
       subcategory: 'Salads', name: salad.name, serviceDate: day.service_date,
@@ -435,6 +471,7 @@ function activeLocations() {
 
 module.exports = {
   SUBCATEGORY_ORDER, subcategoryLabel, activeWeek, weekBySlug, serviceDaysOf, serviceDayOn, weekItemsOf,
+  WEEK_SLOT_COUNTS, slotsOf,
   everyServiceDayOf, meatlessLabel,
   standingItems, standingRunsOn, weekItemRunsOn, pickupWindowFor, clock,
   deliveryOnFor, closureFor, menuForDay, findItem, alsoAvailableLine, activeLocations,

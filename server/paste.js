@@ -31,6 +31,7 @@
 const { db, settings } = require('./db');
 const T = require('./time');
 const DISH = require('./dishes');
+const M = require('./menu');
 const {
   parsePost, displayName, SIDE_SHAPE, SINGLE_PORTION,
 } = require('../scripts/import-facebook-menus');
@@ -38,17 +39,32 @@ const {
 const tz = () => settings.get('timezone', 'America/Toronto');
 
 /** The four slots that belong to the week rather than to a day. */
-const WEEK_SLOTS = ['meatless', 'soup', 'salad', 'dessert'];
-const SLOT_LABELS = {
-  meatless: 'Meatless Monday',
-  soup: 'Soup of the week',
-  salad: 'Salad of the week',
-  dessert: 'Dessert of the week',
-};
-/** The same four in the middle of a sentence. */
-const SLOT_NOUNS = {
-  meatless: 'meatless dish', soup: 'soup', salad: 'salad', dessert: 'dessert',
-};
+/* One entry per (kind, slot) the week actually has — two soups and two salads,
+   one dessert, one meatless main. Derived from menu.js so this list cannot drift
+   from the one the week page draws and the publish gate checks. */
+const WEEK_SLOTS = [];
+const SLOT_KIND = {};
+const SLOT_NUMBER = {};
+const SLOT_LABELS = {};
+const SLOT_NOUNS = {};
+for (const [kind, noun, label] of [
+  ['meatless', 'meatless dish', 'Meatless Monday'],
+  ['soup', 'soup', 'Soup'],
+  ['salad', 'salad', 'Salad'],
+  ['dessert', 'dessert', 'Dessert'],
+]) {
+  for (const n of M.slotsOf(kind)) {
+    // Slot 1 keeps the bare kind as its name, so a form field, a saved link or
+    // a test that already said "soup" still means the first soup.
+    const key = n === 1 ? kind : `${kind}${n}`;
+    WEEK_SLOTS.push(key);
+    SLOT_KIND[key] = kind;
+    SLOT_NUMBER[key] = n;
+    SLOT_LABELS[key] = kind === 'meatless' ? label
+      : `${label}${M.WEEK_SLOT_COUNTS[kind] > 1 ? ` ${n}` : ''} of the week`;
+    SLOT_NOUNS[key] = noun;
+  }
+}
 const isWeekSlot = (s) => WEEK_SLOTS.includes(s);
 const isDaySlot = (s) => T.WEEKDAYS_MON_FIRST.includes(s);
 
@@ -58,14 +74,21 @@ const isDaySlot = (s) => T.WEEKDAYS_MON_FIRST.includes(s);
  * Derek names his days at length — "Meatless Monday", "Taco Tuesday" — so the
  * weekday is looked for inside the line rather than matched against it. A bare
  * "Meatless" is Monday, which is what it has always been called.
+ *
+ * These carry the same optional `s` as the DAY regex in
+ * scripts/import-facebook-menus.js, and they have to: the parser hands back the
+ * words it matched, so a line reading "Tueday" arrives here spelled that way.
+ * Matching the literal "tuesday" would leave the row with no box to go in —
+ * which is worse than the bug being fixed, because the dish would then show up
+ * in the preview pointing at nothing instead of being quietly absent.
  */
-const DAY_NAMES = {
-  sunday: 'sun', monday: 'mon', tuesday: 'tue', wednesday: 'wed',
-  thursday: 'thu', friday: 'fri', saturday: 'sat',
-};
+const DAY_PATTERNS = [
+  [/sunday/, 'sun'], [/monday/, 'mon'], [/tues?day/, 'tue'], [/wednes?day/, 'wed'],
+  [/thurs?day/, 'thu'], [/friday/, 'fri'], [/saturday/, 'sat'],
+];
 function weekdayKeyOf(day) {
   const s = String(day || '').toLowerCase();
-  for (const name of Object.keys(DAY_NAMES)) if (s.includes(name)) return DAY_NAMES[name];
+  for (const [re, key] of DAY_PATTERNS) if (re.test(s)) return key;
   return s.startsWith('meatless') ? 'mon' : '';
 }
 
@@ -147,18 +170,45 @@ function rowOf(it) {
  */
 function read(text, week) {
   const items = parsePost({ n: 0, week: '', lines: String(text || '').split(/\r?\n/) });
-  const spoken = new Set();
+  const filled = new Map();       // kind -> how many of its slots are spoken for
+  const days = new Set();         // weekday keys already taken
+
   return items.map((it) => {
     const row = rowOf(it);
-    if (row.use && row.slot) {
-      if (spoken.has(row.slot)) {
+    if (!row.slot || !row.use) return row;
+
+    /* A day takes one dish. Two lines aimed at one weekday is the post naming
+       it twice, and the second is shown switched off rather than silently
+       overwriting the first. */
+    if (isDaySlot(row.slot)) {
+      if (days.has(row.slot)) {
         row.use = false;
-        const noun = SLOT_NOUNS[row.slot] || 'dish';
-        row.note = `The post offers more than one ${noun} and a week holds one, so this one `
-          + 'arrives switched off. Tick it and untick the other if it is the one you want.';
+        row.note = `The post names ${labelOfSlot(week, row.slot)} more than once, and a day `
+          + 'takes one dish. This one arrives switched off — tick it and untick the other if '
+          + 'it is the one you want.';
       } else {
-        spoken.add(row.slot);
+        days.add(row.slot);
       }
+      return row;
+    }
+
+    /* Soup one, then soup two. Derek offers a choice of two and the week now
+       holds both, so the second is ticked like the first instead of arriving
+       switched off with an apology. A third would have nowhere to go. */
+    const kind = SLOT_KIND[row.slot];
+    const slots = M.slotsOf(kind);
+    const taken = filled.get(kind) || 0;
+    if (taken < slots.length) {
+      const n = slots[taken];
+      row.slot = n === 1 ? kind : `${kind}${n}`;
+      filled.set(kind, taken + 1);
+    } else {
+      row.use = false;
+      row.slot = '';
+      const noun = SLOT_NOUNS[kind] || 'item';
+      row.note = `The week holds ${slots.length} ${noun}${slots.length === 1 ? '' : 's'} and the `
+        + `post offers more, so this one arrives switched off. Put it somewhere else, or untick `
+        + `one above and tick this instead.`;
     }
     return row;
   });
@@ -171,8 +221,8 @@ function read(text, week) {
  */
 function occupantOf(week, slot) {
   if (isWeekSlot(slot)) {
-    const r = db.prepare('SELECT name FROM week_items WHERE week_id = ? AND kind = ?')
-      .get(week.id, slot);
+    const r = db.prepare('SELECT name FROM week_items WHERE week_id = ? AND kind = ? AND slot = ?')
+      .get(week.id, SLOT_KIND[slot], SLOT_NUMBER[slot]);
     return r && r.name.trim() ? r.name : null;
   }
   const date = dateOfSlot(week, slot);
@@ -248,15 +298,18 @@ function writeWeekItem(week, slot, row) {
   /* The days a soup runs are the owner's, not the post's: Derek writes "soup
      will be ready on Tuesday" in a sentence this app has no way to read, and a
      slot that already has its days set keeps them. */
-  const existing = db.prepare('SELECT weekdays FROM week_items WHERE week_id = ? AND kind = ?')
-    .get(week.id, slot);
+  const kind = SLOT_KIND[slot];
+  const n = SLOT_NUMBER[slot];
+  const existing = db.prepare(
+    'SELECT weekdays FROM week_items WHERE week_id = ? AND kind = ? AND slot = ?')
+    .get(week.id, kind, n);
   db.prepare(`INSERT INTO week_items
-      (week_id, kind, name, description, photo, halal, allergens, dismissed, ack, ack_of,
+      (week_id, kind, slot, name, description, photo, halal, allergens, dismissed, ack, ack_of,
        weekdays, full_on, full_label, full_price, single_on, single_label, single_price)
-      VALUES (@week_id, @kind, @name, @description, @photo, @halal, @allergens, @dismissed,
+      VALUES (@week_id, @kind, @slot, @name, @description, @photo, @halal, @allergens, @dismissed,
        @ack, @ack_of, @weekdays, @full_on, @full_label, @full_price, @single_on,
        @single_label, @single_price)
-      ON CONFLICT(week_id, kind) DO UPDATE SET
+      ON CONFLICT(week_id, kind, slot) DO UPDATE SET
        name=excluded.name, description=excluded.description, photo=excluded.photo,
        halal=excluded.halal, allergens=excluded.allergens, dismissed=excluded.dismissed,
        ack=excluded.ack, ack_of=excluded.ack_of, full_on=excluded.full_on,
@@ -267,8 +320,9 @@ function writeWeekItem(week, slot, row) {
       ...c,
       name: row.name,
       week_id: week.id,
-      kind: slot,
-      weekdays: existing ? existing.weekdays : DISH.SLOT_DEFAULT_WEEKDAYS[slot],
+      kind,
+      slot: n,
+      weekdays: existing ? existing.weekdays : DISH.SLOT_DEFAULT_WEEKDAYS[kind],
     });
   return { done: `${SLOT_LABELS[slot]} — ${row.name}` };
 }

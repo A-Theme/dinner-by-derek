@@ -48,15 +48,20 @@ function blockers(weekId) {
     const st = A.reviewState(d);
     if (!st.ok) out.push(A.reviewMessage(`${T.fmtDayShort(d.service_date, tz())} — ${d.dish_name}`, st));
   }
-  const { soup, salad, dessert, meatless } = M.weekItemsOf(weekId);
-  for (const [item, label] of [
+  const { soups, salads, dessert, meatless } = M.weekItemsOf(weekId);
+  /* Every level-2 item, both soups and both salads included. The list is built
+     rather than written out, because the failure mode of writing it out is a
+     second soup nobody checked going live under a gate that never looked at
+     it — and this gate is the one thing in the app that must not have a hole. */
+  const labelled = [
     // First, because it is a main. An unreviewed meatless dish is the same
     // kind of problem as an unreviewed Monday dish, not a lesser one.
     [meatless, 'The meatless dish'],
-    [soup, 'The soup of the week'],
-    [salad, 'The salad of the week'],
+    ...soups.map((x, i) => [x, soups.length > 1 ? `Soup ${i + 1} of the week` : 'The soup of the week']),
+    ...salads.map((x, i) => [x, salads.length > 1 ? `Salad ${i + 1} of the week` : 'The salad of the week']),
     [dessert, 'The dessert of the week'],
-  ]) {
+  ];
+  for (const [item, label] of labelled) {
     if (!item || !item.name.trim()) continue;
     const st = A.reviewState(item);
     if (!st.ok) out.push(A.reviewMessage(`${label}, ${item.name},`, st));
@@ -82,9 +87,10 @@ function isEmpty(weekId) {
   if (week && week.closed) return false;
   const days = M.serviceDaysOf(weekId);
   if (days.some((d) => d.closed || d.dish_name.trim())) return false;
-  const { soup, salad, dessert, meatless } = M.weekItemsOf(weekId);
-  return !(soup && soup.name.trim()) && !(salad && salad.name.trim())
-    && !(dessert && dessert.name.trim()) && !(meatless && meatless.name.trim());
+  const { soups, salads, dessert, meatless } = M.weekItemsOf(weekId);
+  const named = (x) => !!(x && x.name.trim());
+  return !soups.some(named) && !salads.some(named)
+    && !named(dessert) && !named(meatless);
 }
 
 /**

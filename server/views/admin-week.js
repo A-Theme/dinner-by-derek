@@ -42,9 +42,28 @@ function weekPage({ week, days, items, hasPrevious }) {
   const weekStart = week.week_start || T.mondayOf(T.todayIn(tz()));
   const globalCap = M.featuredCapFor({});   // null when the setting is 0
 
-  const soup = items.soup || { kind: 'soup', weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1 };
-  const salad = items.salad || { kind: 'salad', weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1 };
-  const dessert = items.dessert || { kind: 'dessert', weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1 };
+  /* One blank to fall back on, so an empty slot renders the same boxes a
+     filled one does. */
+  const blank = (kind) => ({
+    kind, weekdays: '["tue","wed","thu"]', allergens: '[]', dismissed: '[]', full_on: 1,
+  });
+  /* Two soups and two salads, one dessert — M.WEEK_SLOT_COUNTS is the authority
+     on how many, so adding a third soup is a number there and nothing here. */
+  const slotRows = (kind, label, subject, list) => M.slotsOf(kind).map((n) => ({
+    kind,
+    slot: n,
+    // Slot 1 keeps the bare field prefix it has always had, so nothing that was
+    // already typed into a form changes name underneath it.
+    prefix: n === 1 ? kind : `${kind}${n}`,
+    label: M.WEEK_SLOT_COUNTS[kind] > 1 ? `${label} ${n}` : label,
+    subject: M.WEEK_SLOT_COUNTS[kind] > 1 ? `${subject} ${n}` : subject,
+    item: list[n - 1] || blank(kind),
+  }));
+  const weekRows = [
+    ...slotRows('soup', 'Soup', 'The soup', items.soups || []),
+    ...slotRows('salad', 'Salad', 'The salad', items.salads || []),
+    ...slotRows('dessert', 'Dessert', 'The dessert', items.dessert ? [items.dessert] : []),
+  ];
   // Monday, because that is what it is called. It is a row of checkboxes like
   // any other level-2 item and can be moved, but nothing should have to be
   // ticked for the ordinary week.
@@ -267,15 +286,12 @@ function weekPage({ week, days, items, hasPrevious }) {
 
     <!-- 4. Soup & salad of the week -->
     <div class="card">
-      <h2>Soup &amp; salad of the week</h2>
-      <p class="also">Entered once for the whole week. One soup, one salad, one dessert — any of them
-        can be left blank. They default to Tuesday, Wednesday and Thursday.</p>
+      <h2>Soups, salads &amp; dessert of the week</h2>
+      <p class="also">Entered once for the whole week. Two soups, two salads and a dessert —
+        Derek offers a choice of two, and each one is its own litre on the menu. Any of them can
+        be left blank and simply won't be shown. They default to Tuesday, Wednesday and Thursday.</p>
       <div class="stack2">
-        ${[
-          ['soup', 'Soup', soup, 'The soup'],
-          ['salad', 'Salad', salad, 'The salad'],
-          ['dessert', 'Dessert', dessert, 'The dessert'],
-        ].map(([kind, label, item, subject]) => {
+        ${weekRows.map(({ kind, slot, prefix, label, subject, item }) => {
           const list = savedOf(kind);
           return html`
         <div>
@@ -285,28 +301,33 @@ function weekPage({ week, days, items, hasPrevious }) {
                the soups Derek actually makes are at the top of a long list. -->
           <div class="dl-row" style="margin-bottom:var(--dbd-sp-3)">
             <label style="flex:1 1 200px">Put a saved ${kind} here
-              <select name="dish_id" form="use-${kind}"${list.length ? '' : ' disabled'}>
+              <select name="dish_id" form="use-${prefix}"${list.length ? '' : ' disabled'}>
                 ${list.length
                   ? html`<option value="">Choose a saved ${kind}…</option>
                       ${list.map((d) => html`<option value="${d.id}">${d.name}${d.used_count ? ` — ${d.used_count}×` : ''}</option>`)}`
                   : html`<option>No saved ${kind}s yet</option>`}
               </select>
             </label>
-            <button class="btn btn--secondary" type="submit" form="use-${kind}"${list.length ? '' : ' disabled'}>Use it</button>
+            <button class="btn btn--secondary" type="submit" form="use-${prefix}"${list.length ? '' : ' disabled'}>Use it</button>
           </div>
 
           <form method="post" action="/admin/week/${week.id}/${kind}" data-autosave>
-            ${V.itemEditor({ prefix: kind, item, nameLabel: `${label} name`, showWeekdays: true })}
-            <button class="btn btn--secondary" type="submit">Save ${kind}</button>
+            <input type="hidden" name="slot" value="${slot}">
+            ${V.itemEditor({ prefix, item, nameLabel: `${label} name`, showWeekdays: true })}
+            <button class="btn btn--secondary" type="submit">Save ${label.toLowerCase()}</button>
             <span class="saveflag" data-saveflag></span>
           </form>
 
           ${item && item.name && item.name.trim() ? html`
-            <p style="margin-top:var(--dbd-sp-3)"><button class="btn btn--secondary" type="submit" form="keep-${kind}">
+            <p style="margin-top:var(--dbd-sp-3)"><button class="btn btn--secondary" type="submit" form="keep-${prefix}">
               Keep "${item.name}" on the saved list</button></p>` : ''}
 
-          <form method="post" action="/admin/week/${week.id}/${kind}/use" id="use-${kind}"></form>
-          <form method="post" action="/admin/week/${week.id}/${kind}/save" id="keep-${kind}"></form>
+          <!-- The slot rides in the body of these too: they are the forms the
+               buttons above belong to, and an empty one would mean slot 1. -->
+          <form method="post" action="/admin/week/${week.id}/${kind}/use" id="use-${prefix}">
+            <input type="hidden" name="slot" value="${slot}"></form>
+          <form method="post" action="/admin/week/${week.id}/${kind}/save" id="keep-${prefix}">
+            <input type="hidden" name="slot" value="${slot}"></form>
         </div>`;
         })}
       </div>

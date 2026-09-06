@@ -32,8 +32,20 @@ const path = require('path');
 
 /* --- Reading a post ------------------------------------------------------ */
 
-/** Day lines. "Meatless" is written both with and without "Monday". */
-const DAY = /^(meatless\s+monday|meatless|taco\s+tuesday|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*[-–—:]+\s*(.*)$/i;
+/**
+ * Day lines. "Meatless" is written both with and without "Monday".
+ *
+ * The `s` before "day" is optional in the three weekdays that have one, because
+ * Derek drops it. "Tueday - chicken alfredo farfalle pasta bake $50" went up on
+ * 2026-09-06 and the whole of that Tuesday vanished: the line matched nothing,
+ * was skipped in silence, and the preview simply showed one row fewer — which
+ * looks exactly like a day he chose not to cook. A dropped letter should not be
+ * able to take a service day off the menu, so tues?day, wednes?day and thurs?day
+ * each answer to both spellings. Deliberately no looser than that: these are
+ * whole words anchored at the start of a line, and inventing fuzzy matching here
+ * would start reading prose as menu.
+ */
+const DAY = /^(meatless\s+monday|meatless|taco\s+tues?day|monday|tues?day|wednes?day|thurs?day|friday|saturday|sunday)\s*[-–—:]+\s*(.*)$/i;
 
 /**
  * "Single Select" is a heading, and the day names start over underneath it:

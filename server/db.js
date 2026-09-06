@@ -107,7 +107,11 @@ CREATE TABLE IF NOT EXISTS week_items (
   single_label  TEXT NOT NULL DEFAULT 'Meal for one',
   single_price  INTEGER,
   single_cap    INTEGER,
-  UNIQUE(week_id, kind)          -- one of each kind. Enforced in storage.
+  slot          INTEGER NOT NULL DEFAULT 1,
+  -- Two soups and two salads a week, one dessert, one meatless main. The count
+  -- per kind is a rule about the menu and lives in menu.js (WEEK_SLOTS); what
+  -- storage enforces is that a (kind, slot) pair cannot be filled twice.
+  UNIQUE(week_id, kind, slot)
 );
 
 -- LEVEL 3 -------------------------------------------------------------------
@@ -832,6 +836,61 @@ for (const [table, nameCol] of [
         single_price  INTEGER,
         single_cap    INTEGER,
         UNIQUE(week_id, kind)
+      )`);
+      db.exec(`INSERT INTO week_items_rebuild (${cols}) SELECT ${cols} FROM week_items`);
+      db.exec('DROP TABLE week_items');
+      db.exec('ALTER TABLE week_items_rebuild RENAME TO week_items');
+    })();
+    db.pragma('foreign_keys = ON');
+  }
+}
+
+/**
+ * A second soup and a second salad.
+ *
+ * Derek offers a choice of two of each every week — the posts have read
+ * "tomato and dill or sweet corn chowder" for three years — and until now the
+ * menu could hold one, so the second was dropped on the way in. UNIQUE(week_id,
+ * kind) was what refused it, so the key grows a slot rather than the kind
+ * growing a duplicate: 'soup2' would have been a second kind to teach the
+ * saved-dish catalogue, the publish gate and the Facebook post about, all to
+ * say "soup" twice.
+ *
+ * Everything already stored is slot 1, which is what the DEFAULT does. Nothing
+ * moves, and a week that only ever has one soup looks exactly as it did.
+ */
+{
+  const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='week_items'").get();
+  // Guarded on a plain substring, like the two migrations above it. A regex
+  // here is a place to get an escape wrong, and a guard that never matches
+  // rebuilds this table on every boot of the live app rather than once.
+  if (ddl && !ddl.sql.includes('slot')) {
+    const cols = db.prepare('PRAGMA table_info(week_items)').all().map((c) => c.name).join(', ');
+    db.pragma('foreign_keys = OFF');
+    db.transaction(() => {
+      db.exec(`CREATE TABLE week_items_rebuild (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        week_id       INTEGER NOT NULL REFERENCES weeks(id) ON DELETE CASCADE,
+        kind          TEXT NOT NULL CHECK (kind IN ('soup','salad','dessert','meatless')),
+        name          TEXT NOT NULL DEFAULT '',
+        description   TEXT NOT NULL DEFAULT '',
+        photo         TEXT,
+        halal         INTEGER NOT NULL DEFAULT 0,
+        allergens     TEXT NOT NULL DEFAULT '[]',
+        dismissed     TEXT NOT NULL DEFAULT '[]',
+        ack           INTEGER NOT NULL DEFAULT 0,
+        ack_of        TEXT,
+        weekdays      TEXT NOT NULL DEFAULT '["tue","wed","thu"]',
+        full_on       INTEGER NOT NULL DEFAULT 1,
+        full_label    TEXT NOT NULL DEFAULT 'Full size',
+        full_price    INTEGER,
+        full_cap      INTEGER,
+        single_on     INTEGER NOT NULL DEFAULT 0,
+        single_label  TEXT NOT NULL DEFAULT 'Meal for one',
+        single_price  INTEGER,
+        single_cap    INTEGER,
+        slot          INTEGER NOT NULL DEFAULT 1,
+        UNIQUE(week_id, kind, slot)
       )`);
       db.exec(`INSERT INTO week_items_rebuild (${cols}) SELECT ${cols} FROM week_items`);
       db.exec('DROP TABLE week_items');

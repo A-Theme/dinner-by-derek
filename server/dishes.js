@@ -251,23 +251,25 @@ function asWeekColumns(dish) {
  * soup it is should not quietly put it back to Tuesday/Wednesday/Thursday —
  * the choice of days belongs to the week, not to the recipe.
  */
-function applyToWeek(dishId, weekId, slot = null) {
+function applyToWeek(dishId, weekId, slot = null, slotNo = 1) {
   const dish = byId(dishId);
   if (!dish) return null;
   const target = slot || dish.kind;
   if (WEEK_SLOTS[target] !== dish.kind) return null;
+  const n = Number(slotNo) === 2 ? 2 : 1;
 
-  const existing = db.prepare('SELECT weekdays FROM week_items WHERE week_id = ? AND kind = ?')
-    .get(Number(weekId), target);
+  const existing = db.prepare(
+    'SELECT weekdays FROM week_items WHERE week_id = ? AND kind = ? AND slot = ?')
+    .get(Number(weekId), target, n);
   const cols = asWeekColumns(dish);
   const weekdays = existing ? existing.weekdays : SLOT_DEFAULT_WEEKDAYS[target];
   const names = Object.keys(cols);
 
-  db.prepare(`INSERT INTO week_items (week_id, kind, weekdays, ${names.join(', ')})
-      VALUES (@week_id, @kind, @weekdays, ${names.map((n) => '@' + n).join(', ')})
-      ON CONFLICT(week_id, kind) DO UPDATE SET
-        ${names.map((n) => `${n}=excluded.${n}`).join(', ')}`)
-    .run({ ...cols, week_id: Number(weekId), kind: target, weekdays });
+  db.prepare(`INSERT INTO week_items (week_id, kind, slot, weekdays, ${names.join(', ')})
+      VALUES (@week_id, @kind, @slot, @weekdays, ${names.map((x) => '@' + x).join(', ')})
+      ON CONFLICT(week_id, kind, slot) DO UPDATE SET
+        ${names.map((x) => `${x}=excluded.${x}`).join(', ')}`)
+    .run({ ...cols, week_id: Number(weekId), kind: target, slot: n, weekdays });
 
   db.prepare('UPDATE saved_dishes SET used_count = used_count + 1 WHERE id = ?').run(dish.id);
   return dish;

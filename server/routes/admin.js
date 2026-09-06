@@ -621,13 +621,26 @@ const WEEK_ITEM_SLOTS = {
  * was doing the guard's job, which is a fine backstop and a poor front door. */
 const isWeekItemKind = (k) => Object.prototype.hasOwnProperty.call(WEEK_ITEM_SLOTS, k);
 
+/* Which of a kind's slots a form is talking about, read off the body rather
+   than the path so the URLs did not all have to change when soup grew a second
+   one. Anything that is not a slot this kind actually has becomes slot 1 —
+   never a 500, and never a row wearing a slot number the menu will not look
+   for. `${kind}2` is the field prefix for the second; the first keeps the bare
+   kind, so every field name that existed before still means what it did. */
+function slotFrom(body, kind) {
+  const n = Math.floor(Number(body.slot));
+  return n >= 1 && n <= (M.WEEK_SLOT_COUNTS[kind] || 1) ? n : 1;
+}
+const prefixFor = (kind, slot) => (slot === 1 ? kind : `${kind}${slot}`);
+
 /* Keep this week's meatless dish, soup, salad or dessert on the saved list —
    the same button the featured dish of a day has, at the level above it. */
 router.post('/week/:id/:kind/save', (req, res, next) => {
   const kind = req.params.kind;
   if (!isWeekItemKind(kind)) return next();
-  const item = db.prepare('SELECT * FROM week_items WHERE week_id = ? AND kind = ?')
-    .get(Number(req.params.id), kind);
+  const slot = slotFrom(req.body, kind);
+  const item = db.prepare('SELECT * FROM week_items WHERE week_id = ? AND kind = ? AND slot = ?')
+    .get(Number(req.params.id), kind, slot);
   const noun = WEEK_ITEM_SLOTS[kind].noun;
   if (!item || !item.name.trim()) {
     return back(res, req, null, `There is no ${noun} on this week yet. `
@@ -654,7 +667,7 @@ router.post('/week/:id/:kind/use', (req, res, next) => {
     return back(res, req, null,
       `Pick one of your saved ${DISH.KIND_LABELS[wants].toLowerCase()} first.`);
   }
-  DISH.applyToWeek(dish.id, week.id, kind);
+  DISH.applyToWeek(dish.id, week.id, kind, slotFrom(req.body, kind));
   back(res, req, `"${dish.name}" is this week's ${WEEK_ITEM_SLOTS[kind].noun}. `
     + 'The review box is unticked — tick it before you publish.');
 });
@@ -663,24 +676,25 @@ router.post('/week/:id/:kind', (req, res, next) => {
   const kind = req.params.kind;
   if (!isWeekItemKind(kind)) return next();
   const weekId = Number(req.params.id);
-  const item = IF.parse(req.body, kind, { withWeekdays: true });
+  const slot = slotFrom(req.body, kind);
+  const item = IF.parse(req.body, prefixFor(kind, slot), { withWeekdays: true });
 
   // UNIQUE(week_id, kind) means this upsert can only ever produce one soup,
   // one salad, one dessert and one meatless dish per week, no matter what
   // arrives in the body.
   db.prepare(`INSERT INTO week_items
-      (week_id, kind, name, description, photo, halal, allergens, dismissed, ack, ack_of,
+      (week_id, kind, slot, name, description, photo, halal, allergens, dismissed, ack, ack_of,
        weekdays, full_on, full_label, full_price, full_cap, single_on, single_label,
        single_price, single_cap)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-      ON CONFLICT(week_id, kind) DO UPDATE SET
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(week_id, kind, slot) DO UPDATE SET
        name=excluded.name, description=excluded.description, photo=excluded.photo,
        halal=excluded.halal, allergens=excluded.allergens, dismissed=excluded.dismissed,
        ack=excluded.ack, ack_of=excluded.ack_of, weekdays=excluded.weekdays,
        full_on=excluded.full_on, full_label=excluded.full_label, full_price=excluded.full_price,
        full_cap=excluded.full_cap, single_on=excluded.single_on, single_label=excluded.single_label,
        single_price=excluded.single_price, single_cap=excluded.single_cap`)
-    .run(weekId, kind, item.name, item.description, item.photo, item.halal,
+    .run(weekId, kind, slot, item.name, item.description, item.photo, item.halal,
       item.allergens, item.dismissed, item.ack, item.ack_of, item.weekdays,
       item.full_on, item.full_label, item.full_price, item.full_cap,
       item.single_on, item.single_label, item.single_price, item.single_cap);

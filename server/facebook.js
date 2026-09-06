@@ -294,7 +294,7 @@ function priceStandard(featured, fallback) {
 function buildPostText(week) {
   const tz = settings.get('timezone', 'America/Toronto');
   const days = M.serviceDaysOf(week.id);
-  const { soup, salad, dessert } = M.weekItemsOf(week.id);
+  const { soups, salads, dessert } = M.weekItemsOf(week.id);
   const L = [];
 
   L.push(week.title || 'This week at ' + settings.get('business_name'));
@@ -324,8 +324,14 @@ function buildPostText(week) {
      price at the top and make every meat dish an exception to it. */
   const meatlessItems = dayMenus.filter((x) => !x.menu.closed && x.menu.meatless)
     .map((x) => x.menu.meatless);
-  const weeklyRows = [[soup, 'Soup'], [salad, 'Salad'], [dessert, 'Dessert']]
-    .filter(([item]) => item && item.name.trim());
+  /* Both soups and both salads get their own line, the way Derek writes them.
+     Each keeps the plain label: the post reads "Soup: Chicken Mulligatawny"
+     twice over, which is how a choice of two is offered out loud. */
+  const weeklyRows = [
+    ...soups.map((item) => [item, 'Soup']),
+    ...salads.map((item) => [item, 'Salad']),
+    [dessert, 'Dessert'],
+  ].filter(([item]) => item && item.name.trim());
   const { reviewState } = require('./allergens');
   const standing = M.standingItems().filter((s) => reviewState(s).ok);
 

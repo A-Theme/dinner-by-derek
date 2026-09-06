@@ -381,9 +381,18 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   try { ins.run(week, 'pudding', 'Not a kind'); } catch (e) { junkKindRejected = true; }
   ok('and no fifth kind can be invented', junkKindRejected);
 
-  check('weekItemsOf hands back all four',
-    Object.keys(require('../server/menu').weekItemsOf(week)).sort(),
-    ['dessert', 'meatless', 'salad', 'soup']);
+  /* The plurals are load-bearing. When soup grew a second slot, any caller
+     still destructuring `soup` would have gone on working and quietly ignored
+     it — and one of those callers is the publish gate. Naming them `soups` and
+     `salads` makes such a caller read undefined and fail loudly instead. */
+  const shape = require('../server/menu').weekItemsOf(week);
+  check('weekItemsOf hands back the four slots, soups and salads plural',
+    Object.keys(shape).sort(), ['dessert', 'meatless', 'salads', 'soups']);
+  ok('the many-of are arrays', Array.isArray(shape.soups) && Array.isArray(shape.salads));
+  ok('and the one-of are not', !Array.isArray(shape.dessert) && !Array.isArray(shape.meatless));
+  check('the week may hold two soups and two salads, one dessert, one meatless',
+    require('../server/menu').WEEK_SLOT_COUNTS,
+    { meatless: 1, soup: 2, salad: 2, dessert: 1 });
 
   db.prepare('DELETE FROM week_items WHERE week_id = ?').run(week);
   db.prepare('DELETE FROM weeks WHERE id = ?').run(week);
@@ -3445,13 +3454,28 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('the soup is the week\'s soup', at('soup').name, 'Roasted Tomato and Dill');
   check('the dessert is the week\'s dessert', at('dessert').name, 'Chai Rice Pudding Cups');
 
-  /* Derek offers a choice of two soups most weeks and the week holds one. Both
-     are shown; the second arrives switched off with the reason on it, rather
-     than being dropped where nobody can see it was there. */
-  const soups = rows.filter((r) => r.slot === 'soup');
-  check('both soups in the post are shown', soups.length, 2);
-  check('but only the first is ticked', soups.filter((r) => r.use).length, 1);
-  ok('and the second says why it is not', /more than one soup/.test(soups[1].note));
+  /* Derek offers a choice of two soups and two salads every week, and the week
+     now holds both of each. They fill slot 1 then slot 2, in the order the post
+     wrote them, and both arrive ticked — the second is a soup he is cooking,
+     not an overflow to apologise for. */
+  const soups = rows.filter((r) => r.kind === 'soup');
+  check('both soups in the post are read', soups.length, 2);
+  check('and both are ticked', soups.filter((r) => r.use).length, 2);
+  check('into slot one and slot two, in the order written',
+    soups.map((r) => r.slot), ['soup', 'soup2']);
+  check('the second soup keeps its own name', at('soup2').name, 'Sweet Corn Chowder');
+  const salads = rows.filter((r) => r.kind === 'salad');
+  check('both salads too', salads.map((r) => r.slot), ['salad', 'salad2']);
+
+  /* A third would have nowhere to go, and says so rather than displacing one. */
+  {
+    const three = 'Soup - this week features aaa soup or bbb soup or ccc soup';
+    const got = PASTE.read(three, week).filter((r) => r.kind === 'soup');
+    check('a third soup is still shown', got.length, 3);
+    check('but not ticked', got[2].use, false);
+    check('and aimed nowhere', got[2].slot, '');
+    ok('with the reason on it', /week holds 2 soups/.test(got[2].note));
+  }
 
   /* A Single Select is a second plate on a day that already has a dinner, and
      this menu has one featured dish a day. It is read and shown switched off. */
@@ -3471,12 +3495,12 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
 
   /* --- and now the write --- */
   const result = PASTE.apply(week, rows);
-  check('everything ticked lands', result.done.length, 8);
+  check('everything ticked lands', result.done.length, 10);
   check('and nothing is quietly skipped', result.skipped, []);
 
   const days = MENU.serviceDaysOf(week.id);
   const items = MENU.weekItemsOf(week.id);
-  const landed = [...days, items.meatless, items.soup, items.salad, items.dessert];
+  const landed = [...days, items.meatless, ...items.soups, ...items.salads, items.dessert];
 
   check('four days were written', days.length, 4);
   check('Monday got the dish the post put on Monday',
@@ -3486,10 +3510,10 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
      allergens.js would find the peanuts. It is not asked, and nothing arrives
      wearing a tag: a tag that arrives already accepted is a tag nobody read. */
   check('nothing lands with an allergen tag on it',
-    landed.map((x) => x.allergens), Array(8).fill('[]'));
+    landed.map((x) => x.allergens), Array(10).fill('[]'));
   check('nothing lands with a dismissal on it either',
-    landed.map((x) => x.dismissed), Array(8).fill('[]'));
-  check('and nothing lands reviewed', landed.map((x) => x.ack), Array(8).fill(0));
+    landed.map((x) => x.dismissed), Array(10).fill('[]'));
+  check('and nothing lands reviewed', landed.map((x) => x.ack), Array(10).fill(0));
   const satay = days.find((d) => d.service_date === '2026-08-31');
   ok('the peanuts are in the words the owner will read', /peanuts/.test(satay.description));
   ok('and the dictionary can see them',
@@ -3499,7 +3523,7 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   /* Which means the gate is still shut. Eight things landed, and every one of
      them is a sentence in the owner's way before this week can go out. */
   const stopped = PUB.blockers(week.id);
-  check('a pasted week cannot publish', stopped.length, 8);
+  check('a pasted week cannot publish', stopped.length, 10);
   ok('and every blocker asks for the same tick',
     stopped.every((b) => /allergen review/.test(b)));
 
@@ -3530,7 +3554,7 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     db.prepare('INSERT INTO service_days (week_id, service_date, closed) VALUES (?,?,1)')
       .run(w3.id, '2026-08-31');
     const r = PASTE.apply(w3, PASTE.read(POST, w3));
-    check('a closed day is not written over', r.done.length, 7);
+    check('a closed day is not written over', r.done.length, 9);
     ok('and the owner is told which one', r.skipped.some((m) => /marked closed/.test(m)));
     check('the day stays shut',
       db.prepare('SELECT closed, dish_name FROM service_days WHERE week_id = ? AND service_date = ?')
@@ -3542,14 +3566,19 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
      looking at a soup they did not pick with nothing on the page saying so. */
   {
     const w4 = newWeek('paste-clash', '2026-08-31');
-    const both = PASTE.read(POST, w4).filter((r) => r.slot === 'soup')
-      .map((r) => ({ ...r, use: true }));
+    /* Forced to the same slot on purpose — read() would have put these in
+       slot 1 and slot 2. This is the corrected form of the form coming back
+       with two rows pointed at one box. */
+    const both = PASTE.read(POST, w4).filter((r) => r.kind === 'soup')
+      .map((r) => ({ ...r, slot: 'soup', use: true }));
     const r = PASTE.apply(w4, both);
     check('only the first of two rows aimed at one slot is used', r.done.length, 1);
     ok('and the second is reported, not swallowed',
       r.skipped.some((m) => /already taken/.test(m)));
     check('the week holds the first one',
-      MENU.weekItemsOf(w4.id).soup.name, 'Roasted Tomato and Dill');
+      MENU.weekItemsOf(w4.id).soups[0].name, 'Roasted Tomato and Dill');
+    check('and nothing was written into the second slot',
+      MENU.weekItemsOf(w4.id).soups.length, 1);
   }
 
   /* Nothing recognisable in the box is not an error and must not be a write.
@@ -3587,6 +3616,78 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
     check('a slot nobody has heard of is dropped',
       PASTE.rowsFromBody({ rows: '1', r1_use: '1', r0_slot: 'constructor', r0_name: 'x' })[0].slot, '');
   }
+}
+
+/* --- Two soups and two salads reach the customer ----------------------------
+ * The storage change is only worth anything if both actually appear on the
+ * menu. Asserted through menuForDay, which is what the customer page renders
+ * from, rather than by reading the table back — the table was never the thing
+ * in doubt.
+ */
+{
+  const MENU2 = require('../server/menu');
+  const A2 = require('../server/allergens');
+
+  const wid = db.prepare(
+    "INSERT INTO weeks (slug, title, week_start, status) VALUES (?,?,?,'published')")
+    .run('two-soup-week', 'Two soups', '2026-09-07').lastInsertRowid;
+  const week = db.prepare('SELECT * FROM weeks WHERE id = ?').get(wid);
+  const date = '2026-09-08';                      // the Tuesday of that week
+  db.prepare(`INSERT INTO service_days (week_id, service_date, dish_name, description,
+      full_on, full_price, ack, ack_of) VALUES (?,?,?,?,1,5000,1,?)`)
+    .run(wid, date, 'Boeuf Bourguignon', 'with mashed potatoes',
+      A2.reviewedText({ name: 'Boeuf Bourguignon', description: 'with mashed potatoes' }));
+
+  /* Tagged as an owner who worked through the chips would leave it: every
+     suggestion the dictionary raises is accepted, so nothing is left undecided.
+     An item with a pending suggestion is deliberately withheld from the menu —
+     "Butternut Squash Ravioli" raises wheat and gluten off the word ravioli —
+     and a fixture that ignored that would be testing the wrong thing. */
+  const addSoup = (slot, name, kind = 'soup') => db.prepare(`INSERT INTO week_items
+      (week_id, kind, slot, name, description, weekdays, full_on, full_label, full_price,
+       ack, ack_of, allergens) VALUES (?,?,?,?,'','["tue"]',1,'Litre',1200,1,?,?)`)
+    .run(wid, kind, slot, name, A2.reviewedText({ name, description: '' }),
+      JSON.stringify(A2.detect(name).map((d) => d.allergen)));
+
+  addSoup(1, 'Chicken Mulligatawny');
+  addSoup(2, 'Late Summer Harvest Vegetable');
+  addSoup(1, 'Korean Potsticker', 'salad');
+  addSoup(2, 'Butternut Squash Ravioli', 'salad');
+
+  const day = MENU2.serviceDayOn(wid, date);
+  const menu = MENU2.menuForDay(week, day);
+  const named = (sub) => menu.grouped.find((g) => g.subcategory === sub);
+
+  check('both soups reach the menu',
+    (named('Soups') || { items: [] }).items.map((i) => i.name),
+    ['Chicken Mulligatawny', 'Late Summer Harvest Vegetable']);
+  check('and both salads',
+    (named('Salads') || { items: [] }).items.map((i) => i.name),
+    ['Korean Potsticker', 'Butternut Squash Ravioli']);
+  check('each is its own orderable line, not one line with a choice on it',
+    (named('Soups') || { items: [] }).items.length, 2);
+
+  /* Each points at its own row, or the two would share a stock count and
+     selling out of one would sell out the other. */
+  const soupItems = named('Soups').items;
+  ok('the two soups are distinct rows', soupItems[0].refId !== soupItems[1].refId);
+
+  /* And the gate still covers the second. Unticking soup 2 alone must stop
+     the week — this is the check that would silently pass if publish.js were
+     still reading a single `soup`. */
+  db.prepare("UPDATE week_items SET ack = 0 WHERE week_id = ? AND kind = 'soup' AND slot = 2")
+    .run(wid);
+  const stopped = require('../server/publish').blockers(wid);
+  ok('an unreviewed second soup blocks the week',
+    stopped.some((b) => /Late Summer Harvest Vegetable/.test(b)), stopped.join(' | '));
+  check('and it is named as the second one', stopped.filter((b) => /Soup 2/.test(b)).length, 1);
+
+  const menu2 = MENU2.menuForDay(week, MENU2.serviceDayOn(wid, date));
+  check('while it is unreviewed the customer sees only the reviewed soup',
+    (menu2.grouped.find((g) => g.subcategory === 'Soups') || { items: [] })
+      .items.map((i) => i.name), ['Chicken Mulligatawny']);
+
+  db.prepare('DELETE FROM weeks WHERE id = ?').run(wid);
 }
 
 /* --- Report ---------------------------------------------------------------- */
