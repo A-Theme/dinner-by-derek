@@ -53,6 +53,7 @@ ${extraHead || ''}
   <li><a href="/admin/locations"${here('locations')}>Locations &amp; Delivery</a></li>
   <li><a href="/admin/graphics"${here('graphics')}>Graphics</a></li>
   <li><a href="/admin/settings"${here('settings')}>Settings</a></li>
+  <li><a href="/admin-training">Training Mode</a></li>
 </ul></nav>
 <main class="admin-wrap">
 ${body}

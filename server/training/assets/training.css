@@ -1,0 +1,203 @@
+/* Training mode: the banner, the walkthrough panel, and nothing else.
+ *
+ * This file is additive. It defines no rule that the real dashboard's
+ * stylesheets also define, and every selector below is either .tr-* or scoped
+ * inside .tr-body — so loading it cannot change how any real screen looks, and
+ * the training screens keep the design system exactly as it is.
+ *
+ * Every colour is a theme.css token. theme.css is the only file in this
+ * codebase allowed to hold a hex literal and the acceptance suite enforces it,
+ * so the training amber is not an invented colour — it is the Saddle Tan
+ * family the palette already carries for "needs review", used at full strength
+ * where the real screens only ever use it for a flag. That is what makes the
+ * banner read as a different place: the same paints, a louder arrangement.
+ *
+ * The tan tones below are the two the contrast audit produced (see
+ * CONTRAST.md) — umber-deep on tan-lift is the pairing that passes for small
+ * text, which the banner sets.
+ */
+
+:root {
+  --tr-amber: var(--dbd-umber-deep);        /* ink on the band          */
+  --tr-amber-bg: var(--dbd-tan-lift);       /* the band itself          */
+  --tr-amber-soft: var(--dbd-parchment-2);  /* large panels, quieter    */
+  --tr-amber-line: var(--dbd-tan-deep);     /* borders and rules        */
+  --tr-amber-hover: var(--dbd-ochre);       /* button hover on the band */
+}
+
+/* --- The banner --------------------------------------------------------- */
+
+.tr-banner {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 900;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dbd-sp-2, 8px) var(--dbd-sp-3, 12px);
+  align-items: center;
+  padding: var(--dbd-sp-2, 8px) var(--dbd-sp-3, 12px);
+  background: var(--tr-amber-bg);
+  color: var(--tr-amber);
+  border-bottom: 3px solid var(--tr-amber-line);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.tr-banner__tag {
+  flex: 0 0 auto;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 10px;
+  border-radius: 3px;
+  background: var(--tr-amber);
+  color: var(--tr-amber-bg);
+  white-space: nowrap;
+}
+
+.tr-banner__text { flex: 1 1 260px; }
+
+.tr-banner__actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: var(--dbd-sp-2, 8px);
+  align-items: center;
+}
+
+.tr-banner__link,
+.tr-banner__btn {
+  font: inherit;
+  color: var(--tr-amber);
+  background: transparent;
+  border: 1px solid var(--tr-amber-line);
+  border-radius: 3px;
+  padding: 3px 10px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tr-banner__link:hover,
+.tr-banner__btn:hover { background: var(--tr-amber-hover); }
+
+/* The banner is fixed, so the page has to start below it. Generous, because
+   it wraps to two and three lines on a phone. */
+.tr-body { padding-top: 86px; }
+.tr-nav { border-top: 0; }
+
+@media (max-width: 700px) {
+  .tr-body { padding-top: 120px; }
+}
+
+/* A tinted edge all the way down the page. Reading one screen out of context —
+   a screenshot, a photo of a laptop — the banner may be off the top; this is
+   still there. */
+.tr-wrap {
+  border-left: 4px solid var(--tr-amber-line);
+  border-right: 4px solid var(--tr-amber-line);
+}
+
+.tr-foot {
+  margin-top: var(--dbd-sp-6, 32px);
+  padding-top: var(--dbd-sp-3, 12px);
+  border-top: 1px dashed var(--tr-amber-line);
+  color: var(--tr-amber);
+  font-size: 0.85rem;
+}
+
+/* --- The walkthrough ----------------------------------------------------- */
+
+.tr-coach {
+  margin: 0 0 var(--dbd-sp-4, 16px);
+  padding: var(--dbd-sp-3, 12px) var(--dbd-sp-4, 16px);
+  background: var(--tr-amber-bg);
+  border: 2px solid var(--tr-amber-line);
+  border-radius: var(--dbd-radius, 6px);
+  color: var(--tr-amber);
+}
+
+.tr-coach__head {
+  display: flex;
+  gap: var(--dbd-sp-3, 12px);
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.tr-coach__pos { font-size: 0.85rem; opacity: 0.8; }
+.tr-coach__close { margin-left: auto; color: inherit; font-size: 0.85rem; }
+.tr-coach__title { margin: var(--dbd-sp-2, 8px) 0 var(--dbd-sp-1, 4px); }
+.tr-coach__body { margin: 0 0 var(--dbd-sp-3, 12px); }
+
+.tr-coach__nav {
+  display: flex;
+  gap: var(--dbd-sp-2, 8px);
+  flex-wrap: wrap;
+}
+
+/* What the walkthrough is pointing at. Two rings rather than one colour, so it
+   still reads for someone who cannot separate the amber from the cream. */
+.tr-target {
+  position: relative;
+  outline: 3px solid var(--tr-amber-line);
+  outline-offset: 4px;
+  border-radius: var(--dbd-radius-sm, 4px);
+  animation: tr-pulse 1.6s ease-out 3;
+  scroll-margin-top: 140px;
+}
+
+/* --dbd-bloom is the faded Warm Ochre the customer header already breathes
+   with. The same colour, three times and then still, rather than a second
+   invented one. */
+@keyframes tr-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--dbd-bloom); }
+  100% { box-shadow: 0 0 0 18px transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tr-target { animation: none; }
+}
+
+/* --- Small training-only bits -------------------------------------------- */
+
+/* A saved "photo". No file was uploaded, so there is nothing to show but the
+   name the sandbox gave it — which is the honest thing to put here. */
+.tr-photo {
+  padding: var(--dbd-sp-2, 8px) var(--dbd-sp-3, 12px);
+  margin-bottom: var(--dbd-sp-2, 8px);
+  background: var(--dbd-surface-sunk);
+  border: 1px dashed var(--tr-amber-line);
+  border-radius: var(--dbd-radius-sm, 4px);
+  font-size: 0.85rem;
+}
+
+.tr-photo img {
+  display: block;
+  max-width: 220px;
+  max-height: 160px;
+  margin-top: var(--dbd-sp-2, 8px);
+  border-radius: var(--dbd-radius-sm, 4px);
+}
+
+.tr-flash { margin-bottom: var(--dbd-sp-4, 16px); }
+
+/* The note that says what a screen would have done for real. */
+.tr-note {
+  margin: var(--dbd-sp-3, 12px) 0;
+  padding: var(--dbd-sp-2, 8px) var(--dbd-sp-3, 12px);
+  border-left: 4px solid var(--tr-amber-line);
+  background: var(--tr-amber-soft);
+  color: var(--tr-amber);
+  font-size: 0.9rem;
+}
+
+.tr-note strong { font-weight: 700; }
+
+/* The confirm dialog, borrowed shape from the real one. */
+.tr-dialog {
+  border: 2px solid var(--dbd-olive);
+  border-radius: var(--dbd-radius, 6px);
+  padding: var(--dbd-sp-4, 16px);
+  max-width: 32rem;
+}
+
+.tr-dialog::backdrop { background: var(--dbd-scrim); }
+.tr-dialog__nav { display: flex; gap: var(--dbd-sp-2, 8px); margin-top: var(--dbd-sp-3, 12px); }

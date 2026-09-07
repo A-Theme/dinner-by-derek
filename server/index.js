@@ -223,6 +223,7 @@ const adminRoutes = require('./routes/admin');
 const adminRoutes2 = require('./routes/admin2');
 const adminRoutes3 = require('./routes/admin3');
 const recipeRoutes = require('./routes/recipes');
+const trainingRoutes = require('./training');
 const proofread = require('./proofread');
 
 /* Mount order matters. admin.js applies `auth.required` to everything passing
@@ -251,6 +252,22 @@ app.use('/admin', adminRoutes);
 app.use('/admin', adminRoutes2.router);
 app.use('/admin', adminRoutes3.router);
 app.use('/admin', recipeRoutes.router);
+
+/* The training dashboard: a practice copy on invented data, in server/training.
+ *
+ * `auth.required` is written here rather than left to the guard above it,
+ * because Express matches mount paths a segment at a time — '/admin' is not a
+ * prefix of '/admin-training', so none of the middleware mounted on '/admin'
+ * runs for these requests. Without this the whole training module, and the
+ * Reset button on it, would answer anyone on the open internet. It holds no
+ * real data, but an unauthenticated interactive surface on a live site is not
+ * something to add by accident.
+ *
+ * The module requires none of db.js, mailer.js, facebook.js, images.js or
+ * publish.js, so nothing reachable through here can write to the database,
+ * send an email or post to a Page. */
+app.use('/admin-training', auth.required, trainingRoutes);
+
 app.use('/', publicRoutes);
 
 /* --- Not found ----------------------------------------------------------- */
