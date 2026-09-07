@@ -365,15 +365,22 @@
       }
       renderTags();
 
-      /* --- Photo upload --------------------------------------------------- */
-      var drop = ed.querySelector('[data-drop]');
-      if (drop) {
-        var file = ed.querySelector('[data-file]');
-        var cam = ed.querySelector('[data-camera]');
-        var photo = ed.querySelector('[data-photo]');
+      /* --- Photo upload ---------------------------------------------------
+       * Two boxes per editor now — the dish, and the optional meal-for-one —
+       * so every lookup below is scoped to its own [data-photoslot]. These
+       * were ed.querySelector calls while there was one box per editor; left
+       * that way both boxes resolve to the first one, and the second box's
+       * camera button fills in the first box's picture. */
+      ed.querySelectorAll('[data-photoslot]').forEach(function (slot, slotIndex) {
+        var drop = slot.querySelector('[data-drop]');
+        if (!drop) return;
+        var file = slot.querySelector('[data-file]');
+        var cam = slot.querySelector('[data-camera]');
+        var photo = slot.querySelector('[data-photo]');
         var bar = drop.querySelector('.progress');
         var fill = bar.querySelector('div');
         var msg = drop.querySelector('.dz-msg');
+        var clear = slot.querySelector('[data-clearphoto]');
 
         /* Assigning .value from script fires nothing. Autosave listens for
            events, so without this dispatch the filename sits in the form and
@@ -383,6 +390,10 @@
         function setPhotoValue(name) {
           photo.value = name;
           photo.dispatchEvent(new Event('change', { bubbles: true }));
+          // Rendered on every slot and hidden until there is something to
+          // remove, so the button appears the moment an upload lands rather
+          // than only after the page is reloaded.
+          if (clear) clear.hidden = !name;
         }
 
         function setPhoto(name) {
@@ -479,9 +490,8 @@
         file.addEventListener('change', function () { upload(file.files[0]); });
         cam.addEventListener('change', function () { upload(cam.files[0]); });
 
-        var take = ed.querySelector('[data-take]');
-        var choose = ed.querySelector('[data-choose]');
-        var clear = ed.querySelector('[data-clearphoto]');
+        var take = slot.querySelector('[data-take]');
+        var choose = slot.querySelector('[data-choose]');
         if (take) take.addEventListener('click', function () { cam.click(); });
         if (choose) choose.addEventListener('click', function () { file.click(); });
         if (clear) clear.addEventListener('click', function () {
@@ -491,15 +501,21 @@
           toast('Photo removed.', 'ok');
         });
 
-        window.addEventListener('paste', function (e) {
-          if (!drop.closest('details') || drop.closest('details').open) {
-            var items = (e.clipboardData || {}).items || [];
-            for (var i = 0; i < items.length; i++) {
-              if (items[i].type.indexOf('image') === 0) { upload(items[i].getAsFile()); break; }
+        /* Paste fills the dish photo and nothing else. The event belongs to the
+           window and names no target, so a handler on each slot would take one
+           Ctrl+V and upload the same clipboard image into both boxes at once.
+           The meal-for-one box is filled from its own two buttons. */
+        if (slotIndex === 0) {
+          window.addEventListener('paste', function (e) {
+            if (!drop.closest('details') || drop.closest('details').open) {
+              var items = (e.clipboardData || {}).items || [];
+              for (var i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') === 0) { upload(items[i].getAsFile()); break; }
+              }
             }
-          }
-        });
-      }
+          });
+        }
+      });
     });
   });
 

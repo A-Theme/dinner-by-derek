@@ -1395,6 +1395,86 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   check('an unreadable price puts no orderable size on the menu', priced.variants.length, 0);
 }
 
+/* --- Two photos for one dish -----------------------------------------------
+   A dish can carry a second picture of the smaller portion. The pair is shown
+   only when it says something: the second photo exists AND both sizes are
+   actually for sale. Everything else -- one photo, or a second photo on a dish
+   that only sells one size -- renders exactly as it did before the column was
+   added, which is the case almost every dish is in. */
+{
+  const M = require('../server/menu');
+  const CV = require('../server/views/customer');
+
+  const weekId = db.prepare(`INSERT INTO weeks (slug, title, status, week_start)
+    VALUES ('two-photo-test','Two photo test','published','2026-08-24')`).run().lastInsertRowid;
+  db.prepare(`INSERT INTO service_days
+    (week_id, service_date, dish_name, description, ack, ack_of,
+     full_on, full_label, full_price, single_on, single_label, single_price)
+    VALUES (?,'2026-08-24','Roast Chicken','',1,?,1,'Full size',5000,1,'Meal for one',1250)`)
+    .run(weekId, A.reviewedText({ name: 'Roast Chicken', description: '' }));
+
+  const wk = () => db.prepare('SELECT * FROM weeks WHERE id = ?').get(weekId);
+  const day = () => db.prepare(
+    "SELECT * FROM service_days WHERE week_id=? AND service_date='2026-08-24'").get(weekId);
+  const setPhotos = (photo, single) => db.prepare(
+    'UPDATE service_days SET photo=?, single_photo=? WHERE week_id=?').run(photo, single, weekId);
+  const render = () => String(CV.dayView({
+    week: wk(), day: day(), menu: M.menuForDay(wk(), day()),
+    locations: [], deliveryFee: 0, deliveryMin: 0, servedAreas: [],
+  }));
+
+  {
+    setPhotos('one.jpg', null);
+    const page = render();
+    ok('one photo draws one picture', /uploads\/one\.jpg/.test(page));
+    ok('and no pair', !/photopair/.test(page));
+    ok('so no size caption is invented', !/photopair__cap/.test(page));
+  }
+
+  {
+    setPhotos('full.jpg', 'small.jpg');
+    const page = render();
+    ok('a second photo draws the pair', /photopair--featured/.test(page));
+    ok('both pictures are on the page',
+      /uploads\/full\.jpg/.test(page) && /uploads\/small\.jpg/.test(page));
+    // The captions are what make the pair readable rather than decorative.
+    check('one caption per picture', (page.match(/photopair__cap/g) || []).length, 2);
+    ok('and the bigger view names the size it belongs to',
+      /See a bigger picture of Roast Chicken — Meal for one/.test(page));
+  }
+
+  /* The guard that stops a stale column speaking. A dish that stopped selling
+     the smaller size keeps its second photo in the database; showing it would
+     caption a picture with a size nobody can order. */
+  {
+    db.prepare('UPDATE service_days SET single_on=0 WHERE week_id=?').run(weekId);
+    const page = render();
+    ok('a second photo is not shown when the smaller size is off', !/photopair/.test(page));
+    ok('and the dish photo is still there', /uploads\/full\.jpg/.test(page));
+    ok('while the second file is not linked at all', !/uploads\/small\.jpg/.test(page));
+    db.prepare('UPDATE service_days SET single_on=1 WHERE week_id=?').run(weekId);
+  }
+
+  /* Both sizes pointed at the same file is one picture, not two of it. */
+  {
+    setPhotos('same.jpg', 'same.jpg');
+    ok('the same file twice is still one picture', !/photopair/.test(render()));
+  }
+
+  /* The fallback the owner asked for, stated as a fact about the data rather
+     than about the markup: a dish with one photo has one photo, and both sizes
+     are sold under it. */
+  {
+    setPhotos('only.jpg', null);
+    const item = M.menuForDay(wk(), day()).featured;
+    check('the dish keeps its photo', item.photo, 'only.jpg');
+    check('and has no second one to show', item.singlePhoto, null);
+    check('both sizes are on sale under it', item.variants.length, 2);
+  }
+
+  db.prepare('DELETE FROM weeks WHERE id = ?').run(weekId);
+}
+
 /* --- A settings row that isn't a number ------------------------------------
    getInt used to return NaN, which reaches the clock and throws from inside
    Intl — a 500 on every customer page from one bad row. */

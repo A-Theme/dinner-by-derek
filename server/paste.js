@@ -239,7 +239,7 @@ function occupantOf(week, slot) {
 /**
  * The columns that describe the dish, and only those.
  *
- * The photo and the halal flag are cleared along with the tags, because they
+ * The photos and the halal flag are cleared along with the tags, because they
  * belong to whatever was in the box before and this is a different dish — last
  * week's brisket photographed over this week's schnitzel is the same class of
  * mistake as last week's allergen tags on it. The ceilings and the pickup
@@ -250,6 +250,7 @@ function dishColumns(row) {
   return {
     description: row.description,
     photo: null,
+    single_photo: null,
     halal: 0,
     allergens: '[]',      // never carried across. See the note at the top.
     dismissed: '[]',
@@ -276,16 +277,16 @@ function writeDay(week, slot, row) {
     };
   }
   if (existing) {
-    db.prepare(`UPDATE service_days SET dish_name=@name, description=@description, photo=@photo,
+    db.prepare(`UPDATE service_days SET dish_name=@name, description=@description, photo=@photo, single_photo=@single_photo,
         halal=@halal, allergens=@allergens, dismissed=@dismissed, ack=@ack, ack_of=@ack_of,
         full_on=@full_on, full_label=@full_label, full_price=@full_price,
         single_on=@single_on, single_label=@single_label, single_price=@single_price
         WHERE id=@id`).run({ ...c, name: row.name, id: existing.id });
   } else {
     db.prepare(`INSERT INTO service_days
-        (week_id, service_date, dish_name, description, photo, halal, allergens, dismissed,
+        (week_id, service_date, dish_name, description, photo, single_photo, halal, allergens, dismissed,
          ack, ack_of, full_on, full_label, full_price, single_on, single_label, single_price)
-        VALUES (@week_id, @service_date, @name, @description, @photo, @halal, @allergens,
+        VALUES (@week_id, @service_date, @name, @description, @photo, @single_photo, @halal, @allergens,
          @dismissed, @ack, @ack_of, @full_on, @full_label, @full_price, @single_on,
          @single_label, @single_price)`)
       .run({ ...c, name: row.name, week_id: week.id, service_date: date });
@@ -304,13 +305,14 @@ function writeWeekItem(week, slot, row) {
     'SELECT weekdays FROM week_items WHERE week_id = ? AND kind = ? AND slot = ?')
     .get(week.id, kind, n);
   db.prepare(`INSERT INTO week_items
-      (week_id, kind, slot, name, description, photo, halal, allergens, dismissed, ack, ack_of,
+      (week_id, kind, slot, name, description, photo, single_photo, halal, allergens, dismissed, ack, ack_of,
        weekdays, full_on, full_label, full_price, single_on, single_label, single_price)
-      VALUES (@week_id, @kind, @slot, @name, @description, @photo, @halal, @allergens, @dismissed,
+      VALUES (@week_id, @kind, @slot, @name, @description, @photo, @single_photo, @halal, @allergens, @dismissed,
        @ack, @ack_of, @weekdays, @full_on, @full_label, @full_price, @single_on,
        @single_label, @single_price)
       ON CONFLICT(week_id, kind, slot) DO UPDATE SET
        name=excluded.name, description=excluded.description, photo=excluded.photo,
+       single_photo=excluded.single_photo,
        halal=excluded.halal, allergens=excluded.allergens, dismissed=excluded.dismissed,
        ack=excluded.ack, ack_of=excluded.ack_of, full_on=excluded.full_on,
        full_label=excluded.full_label, full_price=excluded.full_price,

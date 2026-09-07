@@ -49,7 +49,7 @@ const SLOT_DEFAULT_WEEKDAYS = {
 const KIND_LABELS = { main: 'Mains', soup: 'Soups', salad: 'Salads', dessert: 'Desserts' };
 
 const FIELDS = [
-  'kind', 'name', 'description', 'photo', 'halal', 'allergens', 'dismissed',
+  'kind', 'name', 'description', 'photo', 'single_photo', 'halal', 'allergens', 'dismissed',
   'full_on', 'full_label', 'full_price', 'full_cap',
   'single_on', 'single_label', 'single_price', 'single_cap',
 ];
@@ -138,6 +138,7 @@ function save(item) {
     name,
     description: String(item.description || '').trim(),
     photo: item.photo || null,
+    single_photo: item.single_photo || null,
     halal: item.halal ? 1 : 0,
     allergens: item.allergens || '[]',
     dismissed: item.dismissed || '[]',
@@ -179,6 +180,7 @@ function asDayColumns(dish) {
     dish_name: dish.name,
     description: dish.description,
     photo: dish.photo,
+    single_photo: dish.single_photo,
     halal: dish.halal,
     allergens: dish.allergens,
     dismissed: dish.dismissed,
@@ -220,6 +222,7 @@ function asWeekColumns(dish) {
     name: dish.name,
     description: dish.description,
     photo: dish.photo,
+    single_photo: dish.single_photo,
     halal: dish.halal,
     allergens: dish.allergens,
     dismissed: dish.dismissed,

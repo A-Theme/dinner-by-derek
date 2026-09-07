@@ -65,6 +65,7 @@ function toRenderItem(row, { level, refTable, subcategory, name, serviceDate }) 
     name, subcategory,
     description: row.description || '',
     photo: row.photo || null,
+    singlePhoto: row.single_photo || null,
     halal: !!row.halal,
     allergens: JSON.parse(row.allergens || '[]'),
     variants,

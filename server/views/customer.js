@@ -181,7 +181,7 @@ function featuredBlock(item, cap, readOnly, eyebrow = 'Featured tonight') {
       : '';
   return html`
   <section class="featured">
-    ${item.photo ? zoomablePhoto(item, 'featured__photo') : ''}
+    ${dishPhotos(item, 'featured__photo')}
     <div class="featured__body">
       <p class="featured__eyebrow">${eyebrow}</p>
       <h2 class="featured__name">${item.name}</h2>
@@ -206,21 +206,59 @@ function featuredBlock(item, cap, readOnly, eyebrow = 'Featured tonight') {
  * original, but a missing one should show the picture the page already has
  * rather than a broken frame.
  */
-function zoomablePhoto(item, cls) {
-  const original = item.photo.replace(/\.jpg$/, '-original.jpg');
+function zoomablePhoto(item, cls, { photo = null, label = '' } = {}) {
+  const file = photo || item.photo;
+  const original = file.replace(/\.jpg$/, '-original.jpg');
+  // A size's own picture is captioned with the size, so the big view says
+  // which of the two it is rather than repeating the dish name twice.
+  const title = label ? `${item.name} — ${label}` : item.name;
   return html`
     <button type="button" class="photozoom photozoom--${cls}" data-zoom
-            data-full="/uploads/${original}" data-web="/uploads/${item.photo}"
-            data-name="${item.name}" data-desc="${item.description || ''}"
-            aria-label="See a bigger picture of ${item.name}">
-      <img class="${cls}" src="/uploads/${item.photo}" alt="${item.name}">
+            data-full="/uploads/${original}" data-web="/uploads/${file}"
+            data-name="${title}" data-desc="${item.description || ''}"
+            aria-label="See a bigger picture of ${title}">
+      <img class="${cls}" src="/uploads/${file}" alt="${title}">
     </button>`;
+}
+
+/**
+ * The dish's pictures: one, or one for each size.
+ *
+ * A second photo is shown only when it would say something -- the dish has its
+ * own meal-for-one picture, and both sizes are actually for sale. A kitchen
+ * that photographs a dish once gets exactly what it got before, which is the
+ * common case and stays the default.
+ *
+ * The pair sits at the top of the card, captioned, rather than as a thumbnail
+ * on each price row. On the row it looked right until it was measured on a
+ * phone: the stepper needs two tap targets and the price needs its digits, so
+ * a 48px picture left the label 38px and wrapped "Meal for one" over three
+ * lines. The photo is worth space; it is not worth taking it from the control
+ * somebody orders with.
+ */
+function dishPhotos(item, cls) {
+  const full = item.variants.find((v) => v.id === 'full');
+  const single = item.variants.find((v) => v.id === 'single');
+  const pair = item.photo && item.singlePhoto && item.singlePhoto !== item.photo && full && single;
+  if (!pair) return item.photo ? zoomablePhoto(item, cls) : '';
+
+  const kind = cls === 'featured__photo' ? 'featured' : 'option';
+  const one = (photo, label) => html`
+    <figure class="photopair__item">
+      ${zoomablePhoto(item, cls, { photo, label })}
+      <figcaption class="photopair__cap">${label}</figcaption>
+    </figure>`;
+  return html`
+    <div class="photopair photopair--${kind}">
+      ${one(item.photo, full.label)}
+      ${one(item.singlePhoto, single.label)}
+    </div>`;
 }
 
 function optionCard(item, readOnly) {
   return html`
   <article class="optioncard">
-    ${item.photo ? zoomablePhoto(item, 'optioncard__photo') : ''}
+    ${dishPhotos(item, 'optioncard__photo')}
     <div style="flex:1">
       <div class="optioncard__name">${item.name}</div>
       ${item.halal ? html`<p style="margin:var(--dbd-sp-1) 0">${L.halalBadge(true)}</p>` : ''}

@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS service_days (
   dish_name     TEXT NOT NULL DEFAULT '',
   description   TEXT NOT NULL DEFAULT '',
   photo         TEXT,
+  single_photo  TEXT,                            -- the meal-for-one picture; NULL means use photo
   halal         INTEGER NOT NULL DEFAULT 0,
   allergens     TEXT NOT NULL DEFAULT '[]',
   dismissed     TEXT NOT NULL DEFAULT '[]',
@@ -93,6 +94,7 @@ CREATE TABLE IF NOT EXISTS week_items (
   name          TEXT NOT NULL DEFAULT '',
   description   TEXT NOT NULL DEFAULT '',
   photo         TEXT,
+  single_photo  TEXT,                            -- the meal-for-one picture; NULL means use photo
   halal         INTEGER NOT NULL DEFAULT 0,
   allergens     TEXT NOT NULL DEFAULT '[]',
   dismissed     TEXT NOT NULL DEFAULT '[]',
@@ -121,6 +123,7 @@ CREATE TABLE IF NOT EXISTS standing_items (
   subcategory   TEXT NOT NULL DEFAULT 'Mains',
   description   TEXT NOT NULL DEFAULT '',
   photo         TEXT,
+  single_photo  TEXT,                            -- the meal-for-one picture; NULL means use photo
   halal         INTEGER NOT NULL DEFAULT 0,
   allergens     TEXT NOT NULL DEFAULT '[]',
   dismissed     TEXT NOT NULL DEFAULT '[]',
@@ -305,6 +308,7 @@ CREATE TABLE IF NOT EXISTS saved_dishes (
   name          TEXT NOT NULL,
   description   TEXT NOT NULL DEFAULT '',
   photo         TEXT,
+  single_photo  TEXT,                            -- the meal-for-one picture; NULL means use photo
   halal         INTEGER NOT NULL DEFAULT 0,
   allergens     TEXT NOT NULL DEFAULT '[]',
   dismissed     TEXT NOT NULL DEFAULT '[]',
@@ -923,6 +927,25 @@ for (const [table, nameCol] of [
     console.warn(`[db] Payment instructions now send e-transfers to ${NEW_PAY_EMAIL}.`);
   }
 }
+
+/* A second photo, for the smaller size.
+ *
+ * `photo` stays what it has always been: the dish. This is the optional
+ * second picture of the meal-for-one portion, and it is read as a fallback
+ * chain rather than a requirement — a dish with one photo shows that photo
+ * against both sizes, which is what happens to every row already stored and
+ * to every dish the kitchen only photographs once.
+ *
+ * Added down here, below the week_items rebuilds, and that position is
+ * load-bearing. Those rebuilds copy `PRAGMA table_info` into a CREATE TABLE
+ * with a column list written out by hand; a column added above them appears
+ * in the copy and not in the destination, and the INSERT fails on boot for
+ * every database old enough to still need rebuilding.
+ */
+addColumn('service_days', 'single_photo', 'TEXT');
+addColumn('week_items', 'single_photo', 'TEXT');
+addColumn('standing_items', 'single_photo', 'TEXT');
+addColumn('saved_dishes', 'single_photo', 'TEXT');
 
 /* --- Settings accessors -------------------------------------------------- */
 const getRow = db.prepare('SELECT value FROM settings WHERE key = ?');

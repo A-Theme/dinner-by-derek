@@ -94,6 +94,56 @@ function reviewFlag(item, label) {
 }
 
 /**
+ * One photo box. The editor renders it twice — the dish, then the optional
+ * meal-for-one — and the two are identical apart from the field they write to,
+ * which is what lets admin.js wire them with the same code.
+ *
+ * Everything inside is found relative to [data-photoslot], not to the editor.
+ * While there was one box per editor these were editor-wide lookups; with two,
+ * an editor-wide querySelector returns the first box for both, and the second
+ * box's camera button fills in the first box's picture.
+ */
+function photoSlot({ prefix, field, label, value, hint = '', optional = false }) {
+  const name = `${prefix}_${field}`;
+  return html`
+  <div data-photoslot style="margin-bottom:var(--dbd-sp-4)">
+    <label for="${name}_take">${label}${optional ? html` <span class="variant__label">(optional)</span>` : ''}</label>
+    ${hint ? html`<p class="variant__label" style="margin-bottom:var(--dbd-sp-2)">${hint}</p>` : ''}
+    <!-- Buttons first, dropzone second, and it matters which way round.
+         The dropzone came first and said "Tap to choose a photo" in bold. On a
+         phone it measured 271x158 against the button's 271x51 — three times
+         the area, above it, and instructing a tap. So the owner tapped it, got
+         the photo library, and reported that Take photo did not open the
+         camera. It never ran. The camera was working the whole time.
+         A phone cannot drag and does not paste, so the box below is desktop
+         affordance; the two things a phone can actually do now come first, and
+         taking a photo is the one Derek does standing over the food. -->
+    <div class="dl-row" style="margin-bottom:var(--dbd-sp-3)">
+      <button type="button" class="btn btn--primary" id="${name}_take" data-take>Take photo</button>
+      <button type="button" class="btn btn--secondary" data-choose>Choose from library</button>
+      <button type="button" class="btn btn--secondary" data-clearphoto${value ? '' : ' hidden'}>Remove photo</button>
+    </div>
+    <div class="dropzone" data-drop tabindex="0" role="button">
+      ${value ? html`<img src="/uploads/${value}" alt="">` : ''}
+      <p><strong>Or drag a photo here</strong><br>
+        <span class="variant__label">or paste one from the clipboard. iPhone HEIC is fine.</span></p>
+      <div class="progress" hidden><div></div></div>
+      <p class="dz-msg variant__label"></p>
+    </div>
+    <!-- Outside the dropzone, deliberately. input.click() fires a real click on
+         the input and it bubbles: while these sat inside, Take photo called
+         cam.click(), the event rose into the dropzone's own click handler,
+         which saw an INPUT rather than a BUTTON and opened the photo library
+         over the camera. Nothing renders here — they are hidden, and admin.js
+         finds them from the slot rather than from the dropzone — so the only
+         thing their position controls is what their clicks bubble through. -->
+    <input type="file" accept="image/*,.heic,.heif" hidden data-file>
+    <input type="file" accept="image/*" capture="environment" hidden data-camera>
+    <input type="hidden" name="${name}" value="${value || ''}" data-photo>
+  </div>`;
+}
+
+/**
  * The item editor. Used unchanged for all three levels — the allergen gate,
  * variants and photo behave identically whether the owner is editing a
  * featured dish, the week's soup, or a standing item.
@@ -157,38 +207,15 @@ function itemEditor({ prefix, item, showName = true, nameLabel = 'Name', showWee
 
     ${showPhoto ? html`
     <div class="ie-photo">
-    <label>Photo</label>
-    <!-- Buttons first, dropzone second, and it matters which way round.
-         The dropzone came first and said "Tap to choose a photo" in bold. On a
-         phone it measured 271x158 against the button's 271x51 — three times
-         the area, above it, and instructing a tap. So the owner tapped it, got
-         the photo library, and reported that Take photo did not open the
-         camera. It never ran. The camera was working the whole time.
-         A phone cannot drag and does not paste, so the box below is desktop
-         affordance; the two things a phone can actually do now come first, and
-         taking a photo is the one Derek does standing over the food. -->
-    <div class="dl-row" style="margin-bottom:var(--dbd-sp-3)">
-      <button type="button" class="btn btn--primary" data-take>Take photo</button>
-      <button type="button" class="btn btn--secondary" data-choose>Choose from library</button>
-      ${item.photo ? html`<button type="button" class="btn btn--secondary" data-clearphoto>Remove photo</button>` : ''}
-    </div>
-    <div class="dropzone" data-drop tabindex="0" role="button">
-      ${item.photo ? html`<img src="/uploads/${item.photo}" alt="">` : ''}
-      <p><strong>Or drag a photo here</strong><br>
-        <span class="variant__label">or paste one from the clipboard. iPhone HEIC is fine.</span></p>
-      <div class="progress" hidden><div></div></div>
-      <p class="dz-msg variant__label"></p>
-    </div>
-    <!-- Outside the dropzone, deliberately. input.click() fires a real click on
-         the input and it bubbles: while these sat inside, Take photo called
-         cam.click(), the event rose into the dropzone's own click handler,
-         which saw an INPUT rather than a BUTTON and opened the photo library
-         over the camera. Nothing renders here — they are hidden, and admin.js
-         finds them from the editor rather than from the dropzone — so the only
-         thing their position controls is what their clicks bubble through. -->
-    <input type="file" accept="image/*,.heic,.heif" hidden data-file>
-    <input type="file" accept="image/*" capture="environment" hidden data-camera>
-    <input type="hidden" name="${prefix}_photo" value="${item.photo || ''}" data-photo>
+      ${photoSlot({ prefix, field: 'photo', label: 'Photo', value: item.photo,
+        hint: showPrices
+          ? 'Shown on the card, and against both sizes unless you add a second photo below.'
+          : '' })}
+      ${showPrices ? photoSlot({
+        prefix, field: 'single_photo', label: 'Meal-for-one photo', optional: true,
+        value: item.single_photo,
+        hint: 'Only if the smaller size looks different enough to be worth its own picture. Leave it empty and the photo above is used for both sizes.',
+      }) : ''}
     </div>` : ''}
 
     ${showHalal ? html`

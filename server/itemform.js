@@ -57,6 +57,8 @@ function parse(body, prefix, { withWeekdays = false } = {}) {
     name,
     description,
     photo: String(body[`${prefix}_photo`] || '').trim() || null,
+    // Optional. Null means the dish has one picture and both sizes show it.
+    single_photo: String(body[`${prefix}_single_photo`] || '').trim() || null,
     halal: body[`${prefix}_halal`] ? 1 : 0,
     allergens: JSON.stringify(jsonArr(body[`${prefix}_allergens`])),
     dismissed: JSON.stringify(jsonArr(body[`${prefix}_dismissed`])),

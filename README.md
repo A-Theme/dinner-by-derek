@@ -209,7 +209,9 @@ Authored in **This Week**, one box per weekday — Monday through Sunday. Fill i
 whichever days you're cooking and leave the rest blank. Each box is the same
 full editor the soup and salad get: name, description, photo, halal flag,
 allergen review, and both size variants with their own labels, prices and
-counts. The "Week starts" date decides which seven calendar dates the boxes
+counts. A dish can carry a second photo of the meal-for-one portion; leave it
+empty and the one photo is shown against both sizes, which is what almost
+every dish does. The "Week starts" date decides which seven calendar dates the boxes
 point at — moving it only re-labels the boxes, it never touches a day you've
 already filled in.
 

@@ -347,6 +347,25 @@ a { color: var(--dbd-olive-deep); }
    of nothing under it, all of it opening the lightbox. */
 .photozoom--optioncard__photo { flex: none; align-self: flex-start; }
 
+/* --- A dish photographed at both sizes ----------------------------------
+   Two pictures, each captioned with the size it is, above the price rows.
+   Only drawn when the second photo exists and both sizes are for sale, so a
+   dish with one picture is laid out exactly as it was. */
+.photopair { display: grid; gap: var(--dbd-sp-2); }
+/* Side by side under the headline dish, which is full-bleed at the top of the
+   card and has the width to halve. */
+.photopair--featured { grid-template-columns: 1fr 1fr; }
+.photopair--featured .featured__photo { aspect-ratio: 1 / 1; }
+/* Stacked in an option card, which is a row -- photo beside text. Two of them
+   side by side would take 160px off a 375px phone and leave the description
+   in a column three words wide. */
+.photopair--option { grid-template-columns: 1fr; flex: none; align-self: flex-start; }
+.photopair__item { margin: 0; }
+.photopair__cap {
+  font-size: var(--dbd-step--1); color: var(--dbd-tan-deep);
+  text-align: center; padding-top: var(--dbd-sp-1);
+}
+
 /* The box takes the shape of the picture rather than the picture being letter-
    boxed into a fixed box: Derek shoots on a phone, so most of these are taller
    than they are wide, and a portrait photo in a 4:3 frame is mostly empty

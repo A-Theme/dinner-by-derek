@@ -148,12 +148,12 @@ router.post('/other-options', (req, res) => {
   const f = standingFields(req.body);
   if (!f.name) return back(res, req, null, 'Give the item a name first.');
   db.prepare(`INSERT INTO standing_items
-    (name, subcategory, description, photo, halal, allergens, dismissed, ack, ack_of,
+    (name, subcategory, description, photo, single_photo, halal, allergens, dismissed, ack, ack_of,
      availability, weekdays, full_on, full_label, full_price, full_cap,
      single_on, single_label, single_price, single_cap, sort)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
       (SELECT COALESCE(MAX(sort),0)+1 FROM standing_items))`)
-    .run(f.name, f.subcategory, f.description, f.photo, f.halal, f.allergens, f.dismissed,
+    .run(f.name, f.subcategory, f.description, f.photo, f.single_photo, f.halal, f.allergens, f.dismissed,
       f.ack, f.ack_of, f.availability, f.weekdays, f.full_on, f.full_label, f.full_price,
       f.full_cap, f.single_on, f.single_label, f.single_price, f.single_cap);
   res.redirect(303, `/admin/other-options?ok=${encodeURIComponent(`${f.name} added.${f.ack ? '' : ' It stays hidden until you complete its allergen review.'}`)}`);
@@ -161,11 +161,11 @@ router.post('/other-options', (req, res) => {
 
 router.post('/other-options/:id', (req, res) => {
   const f = standingFields(req.body);
-  db.prepare(`UPDATE standing_items SET name=?, subcategory=?, description=?, photo=?,
+  db.prepare(`UPDATE standing_items SET name=?, subcategory=?, description=?, photo=?, single_photo=?,
     halal=?, allergens=?, dismissed=?, ack=?, ack_of=?, availability=?, weekdays=?,
     full_on=?, full_label=?, full_price=?, full_cap=?, single_on=?, single_label=?,
     single_price=?, single_cap=? WHERE id=?`)
-    .run(f.name, f.subcategory, f.description, f.photo, f.halal, f.allergens, f.dismissed,
+    .run(f.name, f.subcategory, f.description, f.photo, f.single_photo, f.halal, f.allergens, f.dismissed,
       f.ack, f.ack_of, f.availability, f.weekdays, f.full_on, f.full_label, f.full_price,
       f.full_cap, f.single_on, f.single_label, f.single_price, f.single_cap,
       Number(req.params.id));
@@ -202,12 +202,12 @@ router.post('/other-options/:id/duplicate', (req, res) => {
   const it = db.prepare('SELECT * FROM standing_items WHERE id=?').get(Number(req.params.id));
   if (!it) return back(res, req, null, 'That item no longer exists.');
   db.prepare(`INSERT INTO standing_items
-    (name, subcategory, description, photo, halal, allergens, dismissed, ack, ack_of,
+    (name, subcategory, description, photo, single_photo, halal, allergens, dismissed, ack, ack_of,
      availability, weekdays, active, full_on, full_label, full_price, full_cap,
      single_on, single_label, single_price, single_cap, sort)
-    VALUES (?,?,?,?,?,?,?,0,NULL,?,?,0,?,?,?,?,?,?,?,?,
+    VALUES (?,?,?,?,?,?,?,?,0,NULL,?,?,0,?,?,?,?,?,?,?,?,
       (SELECT COALESCE(MAX(sort),0)+1 FROM standing_items))`)
-    .run(`${it.name} (copy)`, it.subcategory, it.description, it.photo, it.halal,
+    .run(`${it.name} (copy)`, it.subcategory, it.description, it.photo, it.single_photo, it.halal,
       it.allergens, it.dismissed, it.availability, it.weekdays, it.full_on,
       it.full_label, it.full_price, it.full_cap, it.single_on, it.single_label,
       it.single_price, it.single_cap);
