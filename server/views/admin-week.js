@@ -80,23 +80,43 @@ function weekPage({ week, days, items, hasPrevious }) {
       Anything filled in below is kept, but none of it is shown. Reopen it at the bottom of this page.</div>` : ''}
 
     <!-- 0. Derek's post, pasted.
-         First on the page because it is the fastest way to fill the whole
-         week, and because it is the only one of these that works standing in a
-         kitchen with a phone. Everything below it still does what it did. -->
+         First on the page because it is the fastest way to fill the whole week,
+         and because it is the only one of these that works standing in a kitchen
+         with a phone. Everything below it still does what it did.
+
+         THE BOX IS AN INPUT AND HAS TO LOOK LIKE ONE. It first shipped labelled
+         "Derek's post" with a greyed-out sample menu behind it and a button
+         reading "Read it", and it was read as a box that would fill itself —
+         the owner tapped the button on an empty box and reported that nothing
+         appeared. Nothing was going to: there is no path from here to Facebook,
+         which is the entire reason this is a paste box. So the steps are on the
+         card, the label is an instruction, the placeholder says what to do
+         instead of showing fake content, and the button says what it reads.
+         Same mistake the photo dropzone made when it said "Tap to choose a
+         photo" above the camera button. -->
     <div class="card">
-      <h2>Paste Derek's post</h2>
-      <p class="also">Hold your finger on the menu post on Facebook, copy it, and paste the whole
-        thing in here. The next page shows what it read — days, prices, soup, salad and dessert —
-        for you to correct before any of it goes on the week. <strong>Nothing is written until you
-        say so on that page.</strong></p>
+      <h2>Put this week's menu in</h2>
+      <p class="also">This copies Derek's Facebook post across. It does not fetch anything —
+        you copy it, you paste it, and it reads what you pasted.</p>
+      <ol class="paste-steps">
+        <li>Open the <strong>Dinner by Derek</strong> page on Facebook and find this week's
+          menu post.</li>
+        <li>Tap <strong>See more</strong> if the post is cut short — the menu is usually
+          below the fold.</li>
+        <li>Press and hold the post, then <strong>Copy</strong>.</li>
+        <li>Press and hold the box below, then <strong>Paste</strong>.</li>
+        <li>Tap <strong>Read what I pasted</strong>.</li>
+      </ol>
       <form method="post" action="/admin/week/${week.id}/paste">
-        <label for="post">Derek's post</label>
+        <label for="post">Paste Derek's post here</label>
         <textarea id="post" name="post" rows="8"
-          placeholder="Menu - August 30th to September 2nd&#10;Soup ... $12 a litre ...&#10;Sunday - braised short ribs with mashed potatoes and vegetables $50&#10;Meatless Monday - ..."></textarea>
-        <button class="btn btn--primary btn--block" type="submit">Read it</button>
+          placeholder="Paste the whole post — the day lines, the prices, the soups, the salads and the dessert. Anything else in it is ignored."></textarea>
+        <button class="btn btn--primary btn--block" type="submit">Read what I pasted</button>
       </form>
-      <p class="also">Dishes arrive with no allergen tags and no review, however they got here.
-        Roughly seven boxes still need ticking below before the week can publish.</p>
+      <p class="also">The next page shows what it made of the post — every day, price and
+        name in a box you can correct. <strong>Nothing goes on the week until you confirm
+        it there.</strong> Dishes arrive with no allergen tags and no review, however they
+        got here, so they still need ticking below before the week can publish.</p>
     </div>
 
     ${hasPrevious ? html`

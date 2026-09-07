@@ -289,6 +289,11 @@ details.daycard-edit > summary { cursor: pointer; font-family: var(--dbd-display
   margin: var(--dbd-sp-2) 0 var(--dbd-sp-2);
 }
 
+/* The steps on the paste card. Numbers, because they are done in order and
+   the whole point of the rewrite is that the order was not obvious. */
+.paste-steps { margin: 0 0 var(--dbd-sp-4); padding-left: var(--dbd-sp-5); }
+.paste-steps li { margin-bottom: var(--dbd-sp-2); }
+
 /* The pasted post, read back.
  *
  * One card per line of the post, and the tick that decides whether the line

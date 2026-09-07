@@ -2420,7 +2420,20 @@ const PAST_DATE = T.addDays(today, -2);
       new RegExp(`action="/admin/week/${pasteId}/paste"`).test(weekPage.text));
     ok('with a textarea to paste it into', /name="post" rows="8"/.test(weekPage.text));
     ok('and a button a thumb can hit',
-      /class="btn btn--primary btn--block" type="submit">Read it</.test(weekPage.text));
+      /class="btn btn--primary btn--block" type="submit">Read what I pasted</.test(weekPage.text));
+
+    /* The card has to say that the copying is the owner's job. It first shipped
+       reading as a box that would fill itself from Facebook, the button was
+       tapped on an empty box, and nothing happened because nothing was ever
+       going to. These are the words that stop that. */
+    ok('the card says it fetches nothing', /It does not fetch anything/.test(weekPage.text));
+    ok('and spells out the copy and paste', /paste-steps/.test(weekPage.text)
+      && /Copy<\/strong>/.test(weekPage.text) && /Paste<\/strong>/.test(weekPage.text));
+    ok('the label tells you to paste rather than naming the box',
+      /Paste Derek's post here/.test(weekPage.text));
+    ok('and the placeholder instructs instead of showing a fake menu',
+      /placeholder="Paste the whole post/.test(weekPage.text)
+      && !/placeholder="Menu - /.test(weekPage.text));
 
     /* Step one reads and shows. It must not write. */
     const preview = await POST(`/admin/week/${pasteId}/paste`, { post: POSTED });
