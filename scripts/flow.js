@@ -2422,6 +2422,16 @@ const PAST_DATE = T.addDays(today, -2);
     ok('and a button a thumb can hit',
       /class="btn btn--primary btn--block" type="submit">Read what I pasted</.test(weekPage.text));
 
+    /* Nothing on This Week opens itself. An empty day used to render its
+       whole item editor expanded, so a fresh week was seven of them stacked
+       down the page and the finished days scrolled off the bottom. The summary
+       line already says what each day holds. */
+    ok('no day box ships open', !/<details class="daycard-edit" open/.test(weekPage.text));
+    ok('nor any with an open attribute at all',
+      !/class="daycard-edit"[^>]*\sopen/.test(weekPage.text));
+    ok('and the summaries still say what each day holds',
+      /<summary>Monday, /.test(weekPage.text));
+
     /* The card has to say that the copying is the owner's job. It first shipped
        reading as a box that would fill itself from Facebook, the button was
        tapped on an empty box, and nothing happened because nothing was ever

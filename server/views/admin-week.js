@@ -187,12 +187,17 @@ function weekPage({ week, days, items, hasPrevious }) {
       <form method="post" action="/admin/week/${week.id}/weekdays" data-autosave>
         ${dayRows.map(({ wd, date, existing, item }) => {
           return html`
-          <!-- Open only while the day is still empty, so a week in progress
-               shows the boxes still wanting something and keeps the finished
-               ones out of the way. The Save and Load controls sit inside, so
-               they are a tap behind the summary rather than on the page — the
-               trade the owner asked for, a clean page over a visible button. -->
-          <details class="daycard-edit"${existing && (existing.dish_name || existing.closed) ? '' : ' open'}>
+          <!-- Always shut until opened. It used to open itself on any day that
+               was still empty, on the theory that an empty box is a job to do —
+               but a fresh week is seven empty boxes, which is seven full item
+               editors stacked down the page, and the days that ARE done scroll
+               off the bottom. The summary already says what each day holds, so
+               the shut card answers the question the open one was asking.
+
+               The Save and Load controls sit inside, so they are a tap behind
+               the summary rather than on the page — a clean page over a visible
+               button, which is the same trade this makes again. -->
+          <details class="daycard-edit">
             <summary>${T.WEEKDAY_LABELS[wd]}, ${T.fmtMonthDay(date, tz())}
               — ${item.closed ? 'closed' : (item.dish_name || 'nothing yet')}
               ${existing && !item.closed ? V.reviewFlag(item, item.dish_name || 'This dish') : ''}
@@ -362,7 +367,9 @@ function weekPage({ week, days, items, hasPrevious }) {
       const cutoff = T.cutoffFor(d.service_date, cutoffHour, cutoffMin, tz());
       const win = M.pickupWindowFor(d);
       return html`
-      <details class="daycard-edit"${d.dish_name || d.closed ? '' : ' open'}>
+      <!-- Shut too, by the same rule as the boxes above. One page, one
+           behaviour: nothing on it opens itself. -->
+      <details class="daycard-edit">
         <summary>${T.fmtDayLong(d.service_date, tz())} — ${d.closed ? 'closed' : (d.dish_name || 'no dish yet')}
           &nbsp;${d.closed ? html`<span class="flag flag--warn">Closed</span>` : V.reviewFlag(d, d.dish_name || 'This dish')}</summary>
 
