@@ -9,3 +9,7 @@ other local media uploads/
 
 # Local Claude Code session state.
 .claude/
+
+# Remotion skill files, fetched by `npx skills add`. Rebuildable from
+# skills-lock.json, so the copies stay out of the repo.
+.agents/
