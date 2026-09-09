@@ -7,6 +7,7 @@ const T = require('../time');
 const O = require('../orders');
 const FB = require('../facebook');
 const X = require('../exports');
+const S = require('../summary');
 const G = require('../graphics');
 const V = require('../views/admin');
 const { html, money } = require('../html');
@@ -47,6 +48,17 @@ strict.get('/export/orders.csv', auth.requiredStrict, (req, res) => {
   res.set('Content-Type', 'text/csv; charset=utf-8');
   res.set('Content-Disposition', `attachment; filename="${X.filename('orders', req.query.date, 'csv')}"`);
   res.send(body);
+});
+
+/* The week's lines, for a spreadsheet. The date names a week rather than a day
+   and is normalised to its Monday, so a link built out of a service date lands
+   on the week that date falls in rather than 404ing on a Wednesday. */
+strict.get('/export/week.csv', auth.requiredStrict, (req, res) => {
+  const asked = X.one(req.query.week);
+  const monday = T.mondayOf(T.isCalendarDate(asked) ? asked : T.todayIn(tz()));
+  res.set('Content-Type', 'text/csv; charset=utf-8');
+  res.set('Content-Disposition', `attachment; filename="${X.filename('week', monday, 'csv')}"`);
+  res.send(S.weekCsv(monday));
 });
 
 strict.get('/export/contacts.csv', auth.requiredStrict, (req, res) => {
@@ -242,6 +254,115 @@ strict.get('/sheet/delivery/:date', auth.requiredStrict, (req, res) => {
     ${orders.length ? '' : html`<p>No deliveries for this day.</p>`}`;
 
   res.type('html').send(String(sheetShell('Delivery run', body)));
+});
+
+/**
+ * The week, added up — the one sheet that is read after the cooking rather
+ * than during it.
+ *
+ * Not wrapped in `.sheet` and not auto-printing, unlike the three above. Those
+ * are a document for one day, opened to be printed; this one is browsed —
+ * back a week, forward a week, and out to the day sheets — and a page that
+ * throws up a print dialog every time you step to the week before is a page
+ * nobody steps through. The Print button is there for when it is wanted.
+ *
+ * Any date in the week is accepted and folded to its Monday, so the links off
+ * the Orders screen can carry a service date without knowing the rule.
+ */
+strict.get('/sheet/week', auth.requiredStrict, (req, res) => {
+  const asked = X.one(req.query.week);
+  const monday = T.mondayOf(T.isCalendarDate(asked) ? asked : T.todayIn(tz()));
+  res.redirect(303, `/admin/sheet/week/${monday}`);
+});
+
+strict.get('/sheet/week/:date', auth.requiredStrict, (req, res) => {
+  const date = sheetDate(req, res);
+  if (!date) return;
+  const monday = T.mondayOf(date);
+  const s = S.weekSummary(monday);
+  const weeks = S.weeksWithOrders();
+
+  const cols = html`<thead><tr>
+    <th>Item</th><th>Size</th><th style="text-align:right">Price</th>
+    <th style="text-align:right">Sold</th><th style="text-align:right">Money</th>
+  </tr></thead>`;
+
+  /* `days` is set on the week roll-up only, and only says something worth
+     saying when a dish ran more than once: eight sold over two nights and eight
+     sold in one are not the same result. */
+  const rows = (g) => g.items.map((i) => html`<tr>
+    <td data-label="Item">${i.item_name}${i.days > 1
+      ? html` <span class="variant__label">on ${i.days} days</span>` : ''}</td>
+    <td data-label="Size">${i.variant_label}</td>
+    <td data-label="Price" style="text-align:right">${i.mixed ? html`<span class="variant__label">mixed</span>` : money(i.unit_price)}</td>
+    <td data-label="Sold" style="text-align:right"><strong>${i.qty}</strong></td>
+    <td data-label="Money" style="text-align:right">${money(i.revenue)}</td>
+  </tr>`);
+
+  /* Food, delivery and total on one line, then what has actually arrived. Paid
+     is money in the bank; outstanding is the number to chase, and it is spelled
+     out rather than left as a subtraction for the reader to do. */
+  const takings = (t) => html`<p class="variant__label">Food ${money(t.food)}
+    · Delivery ${money(t.fees)}
+    · <strong style="font-size:var(--dbd-step-1)">Total ${money(t.total)}</strong>
+    · Paid ${money(t.paid)}${t.outstanding
+      ? html` · <span class="flag flag--warn">${money(t.outstanding)} outstanding</span>` : ''}</p>`;
+
+  const counts = (t) => html`${t.orders} order${t.orders === 1 ? '' : 's'}
+    · ${t.pickups} pickup · ${t.deliveries} delivery`;
+
+  const body = html`
+    <h1>Week totals — ${T.fmtWeekRange(monday, tz())}</h1>
+    <p class="also">Confirmed orders only, by the day the food was for.${s.pending
+      ? html` <span class="flag flag--warn">${s.pending} late request${s.pending === 1 ? '' : 's'}</span>
+        ${s.pending === 1 ? 'is' : 'are'} still waiting on you and ${s.pending === 1 ? 'is' : 'are'}
+        not counted here — <a href="/admin/orders?status=late_request">Orders</a>.` : ''}${s.declined
+      ? html` ${s.declined} declined request${s.declined === 1 ? '' : 's'} ${s.declined === 1 ? 'is' : 'are'} left out.` : ''}</p>
+
+    <form method="get" action="/admin/sheet/week" class="card no-print">
+      <div class="dl-row">
+        <select name="week" style="flex:1 1 220px">
+          ${weeks.includes(monday) ? '' : html`<option value="${monday}" selected>${T.fmtWeekRange(monday, tz())}</option>`}
+          ${weeks.map((m) => html`<option value="${m}"${m === monday ? ' selected' : ''}>${T.fmtWeekRange(m, tz())}</option>`)}
+        </select>
+        <button class="btn btn--secondary" type="submit">Show that week</button>
+        <a class="btn btn--secondary" href="/admin/sheet/week/${T.addDays(monday, -7)}">&larr; Week before</a>
+        <a class="btn btn--secondary" href="/admin/sheet/week/${T.addDays(monday, 7)}">Week after &rarr;</a>
+      </div>
+      <div class="dl-row">
+        <button class="btn btn--primary" type="button" data-print>Print or save as PDF</button>
+        <a class="btn btn--secondary" href="/admin/export/week.csv?week=${monday}">Week CSV</a>
+        <a class="btn btn--secondary" href="/admin/orders">Back to orders</a>
+      </div>
+      <p class="also">The CSV holds one row per item per day, plus a row for each
+        day's delivery fees. It carries no totals of its own — the Money column
+        adds up to the week, and the sums are on this page.</p>
+    </form>
+
+    ${s.empty ? html`<div class="card"><p>No confirmed orders for this week.</p></div>` : ''}
+
+    ${s.days.map((d) => html`<div class="card week-day">
+      <h2>${T.fmtDayLong(d.date, tz())}${d.dish_name ? ` — ${d.dish_name}` : ''}</h2>
+      <p class="variant__label">${d.closed ? html`<em>Kitchen closed.</em> ` : ''}${counts(d)}
+        <span class="no-print">· <a href="/admin/sheet/kitchen/${d.date}">Kitchen</a>
+        · <a href="/admin/orders?date=${d.date}">Orders</a></span></p>
+      ${d.sections.length ? d.sections.map((g) => html`
+        <h3>${g.name}</h3>
+        <table class="dtable">${cols}<tbody>${rows(g)}</tbody></table>`)
+        : html`<p>Nothing sold on this day.</p>`}
+      ${d.orders ? takings(d) : ''}
+    </div>`)}
+
+    ${s.empty ? '' : html`<div class="card week-total">
+      <h2>The whole week</h2>
+      <p class="variant__label">${counts(s.week)}</p>
+      ${s.week.sections.map((g) => html`
+        <h3>${g.name}</h3>
+        <table class="dtable">${cols}<tbody>${rows(g)}</tbody></table>`)}
+      ${takings(s.week)}
+    </div>`}`;
+
+  res.type('html').send(String(V.shell({ title: 'Week totals', body, current: 'weektotals' })));
 });
 
 /* Everything below is behind the ordinary redirect-to-login guard: these are

@@ -343,4 +343,13 @@ details.daycard-edit > summary { cursor: pointer; font-family: var(--dbd-display
   .dtable td { display: table-cell; }
   .dtable td::before { content: none; }
   .allergy-note { border: 1.5pt solid var(--dbd-espresso-2); padding: 4pt; font-size: 12pt; }
+
+  /* Week totals runs to more than one page by design — a day per block, then
+     the week. What must not happen is a day's heading printing at the foot of
+     one page with its table on the next, so the headings hold on to what
+     follows them and the blocks are free to break where they need to. */
+  .week-day h2, .week-day h3, .week-total h2, .week-total h3 {
+    page-break-after: avoid; break-after: avoid;
+  }
+  .week-day, .week-total { page-break-inside: auto; }
 }

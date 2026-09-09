@@ -49,6 +49,7 @@ ${extraHead || ''}
   <li><a href="/admin/recipes"${here('recipes')}>Recipes</a></li>
   <li><a href="/admin/other-options"${here('other')}>Other Options</a></li>
   <li><a href="/admin/orders"${here('orders')}>Orders</a></li>
+  <li><a href="/admin/sheet/week/${T.todayIn(settings.get('timezone', 'America/Toronto'))}"${here('weektotals')}>Week Totals</a></li>
   <li><a href="/admin/payments"${here('payments')}>Payments</a></li>
   <li><a href="/admin/locations"${here('locations')}>Locations &amp; Delivery</a></li>
   <li><a href="/admin/graphics"${here('graphics')}>Graphics</a></li>

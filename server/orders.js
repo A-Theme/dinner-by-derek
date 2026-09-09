@@ -394,6 +394,32 @@ function byRef(ref) {
   return db.prepare('SELECT * FROM orders WHERE ref = ?').get(ref);
 }
 
+/**
+ * The order the kitchen reads a list in: the featured dish first, then soups,
+ * salads and everything else. Shared rather than copied, because the day sheet
+ * and the week's totals have to agree about what a section is called and where
+ * it sits — a line filed under "Featured" on one page and under "Mains" on the
+ * other is the same food counted twice by somebody comparing them.
+ */
+const SECTION_ORDER = { Featured: 0, Soups: 1, Salads: 2, Mains: 3 };
+
+/* A line's section. Featured is a level, not a subcategory: the featured dish
+   carries whatever subcategory it was filed under, and the day it ran is the
+   thing worth seeing. */
+const sectionOf = (row) => (row.source_level === 'Featured' ? 'Featured' : row.subcategory);
+
+function groupBySection(rows) {
+  const groups = new Map();
+  for (const r of rows) {
+    const g = sectionOf(r);
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(r);
+  }
+  return [...groups.entries()]
+    .sort((a, b) => (SECTION_ORDER[a[0]] ?? 9) - (SECTION_ORDER[b[0]] ?? 9))
+    .map(([name, items]) => ({ name, items }));
+}
+
 /** Kitchen totals for a service day: featured first, then Soups/Salads/Mains. */
 function kitchenTotals(serviceDate) {
   const rows = db.prepare(`
@@ -404,21 +430,12 @@ function kitchenTotals(serviceDate) {
     GROUP BY l.source_level, l.subcategory, l.item_name, l.variant_label
     ORDER BY l.item_name`).all(serviceDate);
 
-  const order = { Featured: 0, Soups: 1, Salads: 2, Mains: 3 };
-  const groups = new Map();
-  for (const r of rows) {
-    const g = r.source_level === 'Featured' ? 'Featured' : r.subcategory;
-    if (!groups.has(g)) groups.set(g, []);
-    groups.get(g).push(r);
-  }
   const split = db.prepare(`
     SELECT method, COUNT(*) n FROM orders
     WHERE service_date = ? AND status = 'confirmed' GROUP BY method`).all(serviceDate);
 
   return {
-    groups: [...groups.entries()]
-      .sort((a, b) => (order[a[0]] ?? 9) - (order[b[0]] ?? 9))
-      .map(([name, items]) => ({ name, items })),
+    groups: groupBySection(rows),
     split: {
       pickup: (split.find((s) => s.method === 'pickup') || {}).n || 0,
       delivery: (split.find((s) => s.method === 'delivery') || {}).n || 0,
@@ -460,5 +477,5 @@ function remove(id) {
 
 module.exports = {
   create, quote, remove, linesOf, byRef, kitchenTotals, OrderError,
-  PAYMENT_METHODS, PAYMENT_LABEL,
+  PAYMENT_METHODS, PAYMENT_LABEL, groupBySection, sectionOf,
 };

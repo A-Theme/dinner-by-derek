@@ -3770,6 +3770,88 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
   db.prepare('DELETE FROM weeks WHERE id = ?').run(wid);
 }
 
+/* --- The week, added up ------------------------------------------------------
+   The numbers on this page are the ones the owner reads after the week is over
+   and compares against the bank, so what is checked here is mostly what must
+   NOT be in them: a late request nobody has agreed to, a declined one, and a
+   price that changed mid-week averaged into one nobody was charged. */
+{
+  const S = require('../server/summary');
+  const monday = T.mondayOf('2026-03-04');            // the Wednesday
+  const tue = T.addDays(monday, 1);
+  const wed = T.addDays(monday, 2);
+  const thu = T.addDays(monday, 3);
+
+  const wid = db.prepare("INSERT INTO weeks (slug, title, week_start, status) VALUES (?,?,?,'published')")
+    .run('totals-week', 'Totals week', monday).lastInsertRowid;
+  for (const [d, dish] of [[tue, 'Beef Stew'], [wed, 'Beef Stew'], [thu, 'Nobody Ordered']]) {
+    db.prepare('INSERT INTO service_days (week_id, service_date, dish_name) VALUES (?,?,?)')
+      .run(wid, d, dish);
+  }
+
+  let n = 0;
+  const place = (date, status, method, food, fee, paid, lines) => {
+    const id = db.prepare(`INSERT INTO orders
+      (ref, week_id, service_date, status, name, phone, method, subtotal, delivery_fee, total, paid)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(`WK-${++n}`, wid, date, status, `Customer ${n}`, '5195550000', method,
+        food, fee, food + fee, paid).lastInsertRowid;
+    for (const [name, price, qty] of lines) {
+      db.prepare(`INSERT INTO order_lines
+        (order_id, source_level, ref_table, ref_id, item_name, subcategory, variant, variant_label, unit_price, qty)
+        VALUES (?, 'Featured', 'service_days', 0, ?, 'Mains', 'full', 'Full size', ?, ?)`)
+        .run(id, name, price, qty);
+    }
+  };
+
+  place(tue, 'confirmed', 'pickup', 3000, 0, 1, [['Beef Stew', 1500, 2]]);
+  place(tue, 'confirmed', 'delivery', 1500, 500, 0, [['Beef Stew', 1500, 1]]);
+  place(wed, 'confirmed', 'pickup', 1600, 0, 0, [['Beef Stew', 1600, 1]]);
+  place(tue, 'late_request', 'pickup', 9900, 0, 0, [['Beef Stew', 9900, 1]]);
+  place(wed, 'declined', 'pickup', 9900, 0, 0, [['Beef Stew', 9900, 1]]);
+
+  const s = S.weekSummary(monday);
+  check('a day with a menu and no orders is still printed',
+    s.days.map((d) => d.date), [tue, wed, thu]);
+
+  const t = s.days[0];
+  check('the day counts its confirmed orders and no others', t.orders, 2);
+  check('and splits them by how they leave the kitchen', [t.pickups, t.deliveries], [1, 1]);
+  check('food and delivery are kept apart', [t.food, t.fees, t.total], [4500, 500, 5000]);
+  check('what has actually arrived is separate from what was owed',
+    [t.paid, t.outstanding], [3000, 2000]);
+  check('the day says how many of the dish went out',
+    t.sections[0].items.map((i) => [i.item_name, i.qty, i.revenue]), [['Beef Stew', 3, 4500]]);
+  check('a day nobody ordered on reads as a zero, not as an absence',
+    [s.days[2].orders, s.days[2].total], [0, 0]);
+
+  const week = s.week.sections[0].items[0];
+  check('the week folds the days together', [week.qty, week.revenue], [4, 6100]);
+  ok('and refuses to average a price that changed mid-week', week.mixed);
+  check('the week total is the food plus the delivery',
+    [s.week.food, s.week.fees, s.week.total], [6100, 500, 6600]);
+  check('a late request is counted but left out of the money', [s.pending, s.week.orders], [1, 3]);
+  check('and so is a declined one', s.declined, 1);
+
+  /* The file is the page's own numbers, and the one thing that must be true of
+     it is that the money column adds up to the week without anybody deleting a
+     row first. */
+  const csv = S.weekCsv(monday);
+  const body = csv.trim().split('\r\n').slice(1).map((r) => r.split(','));
+  check('every day of selling is a row, and each day of delivery one more',
+    body.length, 3);
+  check('the delivery fees are their own row, not a column repeated down one',
+    body.filter((r) => r[2] === 'Delivery').map((r) => [r[7], r[8]]), [['1', '5.00']]);
+  check('and the money column adds up to the week',
+    body.reduce((a, r) => a + Math.round(Number(r[8]) * 100), 0), 6600);
+  ok('a name that would run as a formula cannot',
+    require('../server/exports').csv([["=cmd|'/c calc'!A1"]]).includes("'=cmd"));
+
+  // Orders first: they point at the week, and nothing lets that dangle.
+  db.prepare('DELETE FROM orders WHERE week_id = ?').run(wid);
+  db.prepare('DELETE FROM weeks WHERE id = ?').run(wid);
+}
+
 /* --- Report ---------------------------------------------------------------- */
 console.log(`\nAcceptance checks — Dinner By Derek\n`);
 if (failures.length) {
