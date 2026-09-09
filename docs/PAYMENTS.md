@@ -18,6 +18,28 @@ paid his own way.
 
 <!-- toc -->
 
+## Where this stands — 8 September 2026
+
+Everything on this page is built and deployed. What is worth knowing before
+reading the rest is which parts have actually been exercised.
+
+- **The poller runs.** `server/mailbox.js` has read a mailbox of its own every
+  five minutes since 30 August, on the live server.
+- **`orders@dinnerbyderek.ca` is registered for Autodeposit**, so a
+  notification means money landed rather than money offered — which is the
+  difference between the two Interac emails, and the reason only one of them may
+  be trusted.
+- **One arrangement is outstanding**, and it is not code: the rule in Derek's
+  Outlook forwarding `payments.interac.ca` mail into the poller's inbox. Until
+  it exists the poller correctly finds nothing — and a successful empty poll
+  writes no journal line at all, so working and waiting look identical from
+  outside.
+- **Nothing has been matched yet, because nothing has been ordered.** Read from
+  the live database on 6 September: `payments` is empty and so is `orders`,
+  and `orders` has been empty since the site went up on 29 August. Everything
+  below is proven by the suites and by three real notifications read in August;
+  none of it has yet met a real customer's transfer.
+
 ## The problem this solves
 
 Every order already carries a payment method, because the form asks. That is a
@@ -131,7 +153,10 @@ unclaimed, which is where money nobody has accounted for belongs.
   same message, no timestamp — read as a duplicate and the second is refused.
 - **The mailbox is read on a timer, not watched.** `server/mailbox.js` polls
   every five minutes, so a transfer can be that late showing up. It is off
-  entirely unless `IMAP_HOST` is set, and the paste box never goes away.
+  entirely unless `IMAP_HOST` is set, and the paste box never goes away. A poll
+  that reads nothing logs nothing, by design — so silence means the timer is
+  healthy *or* nothing is reaching the inbox, and only `npm run poll -- --dry`
+  tells the two apart.
 - **A forwarded notification cannot be proved genuine.** The forward strips the
   original's DMARC result, so `IMAP_ALLOW_FROM` is a filter for what is worth
   reading rather than evidence. The reference-and-exact-total rule is what

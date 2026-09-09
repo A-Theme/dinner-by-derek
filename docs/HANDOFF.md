@@ -1,20 +1,20 @@
 ---
-eyebrow: Handoff · 26 August 2026
+eyebrow: Handoff · 8 September 2026
 figures:
-  1180 = checks passing
+  1472 = checks passing
   230 = recipes seeded
   16 = recipe buttons
-  3 = items unreviewed
+  0 = orders taken live
 ---
 
-# Handoff — 26 August 2026
+# Handoff — 8 September 2026
 
-Where the project stands at the end of a long day, and what to pick up next.
+Where the project stands, and what to pick up next.
 
-**This document rots.** The numbers below were read from `data/dinnerbyderek.db`
-and `.env` on the evening of 26 August. Re-read both before acting on any of
-them — that habit is not decoration, it is what produced half the corrections
-made across these three days.
+**This document rots.** Everything below that reads a database was read on the
+date the row says, and the database that matters is on the server. Re-read
+before acting on any of it — that habit is not decoration, it is what produced
+half the corrections in this file.
 
 **`docs/GOING-LIVE.md` owns the go-live sequence.** This file does not repeat it.
 Where the two disagree, that one is the operational document and this one is a
@@ -24,56 +24,56 @@ snapshot of a moment.
 
 ## Where things are
 
-`main` was at `7064c6d` when this was written, clean and in sync with
-`origin/main`, suites green at **720 acceptance, 389 flow**. Re-read on
-29 August, five commits later: **732 acceptance, 389 flow** (`npm test`).
+`main` is at `5a1d6ea`, clean, suites green at **983 acceptance, 489 flow**
+(`npm test`, re-run 8 September). For comparison: 720 / 389 on 26 August,
+764 / 416 on the 30th, 840 / 439 on the 31st.
 
-Re-read again on **30 August** at `c4e484f`: **764 acceptance, 416 flow**. The
-biggest change since the 29th is not in the code — **the app is deployed.** It
-runs on an OVH VPS in Beauharnois, answering `https://dinnerbyderek.ca` under
-systemd, and the week of Aug 31 – Sep 6 published itself on schedule at 20:27
-UTC on the 29th. The two items that headed the next-steps list below — hosting,
-and `BASE_URL` on the real domain — are done.
+**It is deployed and current.** The live server serves the same shell
+fingerprint as `main` — `dbd-shell-6cf352d144`, checked over HTTP on
+8 September — so everything through `5a1d6ea` is on the box, including the
+training dashboard and the second dish photo.
 
-Everything in the table below that reads the *database* was last read on the
-26th and has **not** been re-read since the move: the file that matters now is
-`/var/lib/dinnerbyderek/dinnerbyderek.db` on the server, and the only copy the
-laptop can reach is a development one that has already diverged from it. Treat
-those rows as history rather than as state.
+**The database that matters is on the server**, at
+`/var/lib/dinnerbyderek/dinnerbyderek.db`. The laptop's copy has diverged and is
+a development file. There is no read-only way in with the deploy key —
+connecting with it *is* a deploy — so live figures come from a read-only node
+script run over an interactive SSH login, which last happened on **6 September**.
+Rows below say which reading they are.
 
 ### The database
 
 | | |
 |---|---|
-| Weeks | 1 — week 6, **published** by hand at 16:05 on 23 Aug, starts 24 Aug |
-| Service days | 8 rows; **5 in range** (Aug 24–28), all reviewed |
-| | 3 strays (Aug 18–20) outside the week's dates — see below |
-| Week items | **0** — no soup, salad or dessert on the week |
-| Standing items | 6, of which **3 are unreviewed** and therefore invisible to customers |
-| Saved dishes | 816 |
-| Allergen terms | 479 |
-| Orders | 0 — the test order (`A16C0962`, Aug 25, Pork Souvlaki) was deleted on 30 Aug |
-| Payments | 0 |
-| Recipes | 230, all of them tagged onto one of 16 buttons |
+| Weeks | **1 row, and it is reused** — week `#6`, slug `week-2026-08-16`, its `week_start` moved forward each week rather than a new week being started. Read live 6 Sep. See [Traps](#traps). |
+| Service days | 14 stranded rows (Aug 18 – Oct 5) were cleaned to 0 on 6 Sep, after they had blanked the live menu. Backup taken on the box first. |
+| Week items | `warn: not re-read` — the schema now holds **two soups and two salads** per week as of `913bd89` |
+| Standing items | 6, all reviewed since 30 Aug, so Other Options is visible to customers |
+| Saved dishes | `warn: not re-read` was 816 on 26 Aug |
+| Allergen terms | `warn: not re-read` was 479 on 26 Aug |
+| Orders | **0 — and zero since going live on 29 August.** Read live 6 Sep. Not "none this week": the table has never held a real order. |
+| Payments | 0, which is the correct state while no transfer has arrived |
+| Recipes | 230, tagged onto 16 buttons |
 | Recipes linked to a dish | **0** — the column and the picker exist; nothing populates them |
 
-The three unreviewed standing items are **Breaded Chicken Cutlets**, **Pulled
-Pork (Reheat Bag)** and **BBQ Brisket (Reheat Bag)**. Other Options shows
-customers nothing until each is reviewed. They are the owner's to tick — nobody
-else can mean it.
+**Nobody has ordered through the site yet.** The most likely reason is the
+ordinary one — customers use Facebook and the phone number the footer gives
+them. `scripts/flow.js` drives a real order end to end and passes, so the path
+works in test; it has not been proven against production. Do not read a green
+suite as evidence that live ordering works.
 
 ### `.env`
 
-Read on the 26th. The three rows that could be checked from the server's own
-boot output on the 30th say so; the rest are as they were.
+On the server. Mail rows were established by running the tools against it on
+31 August; the rest as noted.
 
 | In .env | State |
 |---|---|
 | Admin password | **hashed**, and the plaintext line is gone |
 | Session secret | set |
 | `BASE_URL` | `https://dinnerbyderek.ca` since 29 Aug — secure cookies and HSTS follow from the scheme |
+| `SMTP_*` | **set and sending, since 31 Aug.** Cyberimpact relay on 587, `SMTP_FROM=orders@dinnerbyderek.ca`, domain showing DKIM ×2, SPF and DMARC all valid |
+| `IMAP_*` | set since 30 Aug — the poller reads its own Gmail inbox every five minutes |
 | `TOKEN_ENCRYPTION_KEY` | empty; needed only for Facebook one-tap publishing |
-| `SMTP_*` | still empty as of 30 Aug — orders are recorded, nothing is sent. Cyberimpact is chosen and signed up for; the domain validation there is the outstanding step |
 | `FB_APP_ID` / `FB_APP_SECRET` | empty; copy-and-paste publishing works without them |
 | `NODE_ENV` / `TRUST_PROXY` | **both correct, established 2026-08-30** — production cache headers prove `NODE_ENV=production`, and the boot output's silence then proves `TRUST_PROXY` is on |
 
@@ -81,44 +81,203 @@ boot output on the 30th say so; the rest are as they were.
 
 ## Next steps
 
-~~1. **Hosting.**~~ **Done, 29 August.** OVHcloud VPS-1 in Beauharnois, Quebec —
-   chosen so customer names, phones and delivery addresses stay in Canada, not for
-   latency. Ubuntu 24.04, nginx, systemd unit `dinnerbyderek`.
+**Four of the five things this list used to hold are done.** Hosting, on
+29 August — an OVHcloud VPS-1 in Beauharnois, Quebec, chosen so customer names,
+phones and delivery addresses stay in Canada rather than for latency, on Ubuntu
+24.04 behind nginx as the systemd unit `dinnerbyderek`. `BASE_URL` on the real
+domain the same day, which is also what turns the secure cookie and HSTS on,
+because the app reads the scheme rather than `NODE_ENV` — and the printed
+graphics were regenerated afterwards, so the QR codes lead somewhere and the
+business card can go to a printer. The three standing-item allergen reviews,
+reported on the 30th, which is the only work in this file nobody but Derek could
+do and the one thing keeping Other Options hidden from customers. And email, in
+both directions, on the 31st.
 
-~~2. **`BASE_URL` on the real domain.**~~ **Done.** The app boots naming
-   `https://dinnerbyderek.ca`, which is also what turns the secure cookie and HSTS
-   on — the app reads the scheme rather than `NODE_ENV`. The graphics were
-   regenerated afterwards (reported 30 Aug), so **the QR codes lead somewhere and
-   printing is safe** — that was the last thing between the business card and a
-   printer.
+What is left:
 
-~~3. **The three standing-item reviews.**~~ **Done, reported 30 August.** The
-   only work in this list nobody but Derek could do. **Other Options is now
-   visible to customers** for the first time — the section stays hidden while any
-   item in it is unticked, and all three were the ones holding it shut.
+1. **Derek's Outlook rule**, forwarding `payments.interac.ca` mail into the
+   poller's inbox and keeping a copy. Everything around it is done — sending
+   through Cyberimpact, receiving through Cloudflare Email Routing, the poller
+   reading its own inbox every five minutes since 30 August, and
+   `orders@dinnerbyderek.ca` registered for Autodeposit at the bank, so a
+   notification means money landed. Until the rule exists the poller correctly
+   finds nothing, and a successful empty poll writes no journal line at all — so
+   the healthy state and the symptom look identical. When it lands, run
+   `npm run poll -- --dry --days 90` first. See
+   [Known and unbuilt](#known-and-unbuilt).
+2. **`TOKEN_ENCRYPTION_KEY`**, if Facebook one-tap publishing is ever wanted.
+   The copy-and-paste path works without it and always will.
+3. **Nothing about ordering, and that is the thing worth watching.** The site
+   has been able to take an order since 29 August and none has arrived. That is
+   probably just how his customers behave, but it is untested ground rather than
+   a proven path.
 
-4. **Email, and the accounts the poller needs.** The poller itself is built and
-   **running live** — the boot line reads `Payments: reading … every 5 minutes`,
-   and silence in the journal is its healthy state, since only recorded payments
-   and failures log. Receiving is done: Cloudflare Email Routing delivers
-   `orders@dinnerbyderek.ca`, now the only address on the domain. What is left is
-   not code, and it is three things. **Sending:** Cyberimpact is chosen and
-   signed up for; validate the domain there — three CNAMEs, added DNS-only at
-   Cloudflare — then fill `SMTP_*` in the server's `.env` and run
-   `npm run mailtest`. **The forward rule**, in Outlook, sending
-   `payments.interac.ca` mail to the poller's inbox; until it exists the poller
-   correctly finds nothing, which looks exactly like working. **Autodeposit** on
-   `orders@dinnerbyderek.ca` at the bank, so a notification means money arrived
-   rather than money offered. See [Known and unbuilt](#known-and-unbuilt).
+---
 
-5. **`TOKEN_ENCRYPTION_KEY`**, if Facebook one-tap publishing is wanted. The
-   copy-and-paste path works without it and always will.
+## What changed on 7 September
+
+### A training dashboard that cannot reach the business — `7c1fb4c`
+
+A complete practice copy of the dashboard at `/admin-training`, working on
+invented data held in memory. A new person had until now been taught on the
+real one, where every screen worth learning is a screen where a wrong tap
+publishes a menu, emails a customer or deletes an order.
+
+**The safety argument is structural rather than careful.** Nothing under
+`server/training` requires `db.js`, `mailer.js`, `facebook.js`, `images.js`,
+`publish.js` or `payments.js`, so these routes *cannot* write to the database,
+send mail or post to a Page — they never load the code that does. An isolation
+check in the harness asserts it. `auth.required` is spelled out on the mount
+rather than inherited, because Express matches mount paths a segment at a time
+and `/admin` is not a prefix of `/admin-training`: without that argument written
+down, the module and its Reset button would answer anyone on the open internet
+the first time somebody tidied the line.
+
+The sandbox is seeded to teach rather than to look full. One dish is left
+unreviewed on purpose, so the first attempt to publish is refused by name and
+the trainee meets the allergen gate deliberately rather than by accident on a
+Saturday. One description carries a misspelling for the proofreader to find. One
+e-transfer is short by exactly the delivery fee. A guided walkthrough of 45
+steps rings each control in turn, in the order the work happens rather than the
+order the navigation lists it. Emails and Facebook posts go to an Outbox screen,
+so declining a late request visibly costs something without costing anything.
+
+The training Payments screen is written and **switched off** by one boolean in
+`sections.js`, because the real one is still being finished and teaching a
+screen that is about to change teaches something to unlearn.
+
+### A second photo, for the meal for one — `4ed2f29`
+
+Every item table gains a `single_photo` column beside the photo it already had.
+`photo` keeps its meaning — the dish, the full pan — and the new one is
+optional: null means both sizes are shown under the one picture, which is what
+every existing row does. The pair is drawn above the price rows, each half
+captioned with its size, and only when it would say something: the second photo
+exists *and* both sizes are actually for sale.
+
+Two things worth keeping. The migration sits **below** the `week_items`
+rebuilds, and that position is load-bearing — those rebuilds write their
+destination columns out by hand, so a column added above them lands in the copy
+and not in the destination, and the insert fails on boot for every database old
+enough to still need rebuilding. And the dashboard's photo box is now rendered
+twice from one helper with every lookup scoped to its own slot; left
+editor-wide, the second box's camera button fills in the first box's picture.
+
+### Three smaller ones — `9b757bf`, `5a09a43`, `5a1d6ea`
+
+**Every day box on This Week now starts shut.** A day used to open itself while
+empty, which reads well on a week with one day left and badly on a fresh week —
+seven empty boxes is seven full item editors stacked down the page, with the
+finished days scrolled off the bottom underneath them. The summary line already
+answers what the open card was there to answer.
+
+**The paste card says the copying is your job.** It had shipped labelled
+"Derek's post", with a greyed-out sample menu behind it and a button reading
+"Read it" — which reads as a box that will fill itself. The owner tapped the
+button on an empty box and reported that nothing appeared. Nothing was ever
+going to: there is no path from this app to Facebook, and that impossibility is
+the entire reason the feature is a paste box. The same mistake the photo
+dropzone made when it said "Tap to choose a photo" above the camera button.
+
+**The shell fingerprint had drifted.** `CACHE_VERSION` is computed from
+`theme.css`, `app.css`, `app.js` and `order.js`; the shell files changed in
+`4ed2f29` without it being recomputed, so `sw.js` named a build that no longer
+existed and every returning phone kept the old shell. `scripts/acceptance.js`
+computes the correct value and had been failing on `main` since that commit —
+which is the check working.
+
+---
+
+## What changed on 6 September
+
+### The day Derek misspelled, and both his soups — `913bd89`
+
+On 2026-09-06 he wrote "Tueday - chicken alfredo farfalle pasta bake $50" and
+the whole of that Tuesday vanished from the paste. The day pattern wanted the
+real weekday name, so the line matched nothing, was skipped in silence, and the
+preview simply showed one row fewer — which looks exactly like a day he chose
+not to cook. The `s` is optional now in the three weekdays that have one, and
+deliberately no looser: these are whole words anchored at the start of a line,
+and fuzzy matching here would start reading prose as menu.
+
+**Two soups and two salads.** The posts have read "tomato and dill or sweet corn
+chowder" for three years and the week could hold one, so the second was dropped
+on the way in. `UNIQUE(week_id, kind)` was what refused it, so the key grew a
+slot rather than the kind growing a duplicate — `soup2` would have been a second
+kind to teach the saved-dish catalogue, the publish gate and the Facebook post
+about, all to say "soup" twice. Everything already stored is slot 1.
+
+`weekItemsOf` now hands back `soups` and `salads` as **arrays**, and the plural
+is load-bearing: a caller left reading `.soup` would have gone on working while
+quietly ignoring the second one, and one of those callers is the publish gate,
+where a slot nobody checked is a hole in the only thing in this app that must
+not have one. `undefined` breaks loudly instead.
+
+Found while testing: a migration guard written as a regex had picked up two
+literal backspace bytes instead of `\b`, so it could never match and would have
+rebuilt `week_items` on **every boot** of the live app.
+
+### The live database, read over SSH
+
+The first proper reading since the move. Two findings, both in
+[Traps](#traps): there is exactly one week row and it is reused, which had
+stranded 14 day rows and blanked the live menu that morning; and the orders
+table has been empty since the site went up.
+
+---
+
+## What changed on 5 September
+
+### Carrying the week's menu over from a phone — `4724f34`
+
+Derek posts the menu to Facebook on Saturday morning and never opens this app,
+so getting it across is a standing manual job — and until now a laptop job as
+well, because the Groups API went in April 2024 and a page read needs a token
+only Derek can issue, which leaves driving a foregrounded Chrome tab with real
+wheel events. None of that fits in a pocket, and Saturday is not a day anybody
+is at a desk.
+
+Pasting the text does fit. The week page opens with a box that takes the post,
+read by the same `parsePost` that read three years of them for the dish library
+— so the day lines, the Single Select heading that restarts the days at a
+one-plate price, the $12 litre of soup and the $4 dessert all come across
+without a second reader to drift apart from the first.
+
+**It reads before it writes, and those are two separate requests.** The first
+shows what it made of the post, one card per line, every word in an editable
+box; the second writes what is on that form rather than what the parser first
+thought.
+
+**Nothing arrives reviewed.** Every dish lands with an empty tag list, no
+dismissals and the box unticked, and the photo and halal flag of whatever it
+replaced are cleared with them. The post says "chicken satay (peanuts)" and the
+dictionary would find the peanuts — but a tag that arrives already accepted is a
+tag nobody read. A pasted week costs about seven ticks before it can go out.
+That is the price of the feature and it is the point of it.
+
+### The proofreader stopped arguing with words that were already right — `5473b44`
+
+Derek called it clunky. Run over the four thousand rows he has actually written
+— the dish library, the recipes, the ingredient lines — the checker raised 76
+chips, of which **two** were mistakes: a doubled "with" and a missing space
+after a full stop. The other 74 were it arguing with his own kitchen, 43 of them
+telling him to write accents he has never once typed.
+
+It defers to him now: a plain spelling this kitchen has already written is the
+spelling here, and the chip survives only for a word he has only ever written
+accented. "pate" and "creole" are gone outright — Pate Brisee is pate, the
+dough, and the chip was offering the terrine. The rest were rules built from
+generic English advice rather than from a kitchen.
+
+The measurement is the method worth keeping: run the checker over the corpus the
+owner has already written, and treat every chip on it as a false positive until
+shown otherwise.
 
 ---
 
 ## What changed on 31 August
 
-### A spelling and grammar checker on everything the owner writes — uncommitted
+### A spelling and grammar checker on everything the owner writes — `9ae2b43`
 
 Every box the owner writes prose into now carries `data-proof`: dish names and
 descriptions (the item editor, so all three menu levels at once), the week
@@ -152,8 +311,14 @@ with twelve correct menu sentences that must produce zero findings — that is
 the check that matters, and it already caught two false positives during the
 build ("shaved" → "shared", and "a desert" being read as pudding).
 
-**Not committed.** The working tree was already carrying about seventy modified
-files from other sessions when this was written, so nothing was staged.
+**Committed as `9ae2b43`.** Later the same evening, `625a755` stopped the week
+page advertising a day the kitchen had not decided on: a day with no headline
+dish is no longer listed at all, because "Menu coming soon" under a date is a
+promise nobody in the kitchen wrote. A day marked **closed** still shows, with
+its note — that is a decision said out loud, not an empty slot — and the filter
+tests `featured || meatless`, since testing `featured` alone would have taken
+Monday down with Friday. The poster and the Facebook post had both decided this
+already; the website was the odd one out.
 
 ---
 
@@ -428,6 +593,43 @@ worth remembering:
 
 ## Traps
 
+**There is one week row and it gets reused, which strands the days.** Week `#6`
+is the only row in `weeks`; each week its `week_start` is moved forward rather
+than a new week being started. `POST /admin/week/:id/weekstart` rewrites the
+start date and deliberately leaves days already filled in on their original
+dates, and `menu.js` shows only days inside `week_start … +6` — so every move
+pushes last week's days outside the range, where the week page, the customer
+menu and `serviceDayOn()` all filter them out. On 6 September that had left 14
+stranded rows spanning Aug 18 – Oct 5 and **the live menu was blank** while the
+database was visibly full of dishes. Cleaned that day, with a backup taken on
+the box first. It will happen again unless the habit changes to *Duplicate last
+week* or *Start this week's menu*. Symptom to recognise instantly: the customer
+page says "The menu for these dates isn't up yet" while the dashboard shows a
+week with dishes on it.
+
+**A day entered outside the week's dates is accepted.** "Need a date outside
+this week?" happily creates one, and one of the stranded rows was `2026-10-05`,
+which looks like a typo for the 5th of September. Nothing refuses it because the
+grid needs the unfiltered list — see the last trap in this section.
+
+**`/admin` is not a prefix of `/admin-training`.** Express matches mount paths a
+segment at a time, so no middleware mounted on `/admin` runs for the training
+routes, session check included. `auth.required` is spelled out on that mount for
+exactly this reason; deleting it as a duplicate opens the whole practice
+dashboard, and its Reset button, to the open internet.
+
+**The shell fingerprint does not recompute itself.** `CACHE_VERSION` in `sw.js`
+is a hash of `theme.css`, `app.css`, `app.js` and `order.js`, written into the
+file by hand. Change one of those four and the value has to move with it, or
+every returning phone keeps the old shell and new client code simply does not
+arrive. `scripts/acceptance.js` computes the right value and fails on a
+mismatch, which is how the drift from `4ed2f29` was caught.
+
+**A new column has to go below the `week_items` rebuilds.** Those rebuilds copy
+a table by writing their destination columns out by hand, so a column added
+above them exists in the copy and not in the destination, and the insert throws
+on boot for every database old enough to still need rebuilding.
+
 **Dictionary growth un-reviews dishes.** Every day in the published week is
 currently reviewed. A future addition to `allergen-seed.js` that raises a new
 suggestion on one of them will correctly revoke that review and pull the item
@@ -492,20 +694,28 @@ see into a constraint error rather than a skip.
 
 ## Known and unbuilt
 
-- **Email is not sending.** Confirmed on the server on 30 August: every send
-  logs `[mail] not sent (SMTP not configured or no recipient)`. Orders are
-  recorded and shown in the dashboard regardless — that is deliberate, mailer.js
-  swallows send failures so a broken mailbox can never lose a stored order — but
-  it also means **nobody is told an order arrived** unless they open the
-  dashboard, and the customer's confirmation, with the reference they are asked
-  to put in the transfer, is shown once on screen and never again. `npm run
-  mailtest` sends one real message through whatever `.env` holds and separates
-  connecting from being allowed to send as that From address.
-- **The IMAP poller is built** — `server/mailbox.js`, off unless `IMAP_HOST` is
-  set, `npm run poll -- --dry` to try it against a live mailbox without writing
-  anything. What is left is not code: an inbox for it to read, the rule that
-  feeds it, and the bank registered to send notifications to the address
-  customers actually pay.
+- **Nobody has ordered through the site.** Read live on 6 September: `orders`
+  and `order_lines` are empty, and have been since it went up on 29 August.
+  Most likely the ordinary reason — customers use Facebook and the phone number
+  the footer gives them. The flow suite drives a real order end to end and
+  passes, so the path works in test; it has never been exercised by a customer.
+  Worth knowing before reading a green suite as proof of anything live.
+- **Email sends, and the poller waits on one rule.** Sending went live on
+  31 August through Cyberimpact (587, `orders@dinnerbyderek.ca` as From, DKIM
+  ×2 / SPF / DMARC all valid); `npm run mailtest` is the one-shot check.
+  Receiving is Cloudflare Email Routing. The IMAP poller has been reading its
+  own Gmail inbox every five minutes since 30 August and `orders@` is registered
+  for **Autodeposit** at the bank, so a notification now means money arrived
+  rather than money offered. What is left is **Derek's Outlook rule** —
+  forwarding `payments.interac.ca` mail into the poller's inbox, keeping a copy.
+  Until it exists the poller correctly finds nothing, which looks exactly like
+  working, because a successful empty poll logs nothing at all. When it lands,
+  run `npm run poll -- --dry --days 90` first: anything already in that inbox
+  predates the 14-day search window and would otherwise never be read, and a
+  wide sweep could in principle auto-settle an old order.
+- **The training Payments screen is written and switched off.** One boolean in
+  `server/training/sections.js`, waiting on the real Payments screen to settle.
+  Its walkthrough steps are already written.
 - **The installed PWA is an untested surface.** Every camera test ran in a
   browser tab; an installed home-screen app has its own Android permission
   grants.
@@ -515,9 +725,10 @@ see into a constraint error rather than a skip.
   all exist and nothing populates them; every link is one pick in the editor.
   The soups are the place to start — 28 of the 30 match a saved dish by name, so
   the picker finds each in one search.
-- **Recipes are owner-only and have no print view.** A kitchen wanting one on
-  the bench prints the browser page. The scaled view is a query parameter, so a
-  scaled recipe can at least be linked and printed as scaled.
+- **Recipes are owner-only.** They print properly since 31 August — the button
+  sits beside the scale controls and the sheet names the scale in words — but
+  there is no path to them for anyone without the dashboard password, which is
+  the intended shape rather than a gap.
 
 ### Test coverage gaps
 

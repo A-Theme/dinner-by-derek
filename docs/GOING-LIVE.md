@@ -17,18 +17,19 @@ question that is deliberately left open until there is evidence to settle it.
 
 ## Where things stand today
 
-Read from the live database and `.env` on 2026-08-26, and **partly** re-read on
-2026-08-30. Check it again before starting — this is a snapshot, not a guarantee.
+Read from the server on 2026-08-30, from the **live database over SSH on
+2026-09-06**, and over HTTP again on 2026-09-08. Check it before starting —
+this is a snapshot, not a guarantee.
 
-The re-read was partial and the rows say which they are. What could be checked
-was checked from the server itself: it is up, it is serving
-`https://dinnerbyderek.ca`, and the journal names the base URL and the database
-path it booted with. What could not be checked is anything **inside** that
-database — the counts of dishes, orders and reviews below were last read on the
-26th and are carried forward unverified, because the only copy reachable from
-the laptop is a development one that has already diverged. Rows in that state
-are marked `warn: not re-read`. Carrying a stale number forward while looking
-like a fresh reading is the specific way this table has been wrong before.
+Three kinds of row, and they are marked. What the server will tell anyone
+asking — that it is up, what base URL and database it booted with, what cache
+headers it sets — is `ok:` and dated. What was read **inside** the live database
+on 6 September is dated too, and that reading is the first since the move: it
+was done with a read-only script over an interactive login, because the deploy
+key cannot read anything (connecting with it *is* a deploy). Everything else
+still carries a figure from before the move, on the laptop's copy, which has
+diverged — those rows say `warn: not re-read`, and they are history rather than
+state.
 
 This table is the part of the document that rots fastest, because it reads two
 things that are not versioned with the code. Git can say the file changed; it
@@ -42,24 +43,25 @@ within four hours of a commit whose entire purpose was to re-read it.
 | `BASE_URL` | `ok: https://dinnerbyderek.ca` | Read off the server's own boot line. Secure cookies and HSTS follow from it automatically — the app decides both from the scheme rather than from `NODE_ENV`. The graphics were regenerated afterwards and the codes were **decoded and checked on 2026-08-30**: the card back and the scan sticker served from `/print` both resolve to `https://dinnerbyderek.ca`, and the card prints that address under the code. See [step 6](#6-regenerate-the-printed-graphics). |
 | `NODE_ENV` / `TRUST_PROXY` | `ok: both correct` 2026-08-30 | **They are visible from outside after all.** `isProd` gates only two boot warnings and the static cache lifetime, so the headers report it: `/app.css` comes back `max-age=604800` and `/print/…` `max-age=3600`, which are the `7d` and `1h` branches — therefore `NODE_ENV=production`. The boot output then carries no "Worth fixing before this is public" block, and with `isProd` true that block is printed whenever `trustProxy` is false — so `TRUST_PROXY` is set. The same silence proves the admin password is hashed and the plaintext line is gone, since that note is not gated on `isProd` at all. |
 | Admin password | `ok: hashed` scrypt | `ADMIN_PASSWORD_HASH` is set and the plaintext `ADMIN_PASSWORD` line is gone. Step 2 is already done; confirm the boot output rather than redo it. |
-| Weeks | `ok: published` starting 2026-08-31 | The week of **Aug 31 – Sep 6 went live on its own** at 20:27 UTC on 2026-08-29 — the first time the scheduler has published rather than the owner. It had been refused as empty three hours earlier and published itself once it had content, which is the design working. It replaces the Aug 24 week described in the rest of this document. What is on it has `warn: not re-read`. |
+| Weeks | `warn: one row, reused` read live 2026-09-06 | There is exactly **one** row in `weeks` — `week-2026-08-16` — and its start date is moved forward each week rather than a new week being started. That is the workflow actually in use, and it strands the previous week's days outside the new range, where every customer-facing query filters them out. On 6 September that had stranded 14 day rows and **the live menu was blank** while the database was full of dishes; they were cleaned that day after a backup. See [step 3](#3-build-a-real-week) before touching a week start. |
 | Soup / salad | `warn: not re-read` was none | |
 | Standing items | `ok: all reviewed` | **Done, reported 2026-08-30.** Breaded Chicken Cutlets, Pulled Pork and BBQ Brisket were the three outstanding, and they were the one blocking item on this list. **Other Options is therefore visible to customers now**, which it had never been — the section stays hidden while any item in it is unticked. |
 | Allergen dictionary | `warn: not re-read` was 479 terms | Was 303 until the seed learned to reach a database that already exists. The extra 176 include caesar salad, oatmeal, tempura, croissant and most of the breads — the working vocabulary of these menus. A bigger dictionary can raise a new suggestion on an item already reviewed, which revokes that review; all fourteen reviewed items were re-checked on 2026-08-26 and none were revoked. |
 | Saved dishes | `warn: not re-read` was 816 | A catalogue was imported. The Load picker is live and long, which is why it now sorts by how often a dish has run. |
-| Orders | `ok: none` re-read 2026-08-30 | **The test order has been deleted.** The table is empty, so the first real order will be unmistakably the first. |
+| Orders | `ok: none` read live 2026-09-06 | **Empty, and empty since the site went up on 29 August** — not "none this week". `orders` and `order_lines` both hold nothing. The likeliest reason is the ordinary one: customers use Facebook and the phone number in the footer. The flow suite drives a real order end to end and passes, so the path works in test and has never been exercised by a customer. |
 | Locations | `warn: not re-read` was 1, Waterloo home kitchen | |
-| Email | `todo: sending off, receiving on` 2026-08-30 | **Receiving works**: Cloudflare Email Routing delivers `orders@dinnerbyderek.ca` to Derek's Hotmail. **Sending does not yet** — Cyberimpact is chosen and signed up for, and the remaining step is validating the domain there. Until it is done, orders are recorded and shown in the dashboard but nothing is sent. Also the reason a customer sees the e-transfer reference only once, on screen — see [payments](#knowing-which-transfer-paid-for-what). |
-| Payments | `warn: not re-read` was **0 rows** | The app has booted against this database, so the table is there. Empty is the correct state until a transfer arrives. |
+| Email | `ok: sending and receiving` 2026-08-31 | **Both directions work.** Receiving is Cloudflare Email Routing on `orders@dinnerbyderek.ca`. Sending went live on the 31st through Cyberimpact — port 587, `SMTP_FROM=orders@dinnerbyderek.ca`, and the domain shows DKIM ×2, SPF and DMARC all valid. `npm run mailtest` is the one-shot check. So a customer now gets their confirmation, with the reference they are asked to put in the transfer, rather than seeing it once on screen. |
+| Payments | `ok: 0 rows` read live 2026-09-06 | Empty is the correct state until a transfer arrives. The **poller is live** — reading its own inbox every five minutes since 30 August — and `orders@` is registered for **Autodeposit**, so a notification means money landed rather than money offered. One thing is outstanding: the rule in Derek's Outlook that forwards `payments.interac.ca` mail into that inbox. Until it exists the poller correctly finds nothing, and a successful empty poll logs nothing at all. |
 | Facebook | not connected | Manual copy-and-paste publishing works without it. |
 
 > [!NOTE] Use this while it lasts
-> Re-read 2026-08-30: the orders table is **empty** — the test order has been
-> deleted — and no payment has ever arrived. While that holds, rebuilding the
-> week, unpublishing it and restoring a backup are all cheap, and all expensive
-> the moment a real customer is in the orders table. Check before assuming it
-> still holds: the site has been taking orders on a public address since the
-> 29th, and nothing warns you when the first one lands except the dashboard.
+> Read live on 2026-09-06: the orders table is **empty and always has been**,
+> and no payment has ever arrived. While that holds, rebuilding the week,
+> unpublishing it and restoring a backup are all cheap, and all expensive the
+> moment a real customer is in the orders table. Check before assuming it still
+> holds — the site has been taking orders on a public address since 29 August,
+> and nothing announces the first one except the dashboard and, now that
+> sending works, an email.
 
 ---
 
@@ -121,16 +123,28 @@ before this is public".
 
 ### 3. Build a real week
 
-The week starting 2026-08-24 is published already, with five days on it and
-every one reviewed. What it has none of is a soup, a salad or a dessert. Three
-further days sit outside its own dates — left behind by a change to the week
-start — so they no longer reach a customer and are readable in Menu History.
+A week is live and has been since 29 August, when the scheduler published one
+by itself for the first time. So this step is no longer "build the first week"
+— it is the ordinary Saturday job, and it is worth reading before doing it,
+because the way it is currently done has a failure mode.
 
-**That week is not the one to go live on.** It ends on the 28th, and no server
-exists yet to serve it, so by the time one does these dates are behind you. Its
-value is as a worked example of a finished week rather than as the menu anyone
-will read: build the week for the dates actually being cooked once hosting is
-real.
+> [!IMPORTANT] Moving the week start strands the days already on it
+> There is one week row in the database and its start date gets moved forward
+> each week. Moving it deliberately leaves filled-in days on their original
+> dates — and the customer menu shows only days inside `week_start … +6`, so
+> every move pushes last week's days out of sight. On 6 September that had left
+> 14 stranded rows and a **blank live menu** over a database full of dishes.
+> Use **Duplicate last week** or **Start this week's menu** instead. If the
+> customer page says "The menu for these dates isn't up yet" while the dashboard
+> plainly has dishes on it, this is what happened.
+
+**Paste the Facebook post.** Since `4724f34` the week page opens with a box
+that takes Derek's own post and reads it with the same parser that read three
+years of them for the dish library: day lines, the Single Select heading, the
+$12 litre of soup, the $4 dessert. It reads before it writes — the preview is
+one editable card per line — and **nothing arrives reviewed**, so a pasted week
+still costs about seven ticks in step 4. That is the price of the feature and
+the point of it. It works on a phone, which is where Saturday actually happens.
 
 **Duplicate last week**, at the top of This Week, copies the most recent week
 into a fresh draft with the dates moved forward seven days — so it lands on the
@@ -145,11 +159,14 @@ touched.
 
 In the dashboard: **This Week** → set the week start → add the service dates →
 fill each day's featured dish with name, description and prices → add soup and
-salad if there are any this week.
+salad if there are any this week. The week holds **two soups and two salads**
+since `913bd89`, because the posts have offered a choice of two for three
+years, and a day with no headline dish is no longer listed to customers at all
+rather than reading "Menu coming soon".
 
-The dish library now holds 816 saved dishes, so **Put a saved dish on…** at the
-top of This Week will do most of the typing for you. It sorts by how often each
-dish has run, which is empty ordering today and useful ordering in a month.
+The dish library holds around 816 saved dishes, so **Put a saved dish on…** at
+the top of This Week will do most of the typing. It sorts by how often each dish
+has run.
 
 **Do not publish yet.** The next step is what makes publishing legal.
 
@@ -238,24 +255,31 @@ not the server.
 
 ## Part 2 — The first week live
 
-### Email, when you want it
+### Email — live since 31 August
 
-Orders are recorded and appear in the dashboard whether or not email works, so
-this is genuinely optional — but without it, nothing tells you an order
-arrived except opening the dashboard.
+**This is done.** Sending runs through Cyberimpact on port 587 with
+`SMTP_FROM=orders@dinnerbyderek.ca`, the domain validated there with two DKIM
+CNAMEs and a return-path CNAME added **DNS-only** at Cloudflare, and DKIM, SPF
+and DMARC all show valid. Receiving is Cloudflare Email Routing on the same
+address. `npm run mailtest` sends one real message and separates connecting
+from being allowed to send as that From address.
 
-Sending needs an SMTP provider. **This deployment uses Cyberimpact** — a Quebec
-company on Canadian servers, free relay to 1,000 messages a month, no card —
-which suits both the volume (two emails an order, so roughly 300 a month) and
-the reason the VPS is in Beauharnois. Resend, Postmark and Fastmail are the
-alternatives if that ever changes. Put `SMTP_FROM` on the domain —
-`orders@dinnerbyderek.ca` — not on a personal mailbox, or it lands in spam. Receiving is separate and
-free: Cloudflare → Email → Email Routing forwards to an inbox you already
-read.
+Two traps cost an afternoon on the way in, both written up in
+[DEPLOY](DEPLOY.md#optional-email), and both present as an authentication
+failure while being nothing of the sort. The provider checks DNS the moment the
+domain is added and **caches the miss** for the zone's SOA minimum — half an
+hour here — so every check inside that window says invalid however correct the
+records are; the tell is DMARC passing while the three new records fail, which
+proves the checker can read the zone and is answering from cache. And the SMTP
+password shown while creating the user is not committed until Save is pressed,
+and cannot be displayed again afterwards.
 
-Set `SMTP_*` and `BASE_URL` together or not at all. Email with a `localhost`
-`BASE_URL` sends you alerts whose links are dead from a phone, which is worse
-than no email.
+Left as written, for whoever changes it: keep `SMTP_FROM` on the domain rather
+than a personal mailbox, or it lands in spam. Never add a second SPF record —
+two is invalid rather than stricter, and Cloudflare has already written the
+first. Set `SMTP_*` and `BASE_URL` together or not at all: email with a
+`localhost` `BASE_URL` sends alerts whose links are dead from a phone, which
+is worse than no email.
 
 ### Knowing which transfer paid for what
 
@@ -277,9 +301,9 @@ exactly as it was — including leaving it paid if it was already paid by hand.
 
 This works because the confirmation screen and the customer's confirmation
 email now ask e-transfer customers to put their order reference in the transfer
-message. That happens on its own; there is nothing to switch on. But it is a
-reason to get [email](#email-when-you-want-it) working sooner rather than later
-— without it, the customer sees the request on screen once and never again, and
+message. That happens on its own; there is nothing to switch on. That mattered more before
+[email](#email-live-since-31-august) worked: until 31 August the customer saw the
+request on screen once and never again. Now the confirmation carries it too, and
 a customer who does not include the reference is one you match by hand.
 
 An order marked paid is a statement about money, not about intent. Somebody
@@ -313,11 +337,24 @@ the same transfer is one payment whether it is forwarded by hand, forwarded
 twice, or later read straight from a mailbox. Without that, switching a poller on
 would have doubled everything already in flight.
 
-**The plumbing is now built.** `server/mailbox.js` reads the mailbox every five
-minutes, off entirely unless `IMAP_HOST` is set, with `npm run poll -- --dry` to
-try it against a live mailbox without writing anything. What is left is not
-code — it is four arrangements outside this repository, and they are the
-substance of the thing rather than an afterthought:
+**It is built, deployed and running.** `server/mailbox.js` has been reading a
+mailbox every five minutes since 30 August, off entirely unless `IMAP_HOST` is
+set, with `npm run poll -- --dry` to try it without writing anything. Three of
+the four arrangements below are done: one address on the domain, `orders@`
+registered for Autodeposit at the bank, and an inbox of the poller's own that
+takes a password over IMAP.
+
+**One is outstanding, and it is Derek's to make:** the rule in his Outlook that
+forwards mail from `payments.interac.ca` into that inbox, keeping a copy. Until
+it exists the poller finds nothing and says nothing, because a successful empty
+poll logs no line at all — the healthy state and the symptom look identical.
+When the rule lands, run `npm run poll -- --dry --days 90` first: anything
+already sitting in that inbox is older than the 14-day search window and would
+otherwise never be read, and a sweep that wide could in principle auto-settle an
+old order on a reference-plus-exact-total match.
+
+The reasoning behind all four is worth keeping, because it is the substance of
+the thing rather than an afterthought:
 
 The domain runs **one address**, `orders@dinnerbyderek.ca`. It is what
 customers see, what the app sends from, and what transfers are addressed to. It
