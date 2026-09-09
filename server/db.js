@@ -998,7 +998,15 @@ function usableTimezone(v) {
   }
 }
 
+/* An empty box is not a zero, whatever Number() says about it.
+ *
+ * Number('') is 0, so a restored backup carrying an empty cutoff_hour stored
+ * midnight and moved that deadline twenty-two hours without a word — where the
+ * whole point of this pair is to keep what is already there and tell the owner
+ * the value could not be used. getInt already reads an empty field as unset;
+ * this is the same rule on the way in. */
 function clampInt(v, lo, hi) {
+  if (v === null || v === undefined || String(v).trim() === '') return null;
   const n = Math.floor(Number(v));
   return Number.isFinite(n) && n >= lo && n <= hi ? String(n) : null;
 }

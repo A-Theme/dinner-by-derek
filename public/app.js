@@ -162,7 +162,19 @@
 
   var slot = document.getElementById('install-slot');
   if (!slot) return;
-  if (localStorage.getItem('dbd.install.dismissed') === '1') return;
+
+  /* Wrapped, the way order.js wraps every one of its own reads. A browser set
+     to block site data does not answer null here — it throws on the property
+     access itself, and that throw took the whole install prompt down with it.
+     A forgotten preference is worth nothing; the section around it is not. */
+  function remembered(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function remember(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) { /* nothing to do */ }
+  }
+
+  if (remembered('dbd.install.dismissed') === '1') return;
 
   function bar(inner) {
     var el = document.createElement('div');
@@ -176,7 +188,7 @@
     var close = el.querySelector('[data-dismiss]');
     if (close) {
       close.addEventListener('click', function () {
-        localStorage.setItem('dbd.install.dismissed', '1');
+        remember('dbd.install.dismissed', '1');
         el.remove();
       });
     }

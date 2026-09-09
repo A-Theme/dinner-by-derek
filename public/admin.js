@@ -236,6 +236,10 @@
   });
 
   section("The allergen suggestions", function () {
+    /* Each editor's dish photo, in document order, collected for the single
+       paste handler registered after this loop. */
+    var pasteTargets = [];
+
     /* --- Allergen suggestions --------------------------------------------- */
     document.querySelectorAll('[data-editor]').forEach(function (ed) {
       var desc = ed.querySelector('[data-description]');
@@ -501,21 +505,66 @@
           toast('Photo removed.', 'ok');
         });
 
-        /* Paste fills the dish photo and nothing else. The event belongs to the
-           window and names no target, so a handler on each slot would take one
-           Ctrl+V and upload the same clipboard image into both boxes at once.
-           The meal-for-one box is filled from its own two buttons. */
-        if (slotIndex === 0) {
-          window.addEventListener('paste', function (e) {
-            if (!drop.closest('details') || drop.closest('details').open) {
-              var items = (e.clipboardData || {}).items || [];
-              for (var i = 0; i < items.length; i++) {
-                if (items[i].type.indexOf('image') === 0) { upload(items[i].getAsFile()); break; }
-              }
-            }
-          });
-        }
+        /* Paste fills the dish photo and nothing else — the meal-for-one box is
+           filled from its own two buttons. Collected here rather than given a
+           listener of its own; the handler below the editor loop says why. */
+        if (slotIndex === 0) pasteTargets.push({ editor: ed, drop: drop, upload: upload });
       });
+    });
+
+    /* --- One pasted image, one dish ---------------------------------------
+     * ONE listener for the page. This used to be registered inside the loop
+     * above, guarded by `slotIndex === 0` — which counts slots within an
+     * editor, not editors within a page. This Week draws thirteen editors, so
+     * it drew thirteen window listeners.
+     *
+     * Seven of those are weekday boxes inside a <details>, and the open check
+     * held them back. The other six — the meatless dish, both soups, both
+     * salads and the dessert — sit in plain cards with no <details> anywhere
+     * above them, so `!drop.closest('details')` was true and every one of them
+     * fired. A single Ctrl+V uploaded the same image six times and set it as
+     * the photo of six unrelated dishes, silently, with the owner meaning one.
+     *
+     * The target is the editor being worked in: the one holding focus, which is
+     * the strongest statement anybody makes about which box they mean, and
+     * failing that the one last touched. If neither names an editor, nothing is
+     * uploaded — no photo is a better answer than six wrong ones, and the two
+     * buttons in every box still work.
+     */
+    var lastEditor = null;
+    var noteEditor = function (e) {
+      var el = e.target && e.target.closest && e.target.closest('[data-editor]');
+      if (el) lastEditor = el;
+    };
+    document.addEventListener('focusin', noteEditor);
+    document.addEventListener('click', noteEditor);
+
+    window.addEventListener('paste', function (e) {
+      if (!pasteTargets.length) return;
+      var items = (e.clipboardData || {}).items || [];
+      var file = null;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') === 0) { file = items[i].getAsFile(); break; }
+      }
+      if (!file) return;
+
+      var active = document.activeElement;
+      var editor = (active && active.closest && active.closest('[data-editor]')) || lastEditor;
+      /* A page carrying exactly one editor has no ambiguity to resolve, and the
+         owner should not have to click into it first: Other Options is a single
+         card and has taken a paste that way since the feature shipped. */
+      if (!editor && pasteTargets.length === 1) editor = pasteTargets[0].editor;
+      if (!editor) return;
+
+      var target = null;
+      for (var j = 0; j < pasteTargets.length; j++) {
+        if (pasteTargets[j].editor === editor) { target = pasteTargets[j]; break; }
+      }
+      if (!target) return;
+      /* A shut box is not being worked in, whatever focus was left pointing at. */
+      var box = target.drop.closest('details');
+      if (box && !box.open) return;
+      target.upload(file);
     });
   });
 

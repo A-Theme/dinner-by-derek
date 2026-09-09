@@ -283,7 +283,12 @@ router.post('/week/:id/basics', (req, res) => {
 router.post('/week/:id/weekstart', (req, res) => {
   const id = Number(req.params.id);
   const raw = String(req.body.week_start || '').trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return back(res, req, null, 'That date doesn\'t look right.');
+  /* A real date, not merely a date-shaped string. The old test was the shape
+     alone, and Date.UTC rolls anything over: 2026-02-31 became March 2nd and
+     0000-99-99 became a Monday in 1908 — silently, on the one field that
+     decides which dates every box on this page points at. isCalendarDate is
+     the check the print sheets and the restore already make. */
+  if (!T.isCalendarDate(raw)) return back(res, req, null, 'That date doesn\'t look right.');
   const weekStart = T.mondayOf(raw);
   db.prepare('UPDATE weeks SET week_start=?, title=? WHERE id=?')
     .run(weekStart, T.fmtWeekRange(weekStart, tz()), id);
@@ -532,7 +537,10 @@ router.post('/dishes/:id/delete', (req, res) => {
 
 router.post('/week/:id/dates', (req, res) => {
   const id = Number(req.params.id);
-  const dates = IF.arr(req.body.dates).map(String).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+  /* The same guard the week start above makes, for the same reason: a
+     date-shaped string that is not a date becomes a service day whose weekday
+     reads as a different one than the date on it says. */
+  const dates = IF.arr(req.body.dates).map(String).filter((d) => T.isCalendarDate(d));
   /* Every row, not just the in-range ones: UNIQUE(week_id, service_date) makes
      a day this check cannot see an error rather than a skip, so moving the week
      start back onto an out-of-range day would fail the save. */
@@ -734,12 +742,18 @@ router.post('/week/duplicate', (req, res) => {
           d.single_cap, d.pickup_start, d.pickup_end, d.delivery_on, d.daily_cap);
     }
     for (const w of db.prepare('SELECT * FROM week_items WHERE week_id = ?').all(src.id)) {
+      /* The slot travels with the row. Without it every copied item landed on
+       * the DEFAULT of 1, so a week's second soup collided with its first on
+       * UNIQUE(week_id, kind, slot) — and because this loop is inside the
+       * transaction, that constraint error rolled the whole duplicate back and
+       * reached the owner as a 500 on the button. Two soups and two salads is
+       * the ordinary week, so it failed on almost every real one. */
       db.prepare(`INSERT INTO week_items
-        (week_id, kind, name, description, photo, single_photo, halal, allergens, dismissed, ack, ack_of,
+        (week_id, kind, slot, name, description, photo, single_photo, halal, allergens, dismissed, ack, ack_of,
          weekdays, full_on, full_label, full_price, full_cap, single_on, single_label,
          single_price, single_cap)
-        VALUES (?,?,?,?,?,?,?,?,?,0,NULL,?,?,?,?,?,?,?,?,?)`)
-        .run(newId, w.kind, w.name, w.description, w.photo, w.single_photo, w.halal, w.allergens,
+        VALUES (?,?,?,?,?,?,?,?,?,?,0,NULL,?,?,?,?,?,?,?,?,?)`)
+        .run(newId, w.kind, w.slot, w.name, w.description, w.photo, w.single_photo, w.halal, w.allergens,
           w.dismissed, w.weekdays, w.full_on, w.full_label, w.full_price, w.full_cap,
           w.single_on, w.single_label, w.single_price, w.single_cap);
     }

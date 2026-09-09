@@ -48,7 +48,7 @@ router.get('/other-options', (req, res) => {
       <tbody>
       ${items.map((i) => {
         const wd = i.availability === 'every_service_day' ? 'Every service day'
-          : (JSON.parse(i.weekdays || '[]').map((w) => T.WEEKDAY_LABELS[w].slice(0, 3)).join(', ') || 'No days set');
+          : (IF.jsonArr(i.weekdays).map((w) => T.weekdayLabel(w).slice(0, 3)).join(', ') || 'No days set');
         const prices = [
           i.full_on && i.full_price != null ? `${i.full_label} ${money(i.full_price)}` : null,
           i.single_on && i.single_price != null ? `${i.single_label} ${money(i.single_price)}` : null,
@@ -119,7 +119,7 @@ router.get('/other-options', (req, res) => {
             Only certain days</label>
           <div style="margin-top:var(--dbd-sp-2)">
           ${T.WEEKDAYS.map((w) => {
-            const on = editing ? JSON.parse(editing.weekdays || '[]').includes(w) : false;
+            const on = editing ? IF.jsonArr(editing.weekdays).includes(w) : false;
             return html`<label style="display:inline-flex;gap:var(--dbd-sp-2);align-items:center;margin-right:var(--dbd-sp-4)">
               <input type="checkbox" name="si_weekdays" value="${w}" style="width:22px;height:22px"${on ? ' checked' : ''}>
               ${T.WEEKDAY_LABELS[w].slice(0, 3)}</label>`;
@@ -140,7 +140,7 @@ function standingFields(body) {
     ...it,
     subcategory: M.SUBCATEGORY_ORDER.includes(body.si_subcategory) ? body.si_subcategory : 'Mains',
     availability,
-    weekdays: JSON.stringify(IF.arr(body.si_weekdays).map(String)),
+    weekdays: JSON.stringify(IF.weekdays(body.si_weekdays)),
   };
 }
 
@@ -170,6 +170,12 @@ router.post('/other-options/:id', (req, res) => {
       f.full_cap, f.single_on, f.single_label, f.single_price, f.single_cap,
       Number(req.params.id));
   const item = db.prepare('SELECT * FROM standing_items WHERE id=?').get(Number(req.params.id));
+  /* Checked after the write, where its two neighbours check before theirs. The
+     UPDATE above is harmless against a row that has gone, but this reads the
+     row back to say which way the review went, and reading .allergens off
+     nothing is a TypeError and a 500. Ordinary to reach with two tabs open:
+     delete it in one, Save in the other. */
+  if (!item) return back(res, req, null, 'That item no longer exists.');
   const st = A.reviewState(item);
   /* Back to the item, not away from it. Landing on the list closed the editor,
      dropped the owner at the top of a table and left a toast at the bottom of
@@ -775,9 +781,19 @@ router.post('/settings/pickup', (req, res) => {
    * wrong text on records nobody can easily fix. */
   const start = settings.guard('pickup_start', req.body.pickup_start);
   const end = settings.guard('pickup_end', req.body.pickup_end);
+  const unchanged = () => `The window is still ${T.fmtWindow(
+    settings.get('pickup_start', '16:00'), settings.get('pickup_end', '19:00'))}.`;
   if (start === null || end === null) {
-    return back(res, req, null, 'A pickup time has to look like 16:00 — nothing was changed. '
-      + `The window is still ${T.fmtWindow(settings.get('pickup_start', '16:00'), settings.get('pickup_end', '19:00'))}.`);
+    return back(res, req, null, `A pickup time has to look like 16:00 — nothing was changed. ${unchanged()}`);
+  }
+  /* Both are times, and two times are not yet a window. Stored as typed, 19:00
+     to 16:00 printed as "7:00 PM–4:00 PM" on the customer menu and was frozen
+     onto every order placed that day — a record the owner cannot correct,
+     telling a customer to collect three hours before collection opens.
+     Refused whole rather than swapped round: the same bargain the guard above
+     makes, and the owner knows which of the two boxes they meant. */
+  if (start >= end) {
+    return back(res, req, null, `Pickup has to finish after it starts — nothing was changed. ${unchanged()}`);
   }
   settings.set('pickup_start', start);
   settings.set('pickup_end', end);
@@ -980,6 +996,21 @@ router.get('/settings', (req, res) => {
   res.type('html').send(String(V.shell({ title: 'Settings', body, current: 'settings' })));
 });
 
+/**
+ * The expiry date, or a word, for a column that is not always a date.
+ *
+ * `new Date(x).toISOString()` throws RangeError on anything it cannot parse,
+ * and the value was only ever checked for being non-empty. One unparseable
+ * `expires_at` — from a hand-edited file, or a Graph response that came back
+ * in a shape this app did not expect — took down the whole Settings page,
+ * including the Facebook panel that is the only way to reconnect and fix it.
+ */
+function expiryDate(value) {
+  if (!value) return 'unknown';
+  const t = new Date(value);
+  return Number.isFinite(t.getTime()) ? t.toISOString().slice(0, 10) : 'unknown';
+}
+
 function facebookPanel(conn) {
   const configured = !!(config.facebook.appId && config.facebook.appSecret && config.tokenKey);
 
@@ -1006,7 +1037,7 @@ function facebookPanel(conn) {
     <p><strong>Connected as ${conn.fb_user_name}</strong><br>
       Posting to <strong>${conn.page_name}</strong><br>
       <span class="variant__label">Connection expires
-        ${conn.expires_at ? new Date(conn.expires_at).toISOString().slice(0, 10) : 'unknown'}</span></p>
+        ${expiryDate(conn.expires_at)}</span></p>
     ${conn.stale ? html`<div class="notice notice--strong">
       Facebook rejected the last publish. Reconnect to fix it.</div>` : ''}
     ${conn.expiringSoon ? html`<div class="notice notice--strong">

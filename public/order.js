@@ -117,10 +117,25 @@
   var checking = false;                 // a code typed but not yet answered for
   var checkTimer = null;
 
-  function showElig(kind, msg) {
+  /* Built as nodes rather than as a string of HTML.
+     Two of the pieces below are not this file's to trust: `fsa` comes back off
+     the network, and `servedAreas` and `ownerContact` are settings the owner
+     types and a restored backup can rewrite. None of them was escaped on the
+     way into innerHTML. The page's CSP refuses inline script, so this was
+     never the hole it looks like — but "the header saves us" is a poor reason
+     to build markup out of content, and the strong tags are the only markup
+     wanted here anyway. */
+  function showElig(kind, parts) {
     elig.hidden = false;
     elig.className = 'notice' + (kind === 'bad' ? ' notice--strong' : '');
-    elig.innerHTML = msg;
+    elig.textContent = '';
+    (Array.isArray(parts) ? parts : [parts]).forEach(function (p) {
+      if (p == null || p === '') return;
+      if (typeof p === 'string') { elig.appendChild(document.createTextNode(p)); return; }
+      var el = document.createElement(p.tag || 'span');
+      el.textContent = p.text;
+      elig.appendChild(el);
+    });
   }
 
   function runCheck() {
@@ -135,14 +150,15 @@
       checking = false;
       fee = d.ok ? d.fee : 0;
       if (d.ok) {
-        showElig('ok', 'We deliver to <strong>' + d.fsa + '</strong>. Delivery is '
-          + money(d.fee) + '.');
+        showElig('ok', ['We deliver to ', { tag: 'strong', text: d.fsa },
+          '. Delivery is ' + money(d.fee) + '.']);
       } else if (d.reason === 'invalid') {
         showElig('bad', "That doesn't look like a Canadian postal code. It should look like N2L 3G1.");
       } else {
-        showElig('bad', 'Sorry — we don\'t deliver to <strong>' + (d.fsa || 'that area')
-          + '</strong> yet. We currently serve ' + (cfg.servedAreas || []).join(', ')
-          + '. ' + (cfg.ownerContact || ''));
+        showElig('bad', ["Sorry — we don't deliver to ",
+          { tag: 'strong', text: d.fsa || 'that area' },
+          ' yet. We currently serve ' + (cfg.servedAreas || []).join(', ')
+            + '. ' + (cfg.ownerContact || '')]);
       }
       render();
     }).catch(function () {

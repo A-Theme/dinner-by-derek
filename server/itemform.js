@@ -6,6 +6,19 @@
  */
 
 const { reviewedText } = require('./allergens');
+const T = require('./time');
+
+/**
+ * The weekday keys, and only those.
+ *
+ * The boxes send 'mon'…'sun' and nothing else, so this changes nothing about
+ * what the form does. It is here because the value is written to storage and
+ * read back out by name — `WEEKDAY_LABELS[w]` — and a key the table does not
+ * hold comes back undefined, which is a TypeError on the screen that lists the
+ * item rather than on the request that stored it. A body is not a form, and the
+ * check belongs on the side that keeps the value.
+ */
+const weekdays = (v) => arr(v).map(String).filter((w) => T.WEEKDAYS.includes(w));
 
 /**
  * A price in cents, or null when the box doesn't hold one.
@@ -73,8 +86,8 @@ function parse(body, prefix, { withWeekdays = false } = {}) {
     single_price: cents(body[`${prefix}_single_price`]),
     single_cap: intOrNull(body[`${prefix}_single_cap`]),
   };
-  if (withWeekdays) out.weekdays = JSON.stringify(arr(body[`${prefix}_weekdays`]).map(String));
+  if (withWeekdays) out.weekdays = JSON.stringify(weekdays(body[`${prefix}_weekdays`]));
   return out;
 }
 
-module.exports = { parse, cents, intOrNull, arr, jsonArr };
+module.exports = { parse, cents, intOrNull, arr, jsonArr, weekdays };

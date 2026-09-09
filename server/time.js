@@ -19,6 +19,23 @@ const WEEKDAY_LABELS = {
 /** Monday-first order, for laying out a week as a grid. */
 const WEEKDAYS_MON_FIRST = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
+/**
+ * A weekday's name, for a key that came out of storage rather than out of the
+ * list above.
+ *
+ * `WEEKDAY_LABELS[w]` is right wherever the key is one of ours and wrong the
+ * moment it is read back off a row: the `weekdays` column is written as JSON
+ * and a value the table has no entry for comes back undefined, so
+ * `.slice(0, 3)` was a TypeError — a 500 on the page that lists the item, from
+ * a row no screen could then be opened to fix. The writers screen their input
+ * now; this is the other half, because a restored backup is a third way in and
+ * a page should not be the thing that discovers a bad value.
+ *
+ * Falls back to the key itself, which is at least the truth about what is
+ * stored, rather than to a guess at which day was meant.
+ */
+const weekdayLabel = (w) => WEEKDAY_LABELS[w] || String(w == null ? '' : w);
+
 /** Offset (ms) between the given instant's wall time in `tz` and UTC. */
 function tzOffsetMs(instant, tz) {
   const dtf = new Intl.DateTimeFormat('en-US', {
@@ -242,7 +259,7 @@ function fmtWeekRange(startIso, tz) {
 }
 
 module.exports = {
-  WEEKDAYS, WEEKDAY_LABELS, WEEKDAYS_MON_FIRST,
+  WEEKDAYS, WEEKDAY_LABELS, WEEKDAYS_MON_FIRST, weekdayLabel,
   tzOffsetMs, zonedToUtc, addDays, weekdayOf, mondayOf, mondayOnOrAfter,
   cutoffFor, lateCutoffFor, dayState, isCalendarDate,
   todayIn, fmtLocal, fmtDayLong, fmtDayShort, fmtMonthDay,

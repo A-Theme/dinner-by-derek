@@ -4,6 +4,7 @@ const { db, settings } = require('./db');
 const config = require('./config');
 const T = require('./time');
 const M = require('./menu');
+const { jsonArr } = require('./itemform');
 const { DISCLAIMER_TEXT } = require('./views/layout');
 
 /**
@@ -397,7 +398,7 @@ function buildPostText(week) {
   // Week-level soup and salad
   const weekly = [];
   for (const [item, label] of weeklyRows) {
-    const wd = JSON.parse(item.weekdays || '[]').map((w) => T.WEEKDAY_LABELS[w]).join(', ');
+    const wd = jsonArr(item.weekdays).map((w) => T.weekdayLabel(w)).join(', ');
     const tags = JSON.parse(item.allergens || '[]');
     // Built as parts and joined, so an item at the standard price loses its
     // price rather than leaving a dangling dash where one used to be.

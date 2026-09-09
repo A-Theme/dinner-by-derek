@@ -727,8 +727,48 @@ const PAST_DATE = T.addDays(today, -2);
 
   /* --- Duplicating a week resets every acknowledgement --------------------- */
   {
+    /* Both soups go on the source week first, and that is the point of them.
+       A week carrying only slot 1 cannot see the bug this guards: the copy
+       named every column except `slot`, so both items landed on the DEFAULT
+       of 1, the second collided with the first on UNIQUE(week_id, kind, slot),
+       and — the loop being inside the transaction — the constraint error rolled
+       the whole duplicate back and reached the owner as a 500. Two soups and
+       two salads is the ordinary week here, so it failed on almost every real
+       one while this suite, which built weeks with a single soup, stayed green.
+
+       Written through the route rather than into the table, because the bug was
+       in a route and a fixture that inserts its own rows would have proved the
+       schema works rather than that the button does.
+
+       Reviewed on the way in — the tags accepted, the box ticked — so these
+       cannot leave a pending suggestion sitting on a week that later checks
+       publish against. */
+    const A2 = require('../server/allergens');
+    const reviewedSoup = (slot, name) => {
+      const prefix = slot === 1 ? 'soup' : `soup${slot}`;
+      return {
+        slot: String(slot),
+        [`${prefix}_name`]: name,
+        [`${prefix}_description`]: '',
+        [`${prefix}_ack`]: '1',
+        [`${prefix}_allergens`]: JSON.stringify(A2.detect(name).map((d) => d.allergen)),
+        [`${prefix}_full_on`]: '1',
+        [`${prefix}_full_price`]: '12.00',
+        [`${prefix}_weekdays`]: 'tue',
+      };
+    };
+    await POST(`/admin/week/${weekId}/soup`, reviewedSoup(1, 'Chicken Mulligatawny'));
+    await POST(`/admin/week/${weekId}/soup`, reviewedSoup(2, 'Late Summer Harvest Vegetable'));
+    check('the source week is carrying two soups before it is copied',
+      db.prepare("SELECT COUNT(*) n FROM week_items WHERE week_id = ? AND kind = 'soup'")
+        .get(weekId).n, 2);
+
     const before = db.prepare('SELECT COUNT(*) n FROM weeks').get().n;
-    await POST('/admin/week/duplicate', {});
+    const dup = await POST('/admin/week/duplicate', {});
+    /* Named separately from the count below. A 500 here and a week that was
+       never made are one failure with two faces, and being told which of them
+       happened is the difference between a minute and an afternoon. */
+    check('the duplicate button does not error', dup.status, 303);
     const after = db.prepare('SELECT COUNT(*) n FROM weeks').get().n;
     check('duplicating makes a new week', after, before + 1);
 
@@ -747,6 +787,19 @@ const PAST_DATE = T.addDays(today, -2);
 
     check('the day ceiling came along with the copy',
       copiedDays[0].daily_cap, db.prepare('SELECT daily_cap FROM service_days WHERE id = ?').get(dayId).daily_cap);
+
+    /* Both soups, each still answering to the slot it was written into. The
+       slot is what the menu looks them up by, so a copy that kept both rows and
+       lost which was which would be a week with two soups in one box. */
+    check('both soups came across, each in its own slot',
+      db.prepare(`SELECT slot, name FROM week_items
+                  WHERE week_id = ? AND kind = 'soup' ORDER BY slot`).all(copy.id),
+      [{ slot: 1, name: 'Chicken Mulligatawny' },
+        { slot: 2, name: 'Late Summer Harvest Vegetable' }]);
+    check('and the second soup lost its review like everything else',
+      db.prepare(`SELECT ack, ack_of FROM week_items
+                  WHERE week_id = ? AND kind = 'soup' AND slot = 2`).get(copy.id),
+      { ack: 0, ack_of: null });
   }
 
   /* --- The two cutoffs, over HTTP ----------------------------------------
