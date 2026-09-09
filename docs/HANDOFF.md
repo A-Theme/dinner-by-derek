@@ -24,7 +24,7 @@ snapshot of a moment.
 
 ## Where things are
 
-`main` is at `5a1d6ea`, clean, suites green at **983 acceptance, 489 flow**
+`main` is at `b37f5e8`, clean, suites green at **983 acceptance, 489 flow**
 (`npm test`, re-run 8 September). For comparison: 720 / 389 on 26 August,
 764 / 416 on the 30th, 840 / 439 on the 31st.
 
@@ -34,32 +34,35 @@ fingerprint as `main` — `dbd-shell-6cf352d144`, checked over HTTP on
 training dashboard and the second dish photo.
 
 **The database that matters is on the server**, at
-`/var/lib/dinnerbyderek/dinnerbyderek.db`. The laptop's copy has diverged and is
-a development file. There is no read-only way in with the deploy key —
-connecting with it *is* a deploy — so live figures come from a read-only node
-script run over an interactive SSH login, which last happened on **6 September**.
-Rows below say which reading they are.
+`/var/lib/dinnerbyderek/dinnerbyderek.db`. The laptop's copy is a development file that has
+diverged. There is no read-only way in with the deploy key — connecting with it *is* a deploy
+— so live figures come from a snapshot pulled down over an interactive login. **Everything
+below was read from one taken on 9 September**, which is the second such reading and the first
+that took ten minutes rather than a plan.
 
-### The database
+`sqlite3` is not installed on the box and does not need to be: the app's own
+`better-sqlite3` is there, and its online backup API copies a running database correctly,
+WAL and all.
+
+### The database — read live 2026-09-09
 
 | | |
 |---|---|
-| Weeks | **1 row, and it is reused** — week `#6`, slug `week-2026-08-16`, its `week_start` moved forward each week rather than a new week being started. Read live 6 Sep. See [Traps](#traps). |
-| Service days | 14 stranded rows (Aug 18 – Oct 5) were cleaned to 0 on 6 Sep, after they had blanked the live menu. Backup taken on the box first. |
-| Week items | `warn: not re-read` — the schema now holds **two soups and two salads** per week as of `913bd89` |
-| Standing items | 6, all reviewed since 30 Aug, so Other Options is visible to customers |
-| Saved dishes | `warn: not re-read` was 816 on 26 Aug |
-| Allergen terms | `warn: not re-read` was 479 on 26 Aug |
-| Orders | **0 — and zero since going live on 29 August.** Read live 6 Sep. Not "none this week": the table has never held a real order. |
-| Payments | 0, which is the correct state while no transfer has arrived |
-| Recipes | 230, tagged onto 16 buttons |
+| Weeks | **1 row, and it is reused.** Week `#6`, slug `week-2026-08-16`, `week_start` now **2026-09-07**, status **published**. Its `published_at` still reads 2026-08-29 20:27 — the scheduler's first publish — because the row has never been replaced. See [Traps](#traps). |
+| Service days | **3**, on 8, 9 and 10 September, none closed, **all three reviewed**. None stranded: the 14 stray rows found on the 6th were cleaned that day and nothing has drifted out of range since. |
+| Week items | **5** — a dessert, **two soups and two salads**, all reviewed. The two-of-each slots landed on the 6th and were in real use within two days. |
+| Standing items | 6, all reviewed and active, so Other Options is visible to customers |
+| Saved dishes | **813** — 375 mains, 145 soups, 187 salads, 106 desserts. **10 carry an allergen review**; the other 803 do not, which is the expected state for an imported catalogue. |
+| Allergen terms | 479 |
+| Orders | **0 — and zero since going live on 29 August.** Confirmed again on the 9th. Not "none this week": the table has never held a real order. |
+| Payments | 0, which is correct while no transfer has arrived |
+| Recipes | **415**, across 17 tags — the expanded seed is live. The laptop's copy still holds 230, because it has not been restarted since. |
 | Recipes linked to a dish | **0** — the column and the picker exist; nothing populates them |
 
-**Nobody has ordered through the site yet.** The most likely reason is the
-ordinary one — customers use Facebook and the phone number the footer gives
-them. `scripts/flow.js` drives a real order end to end and passes, so the path
-works in test; it has not been proven against production. Do not read a green
-suite as evidence that live ordering works.
+**Nobody has ordered through the site yet.** The most likely reason is the ordinary one —
+customers use Facebook and the phone number the footer gives them. `scripts/flow.js` drives a
+real order end to end and passes, so the path works in test; it has not been proven against
+production. Do not read a green suite as evidence that live ordering works.
 
 ### `.env`
 

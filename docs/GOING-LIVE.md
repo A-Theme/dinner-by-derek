@@ -17,19 +17,18 @@ question that is deliberately left open until there is evidence to settle it.
 
 ## Where things stand today
 
-Read from the server on 2026-08-30, from the **live database over SSH on
-2026-09-06**, and over HTTP again on 2026-09-08. Check it before starting —
+Read from the server on 2026-08-30, over HTTP on 2026-09-08, and from a **snapshot of the
+live database pulled down on 2026-09-09** — which is where every database row below now
+comes from. Check it before starting —
 this is a snapshot, not a guarantee.
 
-Three kinds of row, and they are marked. What the server will tell anyone
-asking — that it is up, what base URL and database it booted with, what cache
-headers it sets — is `ok:` and dated. What was read **inside** the live database
-on 6 September is dated too, and that reading is the first since the move: it
-was done with a read-only script over an interactive login, because the deploy
-key cannot read anything (connecting with it *is* a deploy). Everything else
-still carries a figure from before the move, on the laptop's copy, which has
-diverged — those rows say `warn: not re-read`, and they are history rather than
-state.
+Every row is dated, and there are no carried-forward figures left. What the server tells
+anyone asking — that it is up, what base URL it booted with, what cache headers it sets — was
+read over HTTP. Everything **inside** the database was read from a snapshot taken on the 9th
+with the app's own `better-sqlite3` backup API and copied down over an interactive login,
+because the deploy key cannot read anything (connecting with it *is* a deploy) and `sqlite3`
+is not installed on the box. That takes about ten minutes and is worth repeating rather than
+guessing.
 
 This table is the part of the document that rots fastest, because it reads two
 things that are not versioned with the code. Git can say the file changed; it
@@ -43,19 +42,19 @@ within four hours of a commit whose entire purpose was to re-read it.
 | `BASE_URL` | `ok: https://dinnerbyderek.ca` | Read off the server's own boot line. Secure cookies and HSTS follow from it automatically — the app decides both from the scheme rather than from `NODE_ENV`. The graphics were regenerated afterwards and the codes were **decoded and checked on 2026-08-30**: the card back and the scan sticker served from `/print` both resolve to `https://dinnerbyderek.ca`, and the card prints that address under the code. See [step 6](#6-regenerate-the-printed-graphics). |
 | `NODE_ENV` / `TRUST_PROXY` | `ok: both correct` 2026-08-30 | **They are visible from outside after all.** `isProd` gates only two boot warnings and the static cache lifetime, so the headers report it: `/app.css` comes back `max-age=604800` and `/print/…` `max-age=3600`, which are the `7d` and `1h` branches — therefore `NODE_ENV=production`. The boot output then carries no "Worth fixing before this is public" block, and with `isProd` true that block is printed whenever `trustProxy` is false — so `TRUST_PROXY` is set. The same silence proves the admin password is hashed and the plaintext line is gone, since that note is not gated on `isProd` at all. |
 | Admin password | `ok: hashed` scrypt | `ADMIN_PASSWORD_HASH` is set and the plaintext `ADMIN_PASSWORD` line is gone. Step 2 is already done; confirm the boot output rather than redo it. |
-| Weeks | `warn: one row, reused` read live 2026-09-06 | There is exactly **one** row in `weeks` — `week-2026-08-16` — and its start date is moved forward each week rather than a new week being started. That is the workflow actually in use, and it strands the previous week's days outside the new range, where every customer-facing query filters them out. On 6 September that had stranded 14 day rows and **the live menu was blank** while the database was full of dishes; they were cleaned that day after a backup. See [step 3](#3-build-a-real-week) before touching a week start. |
-| Soup / salad | `warn: not re-read` was none | |
+| Weeks | `warn: one row, reused` read live 2026-09-09 | There is exactly **one** row in `weeks` — `week-2026-08-16` — and its start date is moved forward each week rather than a new week being started. That is the workflow actually in use, and it strands the previous week's days outside the new range, where every customer-facing query filters them out. On 6 September that had stranded 14 day rows and **the live menu was blank** while the database was full of dishes; they were cleaned that day after a backup. As of the 9th `week_start` is 2026-09-07, the week is published, and **nothing is stranded** — it carries three service days (8, 9 and 10 September), all reviewed. Its `published_at` still reads 29 August, because the row itself has never been replaced. See [step 3](#3-build-a-real-week) before touching a week start. |
+| Soup / salad / dessert | `ok: 5 items` read live 2026-09-09 | Two soups, two salads and a dessert, all reviewed. The second slot for soup and salad landed on 6 September and was in use within two days — the posts have offered a choice of two for three years. |
 | Standing items | `ok: all reviewed` | **Done, reported 2026-08-30.** Breaded Chicken Cutlets, Pulled Pork and BBQ Brisket were the three outstanding, and they were the one blocking item on this list. **Other Options is therefore visible to customers now**, which it had never been — the section stays hidden while any item in it is unticked. |
-| Allergen dictionary | `warn: not re-read` was 479 terms | Was 303 until the seed learned to reach a database that already exists. The extra 176 include caesar salad, oatmeal, tempura, croissant and most of the breads — the working vocabulary of these menus. A bigger dictionary can raise a new suggestion on an item already reviewed, which revokes that review; all fourteen reviewed items were re-checked on 2026-08-26 and none were revoked. |
-| Saved dishes | `warn: not re-read` was 816 | A catalogue was imported. The Load picker is live and long, which is why it now sorts by how often a dish has run. |
-| Orders | `ok: none` read live 2026-09-06 | **Empty, and empty since the site went up on 29 August** — not "none this week". `orders` and `order_lines` both hold nothing. The likeliest reason is the ordinary one: customers use Facebook and the phone number in the footer. The flow suite drives a real order end to end and passes, so the path works in test and has never been exercised by a customer. |
-| Locations | `warn: not re-read` was 1, Waterloo home kitchen | |
+| Allergen dictionary | `ok: 479 terms` read live 2026-09-09 | Was 303 until the seed learned to reach a database that already exists. The extra 176 include caesar salad, oatmeal, tempura, croissant and most of the breads — the working vocabulary of these menus. A bigger dictionary can raise a new suggestion on an item already reviewed, which revokes that review; all fourteen reviewed items were re-checked on 2026-08-26 and none were revoked. |
+| Saved dishes | `ok: 813` read live 2026-09-09 | 375 mains, 145 soups, 187 salads, 106 desserts. **10 carry an allergen review**; an imported catalogue is unreviewed until a dish goes on a menu, which is the design. The Load picker sorts by how often a dish has run. |
+| Orders | `ok: none` read live 2026-09-09 | **Empty, and empty since the site went up on 29 August** — not "none this week". `orders` and `order_lines` both hold nothing. The likeliest reason is the ordinary one: customers use Facebook and the phone number in the footer. The flow suite drives a real order end to end and passes, so the path works in test and has never been exercised by a customer. |
+| Recipes | `ok: 415` read live 2026-09-09 | Across 17 tags, and **none linked to a dish** — the column, the picker and the checks all exist and nothing populates them. The laptop still holds 230, because the recipe seed runs at boot and that process has not restarted. |
 | Email | `ok: sending and receiving` 2026-08-31 | **Both directions work.** Receiving is Cloudflare Email Routing on `orders@dinnerbyderek.ca`. Sending went live on the 31st through Cyberimpact — port 587, `SMTP_FROM=orders@dinnerbyderek.ca`, and the domain shows DKIM ×2, SPF and DMARC all valid. `npm run mailtest` is the one-shot check. So a customer now gets their confirmation, with the reference they are asked to put in the transfer, rather than seeing it once on screen. |
-| Payments | `ok: 0 rows` read live 2026-09-06 | Empty is the correct state until a transfer arrives. The **poller is live** — reading its own inbox every five minutes since 30 August — and `orders@` is registered for **Autodeposit**, so a notification means money landed rather than money offered. One thing is outstanding: the rule in Derek's Outlook that forwards `payments.interac.ca` mail into that inbox. Until it exists the poller correctly finds nothing, and a successful empty poll logs nothing at all. |
+| Payments | `ok: 0 rows` read live 2026-09-09 | Empty is the correct state until a transfer arrives. The **poller is live** — reading its own inbox every five minutes since 30 August — and `orders@` is registered for **Autodeposit**, so a notification means money landed rather than money offered. One thing is outstanding: the rule in Derek's Outlook that forwards `payments.interac.ca` mail into that inbox. Until it exists the poller correctly finds nothing, and a successful empty poll logs nothing at all. |
 | Facebook | not connected | Manual copy-and-paste publishing works without it. |
 
 > [!NOTE] Use this while it lasts
-> Read live on 2026-09-06: the orders table is **empty and always has been**,
+> Read live on 2026-09-09: the orders table is **empty and always has been**,
 > and no payment has ever arrived. While that holds, rebuilding the week,
 > unpublishing it and restoring a backup are all cheap, and all expensive the
 > moment a real customer is in the orders table. Check before assuming it still
