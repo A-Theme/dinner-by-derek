@@ -181,6 +181,90 @@ async function icon(file, size, inset, bg, ink) {
   console.log(`  ${file.padEnd(28)} ${size}×${size}`);
 }
 
+/* ---------------------------------------------------------------------------
+   The dashboard tile: the badge, and ADMIN under it.
+
+   THE WORDMARK IS ARTWORK, NOT TEXT. It would be one line of SVG to set the
+   word at build time, and the result would depend on which fonts the machine
+   running this happens to have — librsvg silently substitutes, so the same
+   command on another laptop produces a different letterform in a file that is
+   committed and shipped. brand/admin-wordmark.png is that word rendered once
+   and checked in, the way the badge itself is, and it is stored as white on
+   transparent so the colour still comes from the palette rather than from the
+   file. Nothing here holds a hex literal.
+
+   THREE GEOMETRIES, because each platform cuts its own shape out of a square:
+
+     PLAIN     the tile as designed, corners rounded. This is what a desktop
+               browser shows — in the install prompt, the taskbar and the
+               window — and it is the only place the rounding is ever seen.
+
+     PLAIN     again for Apple, but square. iOS masks the icon to its own
+               squircle and fills transparency with BLACK, so pre-rounded
+               corners are either invisible (a smaller radius than Apple's,
+               cut away regardless) or four black wedges. Square, full bleed,
+               and let iOS do it.
+
+     MASKABLE  square, full bleed, and the artwork pulled in to 59% so that all
+               of it — badge, word and the space between them — sits inside the
+               circle Android 12+ crops to. That circle is two thirds of the
+               canvas, and it is measured on the DIAGONAL of what it contains:
+               a tall arrangement like this one loses far more to it than its
+               height alone suggests. Everything outside is gone, and on an
+               Android launcher this is the icon that gets used. */
+
+const WORDMARK = path.join(root, 'brand', 'admin-wordmark.png');
+
+/* Fractions of the icon's edge. mark is the square the badge is drawn into,
+   text is the wordmark's width, and the two tops are measured from the top. */
+const PLAIN = { mark: 0.688, markTop: 0.0445, text: 0.471, textTop: 0.8555 };
+const MASKABLE = { mark: 0.407, markTop: 0.236, text: 0.279, textTop: 0.716 };
+
+/** The wordmark at a given width, in a given colour. */
+async function word(width, colour) {
+  const art = await sharp(WORDMARK).ensureAlpha().resize({ width }).png().toBuffer();
+  const { width: w, height: h } = await sharp(art).metadata();
+  const { r, g, b } = hexToRgb(colour);
+  return sharp({ create: { width: w, height: h, channels: 3, background: { r, g, b } } })
+    .joinChannel(await sharp(art).extractChannel(3).png().toBuffer())
+    .png()
+    .toBuffer();
+}
+
+async function adminIcon(file, size, geom, radius) {
+  const box = await inkBounds();
+  const bg = palette['olive-deep'];
+  const ink = palette.parchment;
+
+  const markSize = Math.round(size * geom.mark);
+  const mark = await stencil(box, ink, markSize);
+  const textWidth = Math.round(size * geom.text);
+  const text = await word(textWidth, ink);
+
+  const { r, g, b } = hexToRgb(bg);
+  const layers = [
+    { input: mark, top: Math.round(size * geom.markTop), left: Math.round((size - markSize) / 2) },
+    { input: text, top: Math.round(size * geom.textTop), left: Math.round((size - textWidth) / 2) },
+  ];
+  /* dest-in, so the corners become transparent rather than a colour that would
+     be wrong against whatever the tile is drawn on. */
+  if (radius) {
+    layers.push({
+      input: Buffer.from(`<svg width="${size}" height="${size}"><rect width="${size}" `
+        + `height="${size}" rx="${Math.round(size * radius)}" ry="${Math.round(size * radius)}" `
+        + 'fill="#fff"/></svg>'),
+      blend: 'dest-in',
+    });
+  }
+
+  await sharp({ create: { width: size, height: size, channels: 4, background: { r, g, b, alpha: 1 } } })
+    .composite(layers)
+    .png({ compressionLevel: 9 })
+    .toFile(path.join(OUT, file));
+
+  console.log(`  ${file.padEnd(28)} ${size}×${size}${radius ? '  rounded' : '  square, full bleed'}`);
+}
+
 /**
  * The header mark is the profile picture, cut round: the gold lockup on an
  * olive disc, which is the same image the Facebook page shows. It used to be a
@@ -251,21 +335,21 @@ const headerMark = async (size) => sharp(await brandmark.disc(size))
   // Browser tab.
   await icon('favicon-32.png', 32, 0.92, palette.parchment, palette.espresso);
 
-  /* The dashboard's own set: the same mark, inverted onto olive.
+  /* The dashboard's own set: the badge on olive with ADMIN written under it.
    *
    * Two apps from one business land on one home screen, and the label under an
-   * icon is truncated to a word or two — so the ground has to carry the
-   * difference rather than the name. The customer's icon is ink on parchment;
-   * this is parchment on olive-deep, 8.19:1, which is the strongest contrast
-   * the olives offer and is still unmistakably the same badge at 48px.
+   * icon is truncated to a word or two — so the tile has to carry the
+   * difference. The customer's icon is ink on parchment; this is parchment on
+   * olive-deep, 8.19:1, the same badge, and the word.
    *
-   * Same insets as above, for the same reasons — 0.86 for the ordinary icons,
-   * 0.62 for maskable, because Android crops this one to a circle too. */
-  await icon('admin-icon-192.png', 192, 0.86, palette['olive-deep'], palette.parchment);
-  await icon('admin-icon-512.png', 512, 0.86, palette['olive-deep'], palette.parchment);
-  await icon('admin-icon-maskable-192.png', 192, 0.62, palette['olive-deep'], palette.parchment);
-  await icon('admin-icon-maskable-512.png', 512, 0.62, palette['olive-deep'], palette.parchment);
-  await icon('admin-apple-touch-icon.png', 180, 0.86, palette['olive-deep'], palette.parchment);
+   * THREE GEOMETRIES, BECAUSE EACH PLATFORM CUTS A DIFFERENT SHAPE. See
+   * adminIcon() for what varies and why. */
+  console.log('\nGenerating dashboard icons');
+  await adminIcon('admin-icon-192.png', 192, PLAIN, 0.20);
+  await adminIcon('admin-icon-512.png', 512, PLAIN, 0.20);
+  await adminIcon('admin-icon-maskable-192.png', 192, MASKABLE, 0);
+  await adminIcon('admin-icon-maskable-512.png', 512, MASKABLE, 0);
+  await adminIcon('admin-apple-touch-icon.png', 180, PLAIN, 0);
 
   // Site header — the profile picture: the gold lockup on an olive disc.
   console.log('\nGenerating header mark from brand/logo-lineart.png');

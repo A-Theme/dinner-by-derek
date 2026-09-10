@@ -81,6 +81,7 @@ ${extraHead || ''}
   <li><a href="/admin-training">Training Mode</a></li>
 </ul></nav>
 <main class="admin-wrap">
+<div id="install-slot"></div>
 ${body}
 </main>
 <div id="toasts" aria-live="polite"></div>
@@ -99,6 +100,7 @@ function login(error, next) {
 ${PWA_HEAD}
 <script src="${assets.url('/install.js')}" defer></script>
 </head><body><main class="wrap" style="max-width:420px;margin-top:var(--dbd-sp-7)">
+<div id="install-slot"></div>
 <div class="card">
 <h1>Dinner By Derek</h1>
 <p>Sign in to the dashboard.</p>
