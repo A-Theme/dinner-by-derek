@@ -10,6 +10,7 @@ const X = require('../exports');
 const S = require('../summary');
 const G = require('../graphics');
 const V = require('../views/admin');
+const { palette } = require('../theme');
 const { html, money } = require('../html');
 
 /**
@@ -38,6 +39,53 @@ strict.use(noStore);
 router.use(noStore);
 
 const { back } = require('./back');
+
+/* ========================= INSTALLING THE DASHBOARD ======================
+   The dashboard as an app on a phone's home screen and a computer's dock:
+   its own icon, its own window, opening on /admin rather than the menu.
+
+   DELIBERATELY NOT BEHIND auth.requiredStrict, and that is the whole reason
+   this route is up here with a paragraph on it rather than filed with the
+   pages it describes. A <link rel="manifest"> is fetched with credentials
+   OMITTED unless the tag says crossorigin="use-credentials" — so a manifest
+   guarded like the exports below would answer the browser's own fetch with a
+   401, and the browser would then decline to offer the install with no error
+   on the page, nothing in the console worth reading, and everything looking
+   correct to a signed-in owner testing it on a laptop. It fails only on the
+   device that was the point.
+
+   Nothing in here is worth guarding. It is the business name, five icon paths
+   and the word "standalone" — the same facts the login page already gives to
+   anyone who loads it. The password is on the pages, which is where it does
+   the work.
+
+   No `orientation`. The customer app pins itself to portrait because it is a
+   phone menu; this one is read on a laptop as often as a phone, and locking a
+   dashboard to portrait would be a bug on the larger screen.
+
+   `id` is set rather than left to default. It defaults to start_url, so it
+   would work today — and would silently become a different app the day anyone
+   changed where this opens, orphaning every icon already installed. */
+strict.get('/manifest.webmanifest', (req, res) => {
+  const name = settings.get('business_name');
+  res.type('application/manifest+json').json({
+    id: '/admin',
+    name: `${name} Dashboard`,
+    short_name: 'Dashboard',
+    description: `Take orders, build the week's menu and read the takings for ${name}.`,
+    start_url: '/admin',
+    scope: '/admin',
+    display: 'standalone',
+    theme_color: palette.olive,
+    background_color: palette.parchment,
+    icons: [
+      { src: '/icons/admin-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icons/admin-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/icons/admin-icon-maskable-192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+      { src: '/icons/admin-icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    ],
+  });
+});
 
 /* ============================== EXPORTS =================================
    Personal data lives behind requiredStrict: a 401, never a redirect, and

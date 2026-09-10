@@ -251,6 +251,22 @@ const headerMark = async (size) => sharp(await brandmark.disc(size))
   // Browser tab.
   await icon('favicon-32.png', 32, 0.92, palette.parchment, palette.espresso);
 
+  /* The dashboard's own set: the same mark, inverted onto olive.
+   *
+   * Two apps from one business land on one home screen, and the label under an
+   * icon is truncated to a word or two — so the ground has to carry the
+   * difference rather than the name. The customer's icon is ink on parchment;
+   * this is parchment on olive-deep, 8.19:1, which is the strongest contrast
+   * the olives offer and is still unmistakably the same badge at 48px.
+   *
+   * Same insets as above, for the same reasons — 0.86 for the ordinary icons,
+   * 0.62 for maskable, because Android crops this one to a circle too. */
+  await icon('admin-icon-192.png', 192, 0.86, palette['olive-deep'], palette.parchment);
+  await icon('admin-icon-512.png', 512, 0.86, palette['olive-deep'], palette.parchment);
+  await icon('admin-icon-maskable-192.png', 192, 0.62, palette['olive-deep'], palette.parchment);
+  await icon('admin-icon-maskable-512.png', 512, 0.62, palette['olive-deep'], palette.parchment);
+  await icon('admin-apple-touch-icon.png', 180, 0.86, palette['olive-deep'], palette.parchment);
+
   // Site header — the profile picture: the gold lockup on an olive disc.
   console.log('\nGenerating header mark from brand/logo-lineart.png');
   fs.writeFileSync(path.join(OUT, 'header-mark.png'), await headerMark(252));

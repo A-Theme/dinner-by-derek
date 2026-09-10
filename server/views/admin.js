@@ -16,6 +16,29 @@ const NAV = [
   ['/admin/settings', 'Settings'],
 ];
 
+/**
+ * What makes the dashboard installable — the same five lines on the shell and
+ * on the login page, because either one can be the page in front of you when
+ * you reach for Add to Home Screen, and an icon that depends on which screen
+ * you happened to be looking at is a trap.
+ *
+ * The apple-* tags are not redundant with the manifest. iOS reads the manifest
+ * for the name and the display mode but takes the home-screen picture from
+ * apple-touch-icon, and with no such tag anywhere on an admin page it falls
+ * back to a SCREENSHOT OF THE PAGE. That was the state before this: a readable
+ * icon everywhere except the one place it is looked at.
+ *
+ * The title is 'Dashboard' rather than the business name, because iOS prints
+ * it under the icon in about eleven characters and "Dinner By Derek Dash…" says
+ * nothing the icon has not already said.
+ */
+const PWA_HEAD = html`
+<link rel="manifest" href="/admin/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/admin-apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Dashboard">`;
+
 function shell({ title, body, current = '', extraHead = null, scripts = null }) {
   /* raw(), because html`` escapes what it interpolates — and an escaped
      attribute is not an attribute. This shipped as
@@ -39,6 +62,7 @@ function shell({ title, body, current = '', extraHead = null, scripts = null }) 
 <link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="${assets.url('/admin.css')}">
+${PWA_HEAD}
 ${extraHead || ''}
 </head><body>
 <nav class="admin-nav no-print"><ul>
@@ -61,6 +85,7 @@ ${body}
 </main>
 <div id="toasts" aria-live="polite"></div>
 <script src="${assets.url('/admin.js')}" defer></script>
+<script src="${assets.url('/install.js')}" defer></script>
 ${scripts || ''}
 </body></html>`;
 }
@@ -71,6 +96,8 @@ function login(error, next) {
 <title>Sign in</title><meta name="theme-color" content="${palette.olive}">
 <meta name="robots" content="noindex">
 <link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/app.css">
+${PWA_HEAD}
+<script src="${assets.url('/install.js')}" defer></script>
 </head><body><main class="wrap" style="max-width:420px;margin-top:var(--dbd-sp-7)">
 <div class="card">
 <h1>Dinner By Derek</h1>

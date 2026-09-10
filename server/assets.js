@@ -42,7 +42,7 @@ function fingerprint(names, dir = publicDir) {
 /* The dashboard files, and only those. The shell files are cached BY URL in
  * the service worker's SHELL list, so hanging a query string on /app.css here
  * would ask for a URL that list does not contain and quietly defeat it. */
-const VERSIONED = ['/admin.css', '/admin.js'];
+const VERSIONED = ['/admin.css', '/admin.js', '/install.js'];
 
 /* Read once at boot, so a missing file fails loudly at startup rather than
  * halfway through rendering a page. */
