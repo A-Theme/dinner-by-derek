@@ -292,6 +292,105 @@ function sheetPage(d, kind, date) {
   return { title: titles[kind], body, current: 'orders' };
 }
 
+/* ============================ WEEK TOTALS ===============================
+ * The one sheet that is read after the cooking rather than during it.
+ *
+ * Not wrapped in `.sheet` and not auto-printing, unlike the three above.
+ * Those are a document for one day, opened to be printed; this one is browsed
+ * — back a week, forward a week, out to the day sheets — and a page that
+ * throws up a print dialog every time you step to the week before is a page
+ * nobody steps through.
+ */
+function weekTotalsPage(d, monday, q) {
+  const s = St.weekSummary(d, monday);
+  const weeks = St.weeksWithOrders(d);
+
+  const cols = html`<thead><tr>
+    <th>Item</th><th>Size</th><th style="text-align:right">Price</th>
+    <th style="text-align:right">Sold</th><th style="text-align:right">Money</th>
+  </tr></thead>`;
+
+  /* `days` is set on the week roll-up only, and only says something worth
+     saying when a dish ran more than once: eight sold over two nights and
+     eight sold in one are not the same result. */
+  const rows = (g) => g.items.map((i) => html`<tr>
+    <td data-label="Item">${i.item_name}${i.days > 1
+      ? html` <span class="variant__label">on ${i.days} days</span>` : ''}</td>
+    <td data-label="Size">${i.variant_label}</td>
+    <td data-label="Price" style="text-align:right">${i.mixed
+      ? html`<span class="variant__label">mixed</span>` : L.money(i.unit_price)}</td>
+    <td data-label="Sold" style="text-align:right"><strong>${i.qty}</strong></td>
+    <td data-label="Money" style="text-align:right">${L.money(i.revenue)}</td>
+  </tr>`);
+
+  /* Food, delivery and total on one line, then what has actually arrived.
+     Paid is money in the bank; outstanding is the number to chase, spelled
+     out rather than left as a subtraction for the reader to do. */
+  const takings = (t) => html`<p class="variant__label">Food ${L.money(t.food)}
+    · Delivery ${L.money(t.fees)}
+    · <strong style="font-size:var(--dbd-step-1)">Total ${L.money(t.total)}</strong>
+    · Paid ${L.money(t.paid)}${t.outstanding
+      ? html` · <span class="flag flag--warn">${L.money(t.outstanding)} outstanding</span>` : ''}</p>`;
+
+  const counts = (t) => html`${t.orders} order${t.orders === 1 ? '' : 's'}
+    · ${t.pickups} pickup · ${t.deliveries} delivery`;
+
+  const body = html`
+    <h1>Week totals — ${L.fmtWeekRange(monday)}</h1>
+    ${V.flash(q)}
+    <p class="also">Confirmed orders only, by the day the food was for.${s.pending
+      ? html` <span class="flag flag--warn">${s.pending} late request${s.pending === 1 ? '' : 's'}</span>
+        ${s.pending === 1 ? 'is' : 'are'} still waiting on you and ${s.pending === 1 ? 'is' : 'are'}
+        not counted here — <a href="${BASE}/orders?status=late_request">Orders</a>.` : ''}${s.declined
+      ? html` ${s.declined} declined request${s.declined === 1 ? '' : 's'}
+        ${s.declined === 1 ? 'is' : 'are'} left out.` : ''}</p>
+
+    <form method="get" action="${BASE}/sheet/week" class="card no-print" data-coach="pick">
+      <div class="dl-row">
+        <select name="week" style="flex:1 1 220px">
+          ${weeks.includes(monday) ? '' : html`<option value="${monday}" selected>${L.fmtWeekRange(monday)}</option>`}
+          ${weeks.map((m) => html`<option value="${m}"${m === monday ? ' selected' : ''}>${L.fmtWeekRange(m)}</option>`)}
+        </select>
+        <button class="btn btn--secondary" type="submit">Show that week</button>
+        <a class="btn btn--secondary" href="${BASE}/sheet/week/${L.addDays(monday, -7)}">&larr; Week before</a>
+        <a class="btn btn--secondary" href="${BASE}/sheet/week/${L.addDays(monday, 7)}">Week after &rarr;</a>
+      </div>
+      <div class="dl-row" data-coach="out">
+        <button class="btn btn--primary" type="button" data-print>Print or save as PDF</button>
+        <a class="btn btn--secondary" href="${BASE}/export/week.csv?week=${monday}">Week CSV</a>
+        <a class="btn btn--secondary" href="${BASE}/orders">Back to orders</a>
+      </div>
+      <p class="also">The CSV holds one row per item per day, plus a row for each day's
+        delivery fees. It carries no totals of its own — the Money column adds up to the
+        week, and the sums are on this page.</p>
+    </form>
+
+    ${s.empty ? html`<div class="card"><p>No confirmed orders for this week.</p></div>` : ''}
+
+    ${s.days.map((day) => html`<div class="card week-day"${day.orders ? '' : raw(' data-coach="quiet"')}>
+      <h2>${L.fmtDayLong(day.date)}${day.dish_name ? ` — ${day.dish_name}` : ''}</h2>
+      <p class="variant__label">${day.closed ? html`<em>Kitchen closed.</em> ` : ''}${counts(day)}
+        <span class="no-print">· <a href="${BASE}/sheet/kitchen/${day.date}">Kitchen</a>
+        · <a href="${BASE}/orders?date=${day.date}">Orders</a></span></p>
+      ${day.sections.length ? day.sections.map((g) => html`
+        <h3>${g.name}</h3>
+        <table class="dtable">${cols}<tbody>${rows(g)}</tbody></table>`)
+        : html`<p>Nothing sold on this day.</p>`}
+      ${day.orders ? takings(day) : ''}
+    </div>`)}
+
+    ${s.empty ? '' : html`<div class="card week-total" data-coach="whole">
+      <h2>The whole week</h2>
+      <p class="variant__label">${counts(s.week)}</p>
+      ${s.week.sections.map((g) => html`
+        <h3>${g.name}</h3>
+        <table class="dtable">${cols}<tbody>${rows(g)}</tbody></table>`)}
+      ${takings(s.week)}
+    </div>`}`;
+
+  return { title: 'Week totals', body, current: 'weektotals' };
+}
+
 /* ============================== OUTBOX ==================================
  * Not a screen the real dashboard has, and the one place this module adds
  * something rather than copying it.
@@ -333,4 +432,4 @@ function outboxPage(d, q) {
   return { title: 'Outbox', body, current: 'outbox' };
 }
 
-module.exports = { todayPage, ordersPage, sheetPage, outboxPage };
+module.exports = { todayPage, ordersPage, sheetPage, weekTotalsPage, outboxPage };

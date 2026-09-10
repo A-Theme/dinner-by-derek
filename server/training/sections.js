@@ -26,6 +26,7 @@ const SECTIONS = [
   { key: 'recipes', path: '/recipes', label: 'Recipes', enabled: true },
   { key: 'other', path: '/other-options', label: 'Other Options', enabled: true },
   { key: 'orders', path: '/orders', label: 'Orders', enabled: true },
+  { key: 'weektotals', path: '/sheet/week', label: 'Week Totals', enabled: true },
 
   /* Built, complete, and not in use yet. See the note above. */
   { key: 'payments', path: '/payments', label: 'Payments', enabled: false },

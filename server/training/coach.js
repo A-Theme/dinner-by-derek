@@ -19,7 +19,7 @@
 
 const SECTION_ORDER = [
   'today', 'week', 'dishes', 'recipes', 'other',
-  'orders', 'payments', 'locations', 'graphics', 'settings', 'history',
+  'orders', 'weektotals', 'payments', 'locations', 'graphics', 'settings', 'history',
 ];
 
 const STEPS = {
@@ -203,6 +203,34 @@ const STEPS = {
       target: 'allergy',
       title: 'Read the allergy notes',
       body: 'They are printed on the kitchen sheet too. This is the line that matters most on the whole screen.',
+    },
+  ],
+
+  weektotals: [
+    {
+      target: 'pick',
+      title: 'The week, added up',
+      body: 'The one screen read after the cooking rather than during it. Monday to Sunday, confirmed orders only. Step back a week or forward a week — it never prints unless you ask it to.',
+    },
+    {
+      target: 'whole',
+      title: 'What sold, and what it made',
+      body: 'Each day first, then the week with the days folded together. Biggest earner at the top of each section, because that is the order the question actually gets asked in.',
+    },
+    {
+      target: 'whole',
+      title: 'Two words worth knowing',
+      body: '"on 2 days" means a dish ran more than once — eight sold over two nights is not eight sold in one. "mixed" in the Price column means it sold at more than one price that week, so no single figure would be true.',
+    },
+    {
+      target: 'quiet',
+      title: 'A day with nothing on it still counts',
+      body: 'A day the menu opened and nobody ordered from is printed as a zero rather than left out — that is the answer to "did anyone order on the Sunday?", which a missing row does not give.',
+    },
+    {
+      target: 'out',
+      title: 'Getting it out',
+      body: 'Print for the folder, or take the CSV into a spreadsheet. The CSV holds the lines only and no totals of its own — a file carrying both its parts and its sums is one AutoSum away from a number twice the size of the week.',
     },
   ],
 

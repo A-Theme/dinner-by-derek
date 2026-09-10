@@ -109,7 +109,7 @@ function read(text, week) {
       kind: 'day',
       slot: 1,
       wd,
-      where: `${C.WEEKDAY_LABELS[wd]}${date ? `, ${L.fmtMonthDay(date)}` : ''}`,
+      where: `${L.weekdayLabel(wd)}${date ? `, ${L.fmtMonthDay(date)}` : ''}`,
       name,
       description: '',
       full_price: prices[0] != null ? prices[0] : null,

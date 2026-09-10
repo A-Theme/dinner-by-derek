@@ -94,7 +94,45 @@ function clockTime(v) {
   return `${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}`;
 }
 
-const isCalendarDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+/**
+ * A real date, not merely a date-shaped string.
+ *
+ * The shape alone was the old test here, and Date.UTC rolls anything over:
+ * 2026-02-31 becomes March 2nd and 0000-99-99 becomes a Monday in 1908. That
+ * matters most on the week-start box, which decides what date every box on
+ * This Week points at. The real app made this same correction on 2026-09-09.
+ */
+function isCalendarDate(s) {
+  const raw = String(s == null ? '' : s);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (!m) return false;
+  const d = new Date(`${raw}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return false;
+  /* Round-tripped, so a rolled-over date fails: Date.UTC accepts Feb 31 and
+     hands back Mar 2, which no longer matches the string it came from. */
+  return d.toISOString().slice(0, 10) === raw;
+}
+
+/**
+ * A weekday's name, for a key that came out of storage rather than out of the
+ * list of ours.
+ *
+ * `WEEKDAY_LABELS[w]` is right wherever the key is one of ours and wrong the
+ * moment it is read back off a saved item: a value the table has no entry for
+ * comes back undefined, and `.slice(0, 3)` on it is a crash on the page that
+ * lists the item — from a row no screen could then be opened to fix. Falls
+ * back to the key itself, which is at least the truth about what is stored.
+ */
+const weekdayLabel = (w) => C.WEEKDAY_LABELS[w] || String(w == null ? '' : w);
+
+/**
+ * The weekday keys, and only those.
+ *
+ * The boxes send 'mon'…'sun' and nothing else, so this changes nothing about
+ * what the forms do. It is here because the value is kept and read back out by
+ * name, and the check belongs on the side that keeps it.
+ */
+const weekdayKeys = (v) => arr(v).map(String).filter((w) => C.WEEKDAYS.includes(w));
 
 /* --- Money and form fields ---------------------------------------------- */
 
@@ -226,7 +264,7 @@ function parseItem(body, prefix, opts) {
     single_price: cents(body[`${prefix}_single_price`]),
     single_cap: intOrNull(body[`${prefix}_single_cap`]),
   };
-  if (withWeekdays) out.weekdays = arr(body[`${prefix}_weekdays`]).map(String);
+  if (withWeekdays) out.weekdays = weekdayKeys(body[`${prefix}_weekdays`]);
   return out;
 }
 
@@ -291,7 +329,7 @@ function proofSummary(findings) {
 module.exports = {
   addDays, today, mondayOf, weekdayKey, ymd,
   fmtDayLong, fmtDayShort, fmtMonthDay, fmtWeekRange, fmtWindow,
-  clockTime, isCalendarDate,
+  clockTime, isCalendarDate, weekdayLabel, weekdayKeys,
   money, cents, intOrNull, arr, jsonArr,
   reviewedText, detect, pendingFor, reviewState, reviewMessage,
   parseItem, proofread, proofSummary,

@@ -99,8 +99,23 @@ function build() {
       .map((x) => x.allergen),
   })).map((x) => { x.ack_of = L.reviewedText(x); return x; });
 
-  /* --- The published week (this week) ----------------------------------- */
-  const publishedDays = [
+  /* --- The published week (this week) -----------------------------------
+   *
+   * The service days are placed relative to today rather than pinned to fixed
+   * weekday offsets, because the orders below are dated from today too. Pinned
+   * offsets meant that on most days of the week the sandbox held orders for
+   * dates the menu had never opened — which reads as a bug on the Week Totals
+   * screen, where a day with takings and no dish is exactly the thing a real
+   * owner would go looking for. Anchoring both to today keeps them agreeing
+   * whichever day the training happens on. */
+  let todayOffset = 0;
+  for (let i = 0; i < 7; i += 1) if (d(thisMonday, i) === today) todayOffset = i;
+  const publishedOffsets = [...new Set(
+    [todayOffset - 1, todayOffset, todayOffset + 1, todayOffset + 3]
+      .filter((n) => n >= 0 && n <= 6),
+  )].sort((a, b) => a - b);
+
+  const publishedDishes = [
     [0, reviewed({
       dish_name: 'Butter Chicken',
       description: 'Marinated overnight, finished with cream and fenugreek. Served with basmati rice.',
@@ -126,6 +141,11 @@ function build() {
       allergens: ['milk'],
     })],
   ];
+
+  /* The dishes above, dealt onto the dates computed for this week. */
+  const publishedDays = publishedOffsets.map((offset, i) => [
+    offset, publishedDishes[i % publishedDishes.length][1],
+  ]);
 
   /* --- The draft week (next week) ---------------------------------------
    * Mon and Tue are done. Wed is filled in but UNREVIEWED, which is what
@@ -419,6 +439,37 @@ function build() {
       ],
     },
   ];
+
+  /* Which part of the menu each item came off.
+   *
+   * The real app writes source_level and subcategory onto the order line at
+   * checkout, frozen, so a week added up months later groups by what the menu
+   * said at the time rather than by what it says now. The sandbox has no
+   * checkout, so the pairing is declared here and stamped onto every line
+   * below — one table rather than two fields repeated down six orders.
+   *
+   * 'Featured' is a level and not a subcategory: the day's dish carries
+   * whatever subcategory it was filed under, and the day it ran is the thing
+   * worth seeing. */
+  const SECTION_OF = {
+    'Butter Chicken': ['Featured', 'Mains'],
+    'Lasagne al Forno': ['Featured', 'Mains'],
+    'Beer-Battered Haddock': ['Featured', 'Mains'],
+    'Chicken and Leek Pie': ['Featured', 'Mains'],
+    'Shepherd’s Pie': ['Featured', 'Mains'],
+    'Roasted Tomato and Basil': ['Week', 'Soups'],
+    'Carrot and Coriander': ['Week', 'Soups'],
+    'Sticky Toffee Pudding': ['Week', 'Desserts'],
+    'Chicken Noodle': ['Standing', 'Soups'],
+    'Caesar': ['Standing', 'Salads'],
+    'Lemon Posset': ['Standing', 'Desserts'],
+  };
+  for (const o of orders) {
+    o.lines = o.lines.map((l) => {
+      const pair = SECTION_OF[l.item_name] || ['Standing', 'Mains'];
+      return { ...l, source_level: pair[0], subcategory: pair[1] };
+    });
+  }
 
   /* --- Payments ----------------------------------------------------------
    * Two unclaimed: one that matches an order to the cent, and one that is

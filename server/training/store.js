@@ -314,8 +314,167 @@ function candidatesFor(d, payment) {
   return out.slice(0, 4);
 }
 
+/* --- The week, added up -------------------------------------------------
+ * Mirrors server/summary.js against arrays instead of SQL.
+ *
+ * MONDAY TO SUNDAY, because Menu History already groups by the Monday on or
+ * before and weeks.week_start is a Monday — a summary drawing its boundary
+ * anywhere else would disagree with both of them about which week a Sunday
+ * belongs to.
+ */
+const SPAN = 7;
+const SECTION_ORDER = { Featured: 0, Soups: 1, Salads: 2, Mains: 3 };
+const sectionOf = (row) => (row.source_level === 'Featured' ? 'Featured' : row.subcategory);
+
+function groupBySection(rows) {
+  const groups = new Map();
+  for (const r of rows) {
+    const g = sectionOf(r);
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(r);
+  }
+  return [...groups.entries()]
+    .sort((a, b) => (SECTION_ORDER[a[0]] ?? 9) - (SECTION_ORDER[b[0]] ?? 9))
+    .map(([name, items]) => ({ name, items }));
+}
+
+/** A totals row, with the one figure nobody stores: what is still owed. */
+function counted(t) {
+  const r = {
+    orders: 0, pickups: 0, deliveries: 0, food: 0, fees: 0, total: 0, paid: 0, ...(t || {}),
+  };
+  r.outstanding = r.total - r.paid;
+  return r;
+}
+
+/**
+ * Every item across the week, its days folded together.
+ *
+ * Prices are part of the grouping and not a property of the item: a price rise
+ * lands mid-week, and the lines carry the price they were sold at. Grouping
+ * without it would average two real prices into one that was never charged.
+ * The roll-up puts them back together and says the price is mixed rather than
+ * picking one.
+ */
+function rollUp(lines) {
+  const items = new Map();
+  for (const l of lines) {
+    /* Joined on a character no dish name can contain, so a section "A" with an
+       item "B C" cannot collide with a section "A B" and an item "C". */
+    const key = [sectionOf(l), l.item_name, l.variant_label].join(' ');
+    const cur = items.get(key);
+    if (!cur) {
+      items.set(key, { ...l, days: 1, prices: new Set([l.unit_price]) });
+      continue;
+    }
+    cur.qty += l.qty;
+    cur.revenue += l.revenue;
+    cur.days += 1;
+    cur.prices.add(l.unit_price);
+  }
+  /* Biggest earner first inside each section — the days already run in date
+     order, and repeating that here would only say again what they said. */
+  return groupBySection([...items.values()]
+    .map((i) => ({ ...i, mixed: i.prices.size > 1 }))
+    .sort((a, b) => b.revenue - a.revenue || a.item_name.localeCompare(b.item_name)));
+}
+
+function weekSummary(d, monday) {
+  const end = L.addDays(monday, SPAN - 1);
+  const inWeek = (date) => date >= monday && date <= end;
+  const confirmed = d.orders.filter((o) => o.status === 'confirmed' && inWeek(o.service_date));
+
+  /* One row per date + item + size + price, the shape the SQL GROUP BY makes. */
+  const lines = [];
+  for (const o of confirmed) {
+    for (const l of o.lines) {
+      const key = [o.service_date, l.source_level, l.subcategory, l.item_name,
+        l.variant_label, l.unit_price].join(' ');
+      const cur = lines.find((x) => x.key === key);
+      if (cur) {
+        cur.qty += l.qty;
+        cur.revenue += l.qty * l.unit_price;
+        continue;
+      }
+      lines.push({
+        key,
+        date: o.service_date,
+        source_level: l.source_level,
+        subcategory: l.subcategory,
+        item_name: l.item_name,
+        variant_label: l.variant_label,
+        unit_price: l.unit_price,
+        qty: l.qty,
+        revenue: l.qty * l.unit_price,
+      });
+    }
+  }
+  lines.sort((a, b) => a.date.localeCompare(b.date)
+    || a.item_name.localeCompare(b.item_name)
+    || a.variant_label.localeCompare(b.variant_label));
+
+  const totals = new Map();
+  for (const o of confirmed) {
+    const t = totals.get(o.service_date)
+      || { date: o.service_date, orders: 0, pickups: 0, deliveries: 0, food: 0, fees: 0, total: 0, paid: 0 };
+    t.orders += 1;
+    if (o.method === 'pickup') t.pickups += 1; else t.deliveries += 1;
+    t.food += o.subtotal;
+    t.fees += o.delivery_fee;
+    t.total += o.total;
+    if (o.paid) t.paid += o.total;
+    totals.set(o.service_date, t);
+  }
+
+  /* The menu, for the day headings. A date with a service day and no orders is
+     still a day that happened, and printing it as a zero answers "did anybody
+     order on the Tuesday?" — which a missing row does not. */
+  const menu = new Map();
+  for (const x of d.serviceDays) if (inWeek(x.service_date)) menu.set(x.service_date, x);
+
+  const days = [];
+  for (let i = 0; i < SPAN; i += 1) {
+    const date = L.addDays(monday, i);
+    const t = totals.get(date);
+    const day = menu.get(date);
+    if (!t && !day) continue;                 // a date the business never touched
+    days.push({
+      date,
+      dish_name: day ? day.dish_name : '',
+      closed: !!(day && day.closed),
+      sections: groupBySection(lines.filter((l) => l.date === date)),
+      ...counted(t),
+    });
+  }
+
+  const whole = { orders: 0, pickups: 0, deliveries: 0, food: 0, fees: 0, total: 0, paid: 0 };
+  for (const t of totals.values()) for (const k of Object.keys(whole)) whole[k] += t[k] || 0;
+
+  const others = d.orders.filter((o) => inWeek(o.service_date) && o.status !== 'confirmed');
+
+  return {
+    monday,
+    end,
+    days,
+    lines,
+    week: { sections: rollUp(lines), ...counted(whole) },
+    pending: others.filter((o) => o.status === 'late_request').length,
+    declined: others.filter((o) => o.status === 'declined').length,
+    empty: !totals.size,
+  };
+}
+
+/** The Mondays that have confirmed orders, newest first, for the picker. */
+function weeksWithOrders(d, limit = 26) {
+  const set = new Set(d.orders
+    .filter((o) => o.status === 'confirmed')
+    .map((o) => L.mondayOf(o.service_date)));
+  return [...set].sort((a, b) => b.localeCompare(a)).slice(0, limit);
+}
+
 module.exports = {
   COOKIE, sessionFor, reset,
+  groupBySection, sectionOf, weekSummary, weeksWithOrders, SPAN,
   byId, currentWeek, activeWeek, serviceDaysOf, everyServiceDayOf,
   weekItemsOf, weekItem, activeLocations, slotsOf, review,
   blockers, scheduledFor, kitchenTotals,

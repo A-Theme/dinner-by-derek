@@ -378,7 +378,7 @@ router.post('/week/:id/paste/apply', (req, res) => {
         d.serviceDays.push(day);
       }
       Object.assign(day, common, { dish_name: row.name });
-      done.push(`${C.WEEKDAY_LABELS[row.wd]} — ${row.name}`);
+      done.push(`${L.weekdayLabel(row.wd)} — ${row.name}`);
     } else {
       const slot = Math.min(row.slot, C.WEEK_SLOT_COUNTS[row.kind] || 1);
       let item = St.weekItem(d, week.id, row.kind, slot);
@@ -993,9 +993,20 @@ router.post('/settings/pickup', (req, res) => {
      nobody can easily fix. */
   const start = L.clockTime(req.body.pickup_start);
   const end = L.clockTime(req.body.pickup_end);
+  const unchanged = () => `The window is still ${L.fmtWindow(d.settings.pickup_start, d.settings.pickup_end)}.`;
   if (start === null || end === null) {
-    return back(res, req, null, 'A pickup time has to look like 16:00 — nothing was changed. '
-      + `The window is still ${L.fmtWindow(d.settings.pickup_start, d.settings.pickup_end)}.`);
+    return back(res, req, null,
+      `A pickup time has to look like 16:00 — nothing was changed. ${unchanged()}`);
+  }
+  /* Both are times, and two times are not yet a window. Stored as typed, 19:00
+     to 16:00 printed as "7:00 PM–4:00 PM" on the customer menu and was frozen
+     onto every order placed that day — a record nobody can correct, telling a
+     customer to collect three hours before collection opens. Refused whole
+     rather than swapped round: the owner knows which of the two boxes they
+     meant. The real app made this same correction on 2026-09-09. */
+  if (start >= end) {
+    return back(res, req, null,
+      `Pickup has to finish after it starts — nothing was changed. ${unchanged()}`);
   }
   d.settings.pickup_start = start;
   d.settings.pickup_end = end;
@@ -1282,6 +1293,24 @@ router.post('/facebook/publish/:id', (req, res) => {
     + 'The post is in the Outbox.');
 });
 
+/* ============================ WEEK TOTALS ===============================
+ * Any date in the week is accepted and folded to its Monday, so a link built
+ * out of a service date lands on the week that date falls in rather than
+ * 404ing on a Wednesday. */
+
+router.get('/sheet/week', (req, res) => {
+  const asked = req.query.week ? String(req.query.week) : '';
+  const monday = L.mondayOf(L.isCalendarDate(asked) ? asked : L.today());
+  res.redirect(303, `${BASE}/sheet/week/${monday}`);
+});
+
+router.get('/sheet/week/:date', (req, res) => {
+  if (!L.isCalendarDate(req.params.date)) {
+    return res.status(404).type('text/plain').send('That is not a date this app can print.');
+  }
+  send(req, res, ops.weekTotalsPage(res.locals.d, L.mondayOf(req.params.date), req.query));
+});
+
 /* ============================ PRINT SHEETS ============================== */
 
 router.get('/sheet/:kind/:date', (req, res, next) => {
@@ -1323,6 +1352,44 @@ router.get('/export/orders.csv', (req, res) => {
   }
   res.set('Content-Type', 'text/csv; charset=utf-8');
   res.set('Content-Disposition', 'attachment; filename="TRAINING-orders.csv"');
+  res.send(csv(rows));
+});
+
+/**
+ * The week's lines, for a spreadsheet.
+ *
+ * Deliberately only the lines: no subtotal rows and no grand total, because a
+ * file carrying both its parts and its sums is one AutoSum away from a number
+ * twice the size of the week. Delivery gets a row of its own per day rather
+ * than a column, for the same reason — it is money the week made, it is not an
+ * item anybody ordered, and a column of fees repeated beside every line would
+ * be summed too.
+ */
+router.get('/export/week.csv', (req, res) => {
+  const d = res.locals.d;
+  const asked = req.query.week ? String(req.query.week) : '';
+  const monday = L.mondayOf(L.isCalendarDate(asked) ? asked : L.today());
+  const s = St.weekSummary(d, monday);
+
+  const rows = [['Service day', 'Weekday', 'Kind', 'Section', 'Item', 'Size',
+    'Unit price', 'Sold', 'Money']];
+  for (const day of s.days) {
+    for (const g of day.sections) {
+      for (const i of g.items) {
+        rows.push([day.date, L.weekdayLabel(L.weekdayKey(day.date)),
+          i.source_level, g.name, i.item_name, i.variant_label,
+          (i.unit_price / 100).toFixed(2), i.qty, (i.revenue / 100).toFixed(2)]);
+      }
+    }
+    if (day.fees) {
+      rows.push([day.date, L.weekdayLabel(L.weekdayKey(day.date)),
+        'Delivery', 'Delivery', 'Delivery fees', '', '', day.deliveries,
+        (day.fees / 100).toFixed(2)]);
+    }
+  }
+
+  res.set('Content-Type', 'text/csv; charset=utf-8');
+  res.set('Content-Disposition', `attachment; filename="TRAINING-week-${monday}.csv"`);
   res.send(csv(rows));
 });
 

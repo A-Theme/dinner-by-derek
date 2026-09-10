@@ -126,6 +126,11 @@
   /* --- The item editor ----------------------------------------------------
      Allergen suggestions, tags, and the review tick. Same behaviour as the
      real editor, pointed at the sandbox's own dictionary. */
+
+  /* Each editor's dish photo, in document order, collected for the single
+     paste handler registered after the loop. */
+  var pasteTargets = [];
+
   document.querySelectorAll('[data-editor]').forEach(function (ed) {
     var desc = ed.querySelector('[data-description]');
     var nameEl = ed.querySelector('[data-item-name]');
@@ -263,7 +268,7 @@
        Nothing is uploaded. The picture is read in the browser and shown, and
        the field carries a sandbox name so the rest of the form behaves as it
        would with a real one. */
-    ed.querySelectorAll('[data-photoslot]').forEach(function (slot) {
+    ed.querySelectorAll('[data-photoslot]').forEach(function (slot, slotIndex) {
       var drop = slot.querySelector('[data-drop]');
       var file = slot.querySelector('[data-file]');
       var cam = slot.querySelector('[data-camera]');
@@ -326,7 +331,62 @@
           if (msg) msg.textContent = 'Photo removed.';
         });
       }
+
+      /* Paste fills the dish photo and nothing else — the meal-for-one box is
+         filled from its own two buttons. Collected here rather than given a
+         listener of its own; the handler below the editor loop says why. */
+      if (slotIndex === 0) pasteTargets.push({ editor: ed, take: take, msg: msg });
     });
+  });
+
+  /* --- One pasted image, one dish ------------------------------------------
+   * ONE listener for the page, deliberately.
+   *
+   * The real dashboard had this registered inside the editor loop, guarded by
+   * `slotIndex === 0` — which counts slots within an editor, not editors
+   * within a page. This Week draws thirteen editors, so it drew thirteen
+   * listeners; the six that sit in plain cards rather than inside a <details>
+   * all fired, and a single Ctrl+V set the same photo on six unrelated dishes.
+   * It was found and fixed in the real app on 2026-09-09, and the training
+   * copy is written the corrected way rather than reproducing the fault.
+   *
+   * The target is the editor being worked in: the one holding focus, which is
+   * the strongest statement anybody makes about which box they mean, and
+   * failing that the one last touched. If neither names an editor, nothing
+   * happens — no photo is a better answer than six wrong ones, and the two
+   * buttons in every box still work.
+   */
+  var lastEditor = null;
+  var noteEditor = function (e) {
+    var el = e.target && e.target.closest && e.target.closest('[data-editor]');
+    if (el) lastEditor = el;
+  };
+  document.addEventListener('focusin', noteEditor);
+  document.addEventListener('click', noteEditor);
+
+  window.addEventListener('paste', function (e) {
+    if (!pasteTargets.length) return;
+    var items = (e.clipboardData || {}).items || [];
+    var file = null;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') === 0) { file = items[i].getAsFile(); break; }
+    }
+    if (!file) return;
+
+    var active = document.activeElement
+      && document.activeElement.closest
+      && document.activeElement.closest('[data-editor]');
+    var wanted = active || lastEditor;
+    if (!wanted) {
+      toast('Tap the dish you meant first, then paste.', 'bad');
+      return;
+    }
+    for (var j = 0; j < pasteTargets.length; j++) {
+      if (pasteTargets[j].editor === wanted) {
+        pasteTargets[j].take(file);
+        return;
+      }
+    }
   });
 
   /* --- The proofreader ----------------------------------------------------

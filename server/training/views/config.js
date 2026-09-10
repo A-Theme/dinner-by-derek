@@ -265,7 +265,7 @@ function settingsPage(d, q) {
           <div><label for="aptime">Time</label>
             <input type="time" id="aptime" name="auto_publish_time" value="${d.settings.auto_publish_time}"></div>
         </div>
-        <p class="also">That is the ${C.WEEKDAY_LABELS[d.settings.auto_publish_weekday]}
+        <p class="also">That is the ${L.weekdayLabel(d.settings.auto_publish_weekday)}
           <em>before</em> the week starts, in ${d.settings.timezone}.</p>
 
         <fieldset>

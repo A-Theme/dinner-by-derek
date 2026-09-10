@@ -343,7 +343,7 @@ function otherOptionsPage(d, q) {
       <tbody>
       ${d.standing.map((i, idx) => {
         const wd = i.availability === 'every_service_day' ? 'Every service day'
-          : (L.jsonArr(i.weekdays).map((w) => C.WEEKDAY_LABELS[w].slice(0, 3)).join(', ') || 'No days set');
+          : (L.jsonArr(i.weekdays).map((w) => L.weekdayLabel(w).slice(0, 3)).join(", ") || 'No days set');
         const prices = [
           i.full_on && i.full_price != null ? `${i.full_label} ${L.money(i.full_price)}` : null,
           i.single_on && i.single_price != null ? `${i.single_label} ${L.money(i.single_price)}` : null,
