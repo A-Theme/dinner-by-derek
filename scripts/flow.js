@@ -339,6 +339,32 @@ const PAST_DATE = T.addDays(today, -2);
     check('and the price', afterOverride.full_price, 2200);
     check('and the allergen acknowledgement', afterOverride.ack, 1);
 
+    /* Two times are not yet a window. The Settings form has refused a backwards
+       one since the September pass; the override is the worse of the two places
+       to be missing it, because this value is frozen onto every order placed on
+       the day and reaches the customer in an email nobody can correct. */
+    const stored = () => db.prepare('SELECT pickup_start, pickup_end FROM service_days WHERE id = ?').get(dayId);
+    let refused = await POST(`/admin/week/${weekId}/day/${dayId}`, {
+      pickup_start: '20:00', pickup_end: '17:00', delivery_override: '',
+    });
+    ok('a backwards per-day window is refused',
+      String(refused.location || '').includes('err='), refused.location);
+    check('and the day keeps the window it had', stored().pickup_start, '17:00');
+
+    /* The quieter route, and the one a two-box comparison would have let
+       through: each half inherits on its own, so a start past the *inherited*
+       end is the same broken window without both boxes being filled in. */
+    const { settings } = require('../server/db');
+    const globalEnd = settings.get('pickup_end', '19:00');
+    check('(the global end this day would inherit)', globalEnd, '19:00');
+    refused = await POST(`/admin/week/${weekId}/day/${dayId}`, {
+      pickup_start: '20:00', pickup_end: '', delivery_override: '',
+    });
+    ok('a start past the inherited end is refused too',
+      String(refused.location || '').includes('err='), refused.location);
+    check('and that day is untouched as well', stored().pickup_start, '17:00');
+    check('with its end still where it was', stored().pickup_end, '20:00');
+
     // Put it back so the rest of the test sees the standard window.
     await POST(`/admin/week/${weekId}/day/${dayId}`, {
       pickup_start: '', pickup_end: '', delivery_override: '',

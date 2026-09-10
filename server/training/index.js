@@ -517,6 +517,22 @@ router.post('/week/:id/day/:dayId', (req, res) => {
       + 'the usual window. Nothing was changed.');
   }
 
+  /* And two times are still not a window. Compared after falling back, not
+     before: each half inherits on its own, so checking only the two boxes
+     would pass a day that sets a late start and leaves the end inheriting the
+     usual one. What is stored here is frozen onto every order placed on the
+     day, which is why the real app guards the override as well as the global
+     window. */
+  const effStart = start || d.settings.pickup_start;
+  const effEnd = end || d.settings.pickup_end;
+  if (effStart >= effEnd) {
+    return back(res, req, null,
+      `Pickup has to finish after it starts, and ${L.fmtWindow(effStart, effEnd)} does not. `
+      + 'Nothing was changed.'
+      + (start && end ? '' : ' A box left empty uses the usual window, so the times you did '
+        + 'set are being read against that.'));
+  }
+
   day.pickup_start = start;
   day.pickup_end = end;
   day.delivery_on = req.body.delivery_override === ''

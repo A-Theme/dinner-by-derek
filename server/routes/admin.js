@@ -596,6 +596,35 @@ router.post('/week/:id/day/:dayId', (req, res) => {
     return back(res, req, null, message);
   }
 
+  /* And two times are still not a window.
+   *
+   * The Settings form has refused a backwards window since the September pass;
+   * this is the same guard on the override, which is the worse of the two
+   * places to be missing it. What is stored here is not only shown: fmtWindow
+   * reads it at submit and writes the result into orders.pickup_window,
+   * permanently, on a record no screen can correct and in the confirmation
+   * email the customer keeps. A backwards window is therefore not a wrong line
+   * on a menu, it is a customer told to collect three hours before collection
+   * opens.
+   *
+   * Compared after falling back, not before. Each half inherits on its own —
+   * pickupWindowFor() takes the day's value where it has one and the setting
+   * where it does not — so checking only the two boxes would pass a day that
+   * sets a 20:00 start and leaves the end inheriting 19:00. That is the same
+   * broken window by a quieter route, and the quieter route is the one that
+   * would have survived this fix.
+   */
+  const effStart = start || settings.get('pickup_start', '16:00');
+  const effEnd = end || settings.get('pickup_end', '19:00');
+  if (effStart >= effEnd) {
+    const message = `Pickup has to finish after it starts, and ${T.fmtWindow(effStart, effEnd)} `
+      + 'does not. Nothing was changed.'
+      + (start && end ? '' : ' A box left empty uses the usual window, so the times you did '
+        + 'set are being read against that.');
+    if (req.get('X-Draft')) return res.status(400).json({ error: message });
+    return back(res, req, null, message);
+  }
+
   db.prepare(`UPDATE service_days SET pickup_start=?, pickup_end=?, delivery_on=?
       WHERE id=? AND week_id=?`)
     .run(start, end,
