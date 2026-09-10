@@ -602,22 +602,26 @@ router.get('/history', (req, res) => {
       week is edited in <a href="/admin/week">This Week</a>.</p>
 
     ${groups.size ? [...groups.entries()].map(([monday, days]) => html`
-      <div class="card">
+      <div class="card card--tight">
         <h2>${T.fmtWeekRange(monday, tz())}${monday === T.mondayOf(today)
           ? html` <span class="flag flag--ok">This week</span>` : ''}</h2>
-        <table class="dtable">
+        <table class="dtable dtable--tight">
           <thead><tr><th>Day</th><th>Dish</th><th></th></tr></thead>
           <tbody>
-            ${days.map((d) => html`<tr>
-              <td data-label="Day">${T.fmtDayShort(d.service_date, tz())}</td>
-              <td data-label="Dish">${d.closed
+            ${days.map((d) => {
+              /* Built here rather than inline, and written into the cell with
+                 no whitespace around it, so that a day which is neither adrift
+                 nor unpublished produces `<td data-label=""></td>` — genuinely
+                 empty, which is what lets the phone stylesheet drop it with
+                 :empty instead of leaving a labelled blank line on every row.
+                 A newline inside those tags is a text node, and a text node is
+                 enough to stop :empty matching. */
+              const marks = html`${d.week_status === 'published' ? html`<span class="variant__label">published</span>` : ''}${d.adrift ? html`<span class="flag flag--warn">Not on ${d.week_title}</span>` : ''}`;
+              const dish = d.closed
                 ? html`<em>Kitchen closed</em>`
-                : (d.dish_name && d.dish_name.trim() ? d.dish_name : html`<em>No dish</em>`)}</td>
-              <td data-label="">
-                ${d.week_status === 'published' ? html`<span class="variant__label">published</span>` : ''}
-                ${d.adrift ? html`<span class="flag flag--warn">Not on ${d.week_title}</span>` : ''}
-              </td>
-            </tr>`)}
+                : (d.dish_name && d.dish_name.trim() ? d.dish_name : html`<em>No dish</em>`);
+              return html`<tr><td data-label="Day">${T.fmtDayShort(d.service_date, tz())}</td><td data-label="Dish">${dish}</td><td data-label="">${marks}</td></tr>`;
+            })}
           </tbody>
         </table>
       </div>`)

@@ -452,22 +452,23 @@ function historyPage(d, q) {
       current week is edited in <a href="${BASE}/week">This Week</a>.</p>
 
     ${groups.size ? [...groups.entries()].map(([monday, days]) => html`
-      <div class="card">
+      <div class="card card--tight">
         <h2>${L.fmtWeekRange(monday)}${monday === thisMonday
           ? html` <span class="flag flag--ok">This week</span>` : ''}</h2>
-        <table class="dtable">
+        <table class="dtable dtable--tight">
           <thead><tr><th>Day</th><th>Dish</th><th></th></tr></thead>
           <tbody>
-            ${days.map((x) => html`<tr>
-              <td data-label="Day">${L.fmtDayShort(x.service_date)}</td>
-              <td data-label="Dish">${x.closed
+            ${days.map((x) => {
+              /* No whitespace inside the last cell, so a day with nothing to
+                 flag renders `<td data-label=""></td>` and the phone
+                 stylesheet can drop it with :empty. Same shape as the real
+                 screen — see the note in routes/admin2.js. */
+              const marks = html`${x.week && x.week.status === 'published' ? html`<span class="variant__label">published</span>` : ''}${x.adrift ? html`<span class="flag flag--warn">Not on ${x.week.title}</span>` : ''}`;
+              const dish = x.closed
                 ? html`<em>Kitchen closed</em>`
-                : (x.dish_name && x.dish_name.trim() ? x.dish_name : html`<em>No dish</em>`)}</td>
-              <td data-label="">
-                ${x.week && x.week.status === 'published' ? html`<span class="variant__label">published</span>` : ''}
-                ${x.adrift ? html`<span class="flag flag--warn">Not on ${x.week.title}</span>` : ''}
-              </td>
-            </tr>`)}
+                : (x.dish_name && x.dish_name.trim() ? x.dish_name : html`<em>No dish</em>`);
+              return html`<tr><td data-label="Day">${L.fmtDayShort(x.service_date)}</td><td data-label="Dish">${dish}</td><td data-label="">${marks}</td></tr>`;
+            })}
           </tbody>
         </table>
       </div>`)

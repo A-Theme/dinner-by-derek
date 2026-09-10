@@ -72,6 +72,55 @@
                        color: var(--dbd-ink-muted); text-transform: uppercase; letter-spacing: 0.05em; }
 }
 
+/* The tight variant, for a table whose row is a couple of short facts.
+ *
+ * The stacked cards above are right for an order — a dozen fields that each
+ * need saying — and wrong for Menu History, which is a date and a dish. On a
+ * 375px screen that row was measuring 116px plus a 12px margin, and 16px of it
+ * was an empty status cell: most days are neither adrift nor unpublished, so
+ * the third column had nothing in it and took a line anyway. Four hundred rows
+ * of that is a page you scroll past rather than read.
+ *
+ * So: one line a row, the label chrome dropped (a date and a dish name do not
+ * need to be told apart), and stripes instead of borders because a stripe
+ * costs no height. The empty cell is hidden outright — the markup renders it
+ * with no whitespace inside so :empty can actually find it.
+ */
+@media (max-width: 620px) {
+  .dtable--tight tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--dbd-sp-3);
+    row-gap: 0;
+    margin: 0;
+    padding: var(--dbd-sp-1) var(--dbd-sp-2);
+    border: none;
+    border-radius: 0;
+    background: none;
+  }
+  .dtable--tight tbody tr:nth-child(even) { background: var(--dbd-surface-sunk); }
+  .dtable--tight td { display: block; padding: 0; border: none; }
+  .dtable--tight td::before { content: none; }
+  .dtable--tight td:empty { display: none; }
+  .dtable--tight td[data-label="Day"] {
+    flex: 0 0 auto;
+    min-width: 5.5em;
+    font-size: var(--dbd-step--1);
+    color: var(--dbd-ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .dtable--tight td[data-label="Dish"] { flex: 1 1 8em; min-width: 0; }
+
+  /* The frame around each week, on the one page that draws a card per week.
+     At 375px a history card measured 209px, and 78px of that was padding, the
+     heading and the gap to the next card — more than half as much chrome as
+     content, repeated once a week for as long as the business has been
+     running. The heading earns its place; the space around it does not. */
+  .card--tight { padding: var(--dbd-sp-3); margin-bottom: var(--dbd-sp-3); }
+  .card--tight > h2 { font-size: var(--dbd-step-1); margin-bottom: var(--dbd-sp-2); }
+}
+
 /* Allergen chips */
 .suggestions { background: var(--dbd-surface-sunk); border: 1px dashed var(--dbd-tan); border-radius: var(--dbd-radius-sm); padding: var(--dbd-sp-3); margin-bottom: var(--dbd-sp-3); }
 .suggestions__label { font-size: var(--dbd-step--1); font-weight: 700; color: var(--dbd-tan-deep); text-transform: uppercase; letter-spacing: 0.06em; }
