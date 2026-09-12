@@ -2,6 +2,7 @@ import { Composition, Folder } from "remotion";
 import "./index.css";
 import "./fonts";
 import { Brief } from "./Brief";
+import { Launch } from "./Launch";
 import { Overview } from "./Overview";
 import { AdminHomeScreen } from "./scenes/AdminHomeScreen";
 import { AllergenDictionary } from "./scenes/AllergenDictionary";
@@ -18,6 +19,9 @@ import { Emails } from "./scenes/Emails";
 import { FacebookPublishing } from "./scenes/FacebookPublishing";
 import { HowManyToCook } from "./scenes/HowManyToCook";
 import { InstallsLikeAnApp } from "./scenes/InstallsLikeAnApp";
+import { LaunchClosing } from "./scenes/launch/LaunchClosing";
+import { LaunchLine } from "./scenes/launch/LaunchLine";
+import { LaunchOpening } from "./scenes/launch/LaunchOpening";
 import { MeatlessMonday } from "./scenes/MeatlessMonday";
 import { MenuHistory } from "./scenes/MenuHistory";
 import { Opening } from "./scenes/Opening";
@@ -60,6 +64,59 @@ export const RemotionRoot: React.FC = () => {
         width={1920}
         height={1080}
       />
+      {/* The customer-facing cut. Same component at two heights: the feed wants
+          4:5, stories want 9:16, and both are 1080 wide so nothing rescales.
+          See src/Launch.tsx and marketing/README.md. */}
+      <Composition
+        id="Launch"
+        component={Launch}
+        durationInFrames={600}
+        fps={30}
+        width={1080}
+        height={1350}
+      />
+      <Composition
+        id="LaunchStory"
+        component={Launch}
+        durationInFrames={600}
+        fps={30}
+        width={1080}
+        height={1920}
+      />
+      <Folder name="Launch">
+        <Composition
+          id="LaunchOpening"
+          component={LaunchOpening}
+          durationInFrames={84}
+          fps={30}
+          width={1080}
+          height={1350}
+        />
+        <Composition
+          id="LaunchLine"
+          component={LaunchLine}
+          durationInFrames={120}
+          fps={30}
+          width={1080}
+          height={1350}
+          defaultProps={{
+            kicker: "What it is",
+            title: "A small menu, cooked the day you collect it.",
+            line: "Not a restaurant. Not a meal kit. One kitchen, a few days a week.",
+            background: "#2C1E18",
+            ink: "#F4EFEB",
+            accent: "#EBC08C",
+          }}
+        />
+        <Composition
+          id="LaunchClosing"
+          component={LaunchClosing}
+          durationInFrames={108}
+          fps={30}
+          width={1080}
+          height={1350}
+        />
+      </Folder>
       <Folder name="Scenes">
         <Composition
           id="ChapterCard"

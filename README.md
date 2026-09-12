@@ -43,6 +43,7 @@ website that installs to a home screen and works like an app.
 - 📣 [Social graphics](#social-graphics)
 - 💳 [Business card](#business-card)
 - 🏷️ [Sticker](#sticker)
+- 📣 [Launch campaign](#launch-campaign)
 - ✨ [README artwork](#readme-artwork)
 - 👍 [Facebook](#facebook)
 - 💾 [Backup and restore](#backup-and-restore)
@@ -1047,6 +1048,43 @@ Like the card, the code points at `BASE_URL`, and the script says so loudly
 when that is unset. Scan the file with your own phone before printing a roll.
 
 ---
+## Launch campaign
+
+Taking this public — to people who already order, and to people who have never
+heard of it — is planned in **[marketing/](marketing)**. It is a folder of
+markdown and one generator script; nothing in it reaches the app, and it can be
+rewritten or deleted without a redeploy.
+
+```bash
+npm run campaign
+```
+
+Writes six pieces to `GRAPHICS_DIR/campaign/` — a feed announcement, a
+four-step explainer, a quiet card for the regulars, the allergen post, a story
+frame and a printable flyer. Same palette, same mark and the same generator
+style as the [social graphics](#social-graphics), which carry on unchanged: the
+weekly menu poster and the last-call reminder are a different job and stay in
+`npm run social`.
+
+Two of the six carry a QR. **This script reads `.env` itself** rather than
+inheriting the trap described under [Business card](#business-card), and when
+`BASE_URL` is still missing it writes neither of them and says so — a flyer
+with a dead code on it is found by a stranger with a phone rather than by
+anybody who could fix it. The other four carry no code and are written either
+way.
+
+The campaign itself is two campaigns, because there are two audiences who want
+opposite things: a **migration** for the people already ordering by comment and
+by phone, which offers the link every week and never asks twice, and an
+**acquisition** campaign for Kitchener–Waterloo, which runs mostly in local
+groups and on paper so that it is not aimed at the regulars by accident. Start
+at [marketing/README.md](marketing/README.md).
+
+The customer-facing video is `Launch` in [video/](video) — a different thing
+from the two tours already there, which are made for whoever runs the app.
+
+---
+
 ## README artwork
 
 The banner at the top of this file, the badges under it, and the colour chips

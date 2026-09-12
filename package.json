@@ -12,6 +12,7 @@
     "card": "node scripts/card.js",
     "password": "node scripts/password.js",
     "sticker": "node scripts/sticker.js",
+    "campaign": "node scripts/campaign.js",
     "readme-art": "node scripts/readme-art.js",
     "contrast": "node scripts/contrast.js",
     "menu-history": "node scripts/import-facebook-menus.js",

@@ -1,13 +1,25 @@
 # The videos
 
-Two cuts of the same story, built with [Remotion](https://remotion.dev). React
-components render to frames; there is no timeline file and no editor project —
-the source here *is* the edit.
+Four compositions, built with [Remotion](https://remotion.dev). React components
+render to frames; there is no timeline file and no editor project — the source
+here *is* the edit.
 
-| Composition | Length | What it is |
-|---|---|---|
-| `Brief` | 0:46 | Eight slides, one idea each. The short answer to "what is this?" |
-| `Overview` | 5:16 | The full tour: 35 feature slides in six chapters, a title card opening each. |
+| Composition | Size | Length | What it is |
+|---|---|---|---|
+| `Brief` | 1920×1080 | 0:46 | Eight slides, one idea each. The short answer to "what is this?" |
+| `Overview` | 1920×1080 | 5:16 | The full tour: 35 feature slides in six chapters, a title card opening each. |
+| `Launch` | 1080×1350 | 0:20 | **For customers.** The feed cut — what this is, when to order, how you get it, how you pay. |
+| `LaunchStory` | 1080×1920 | 0:20 | The same component at 9:16, for stories and reels. |
+
+The first two are a tour of the app, made for whoever runs it. `Launch` is the
+other audience — somebody scrolling a feed who has never heard of any of it —
+and it is the one the launch campaign posts. It answers the four questions a
+stranger actually has and then holds the address. Both cuts are built to work
+with the sound off.
+
+The campaign that uses it is in [marketing/](../marketing), which is a separate
+folder for a separate job: this project renders the video, and that one decides
+where it goes.
 
 Nothing in here reaches the app. It reads the app's colours, its seeded data
 and its own QR encoder, and renders video; the app does not know it exists.
@@ -33,9 +45,44 @@ npx remotion studio --port 3100
 ```bash
 npx remotion render Brief out/brief.mp4
 npx remotion render Overview out/tour.mp4
+npx remotion render Launch out/launch.mp4
+npx remotion render LaunchStory out/launch-story.mp4
 ```
 
-`out/` is ignored by Git. The tour is about 35 MB at the default quality.
+`out/` is ignored by Git. The tour is about 35 MB at the default quality; the
+launch cuts are a few megabytes each.
+
+Rendering downloads a Chrome Headless Shell on first use and fetches the two
+Google fonts from the network. On a machine that cannot reach either, point
+Remotion at a headless shell you already have — `--browser-executable=...` —
+and expect the fonts to be the remaining problem; they are loaded by
+[src/fonts.ts](src/fonts.ts) at module scope, which is the one thing here that
+needs the internet.
+
+## The two generated files
+
+Both are committed, so a fresh checkout renders without running anything. Both
+are regenerated rather than edited.
+
+```bash
+npm run qr      # src/data/qr.json      — the card's real QR, as a module matrix
+npm run mark    # public/icons/mark-gold.png — the brand lockup, gold on transparency
+```
+
+`npm run qr` encodes `https://dinnerbyderek.ca` with the app's own encoder —
+`scripts/qr.js`, the same few hundred lines of arithmetic that print the
+business card — so the code the `CardStickerQr` scene draws is the code on the
+card. Pass a different address as an argument to change it.
+
+`npm run mark` cuts the gold line art the social graphics and the card front
+use. It is **not** `public/icons/icon-512.png`: that file is ink on a parchment
+tile and is the right artwork for the two scenes that depict a home-screen
+icon, and the wrong artwork for a logo — dropped on the launch cut's olive it
+reads as a white box. This one is made for a dark ground.
+
+`npm run mark` reads the app's `brandmark` helper, so it needs the repository
+root's dependencies installed (`npm install` there first). `npm run qr` does
+not — the encoder has none.
 
 ## The music
 
@@ -50,7 +97,10 @@ tempo, the `SECTION_A` / `SECTION_B` tables for the chords.
 
 ## How the slides are put together
 
-Scenes live one per file in [src/scenes](src/scenes). Two of them take props
+Scenes live one per file in [src/scenes](src/scenes), with the customer-facing
+cut's three in [src/scenes/launch](src/scenes/launch) — kept apart because they
+are portrait and written for a different audience, and mixing them into the
+tour's folder would invite reuse in the wrong direction. Two of them take props
 because they are reused — `ChapterCard` (six times) and `BriefSlide` (six) —
 and the rest are written out in full, because each is different.
 

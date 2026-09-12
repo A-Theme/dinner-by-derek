@@ -29,7 +29,9 @@
     "build": "remotion bundle",
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc",
-    "music": "node scripts/make-music.js"
+    "music": "node scripts/make-music.js",
+    "qr": "node scripts/make-qr.js",
+    "mark": "node scripts/make-mark.js"
   },
   "sideEffects": [
     "*.css",

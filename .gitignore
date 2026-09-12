@@ -1,5 +1,12 @@
 node_modules/
-data/
+# Anchored. Unanchored, `data/` matches a directory of that name at any depth —
+# which silently swallowed video/src/data/, where the QR matrix the video's
+# card scene imports is generated. The file was written, ignored, and never
+# committed, so `remotion bundle`, `remotion render` and `tsc` all failed on a
+# clean checkout for every composition in that project. This rule is about the
+# app's runtime directory at the repository root: the database, the uploads and
+# the generated graphics. Nothing else.
+/data/
 .env
 *.log
 
