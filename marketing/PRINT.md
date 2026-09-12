@@ -24,7 +24,9 @@ again.
 | `quiet-move.png` | 1080×1080 | **R1 and R3.** For the regulars. Deliberately the quietest image in the set |
 | `allergens.png` | 1080×1080 | **A4 — The allergen review** |
 | `story.png` | 1080×1920 | Stories and reels covers. Carries a QR |
-| `flyer.png` | 1275×1650 | **Print.** US Letter at 150 DPI, with a QR. Community boards |
+| `flyer-a.png` | 1275×1650 | **Print.** US Letter at 150 DPI, with a QR. Centred |
+| `flyer-b.png` | 1275×1650 | **Print.** The same sheet ranged left |
+| `flyer-c.png` | 1275×1650 | **Print.** The same sheet with a banded head |
 
 Two of these carry a **QR code**, and both take the same care the business card
 does: the address is printed under the code, so a wrong one is visible before it
@@ -80,8 +82,18 @@ it is a good one.
 
 ## The flyer
 
-`flyer.png`, US Letter at 150 DPI. Print at home on decent paper; this does not
-need a print shop.
+`flyer-a.png`, `flyer-b.png`, `flyer-c.png` — US Letter at 150 DPI. Print at
+home on decent paper; this does not need a print shop.
+
+**Three arrangements of one sheet.** Same words, same facts, same code — A is
+centred, B is ranged left, C has a dark banded head. Nothing is lost by using
+only one, and the reason there are three is density: fifty identical sheets
+across a city read as one thing being pushed, and a board carrying three of
+them reads as three. Rotate them by area rather than by board, so the same
+street does not show the same sheet twice.
+
+C spends the most ink, by a good margin. If the printer is yours and the toner
+is not free, print A and B and keep C for the boards that matter.
 
 **Where it works**
 

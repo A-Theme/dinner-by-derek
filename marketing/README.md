@@ -62,12 +62,21 @@ This folder does not restate them; it depends on them.
 
 ## The artwork
 
+Dashboard → Graphics → **Launch campaign**, which is where it belongs: two of
+the pieces carry a QR code, and `BASE_URL` is only reliably set in the
+service's environment. From a terminal it also works —
+
 ```bash
 npm run campaign
 ```
 
-Writes six images to `GRAPHICS_DIR/campaign/`. Same palette, same mark, same
-generator style as the weekly social graphics — see
+— but that path reads `.env` itself and refuses to write the flyers when
+`BASE_URL` is missing, rather than quietly printing a placeholder.
+
+Writes eight images to `GRAPHICS_DIR/campaign/`: four evergreen posts, a story
+cover, and **three arrangements of the same flyer** so a noticeboard carrying
+more than one does not look like the same sheet twice. Same palette, same mark,
+same generator style as the weekly social graphics — see
 [PRINT.md → The generated set](PRINT.md#the-generated-set) for what each one is
 and where it goes.
 

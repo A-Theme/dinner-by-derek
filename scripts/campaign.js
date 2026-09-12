@@ -4,7 +4,7 @@
  *
  *   npm run campaign
  *
- * Six pieces for the launch described in marketing/. They are campaign
+ * Eight pieces for the launch described in marketing/. They are campaign
  * graphics rather than weekly ones: they say durable things — what this is,
  * how ordering works, where delivery reaches — and they are generated once and
  * posted over six weeks. The weekly menu poster and the last-call reminder are
@@ -16,7 +16,16 @@
  * | quiet-move     1080×1080  for the regulars — the quietest    (posts R1, R3)
  * | allergens      1080×1080  the review that gates publishing   (post A4)
  * | story          1080×1920  stories and reels covers      QR
- * | flyer          1275×1650  US Letter at 150 DPI          QR   print
+ * | flyer-a        1275×1650  US Letter at 150 DPI          QR   print
+ * | flyer-b        1275×1650  the same sheet, ranged left   QR   print
+ * | flyer-c        1275×1650  the same sheet, banded head   QR   print
+ *
+ * THREE FLYERS, NOT THREE DESIGNS. They carry the same facts, the same code and
+ * the same address; only the arrangement differs. Fifty identical sheets pinned
+ * across a city read as one thing being pushed, and a board carrying three of
+ * them reads as three. They are enumerated rather than randomised on purpose:
+ * a sheet that worked can be printed again, the contrast pairings can all be
+ * checked ahead of time, and no unlucky combination reaches a printer first.
  *
  * Colours come from theme.css via server/theme, so this file contains no hex
  * literals of its own — the same rule the rest of the codebase keeps, and one
@@ -399,27 +408,57 @@ async function story(f, url) {
 }
 
 /* ==========================================================================
-   6 · flyer — US Letter at 150 DPI, carries a QR
-   Printed at home on a home printer, so: parchment ground rather than a solid
+   6 · the flyers — US Letter at 150 DPI, each carrying a QR
+
+   Three arrangements of one sheet, so a noticeboard carrying more than one of
+   these does not look like the same sheet twice. What differs is the layout
+   and the ground; the facts, the code and the address are shared by
+   construction — flyerFacts() is called once and handed to all three, so they
+   cannot drift apart the way three copied call sites would.
+
+   Printed at home on a home printer, so: pale grounds rather than a solid
    flood of olive, which drinks a cartridge and bleeds on ordinary paper. The
    mark is the flat stamp for the same reason — the gold lockup is a gradient
-   and needs a dark ground to be lighter than.
-   ========================================================================== */
-async function flyer(f, url) {
-  const W = 1275, H = 1650, LEFT = 120, MID = W / 2;
-  const seal = await brandmark.stamp({ width: 300, colour: palette.umber });
-  /* 240 rather than the card's 300. At 150 DPI that is a 40mm symbol, which a
-     phone reads from arm's length off a noticeboard, and it leaves room under
-     the code for the address — which is the whole reason a flyer can be
-     proofread and a sticker cannot. */
-  const code = await qrImage(url, 240);
+   and needs a dark ground to be lighter than. Variant C spends ink on one
+   banded head, about a sixth of the sheet, which is the most a page meant for
+   a domestic printer should ask for.
 
-  const facts = [
+   Every pairing used below is one CONTRAST.md already measured: espresso on
+   parchment 14.08:1, espresso on parchment-2 12.56:1, umber on parchment
+   11.23:1, tan-deep on parchment 5.14:1, parchment on olive 5.38:1, and
+   tan-lift for tracked labels on olive, as announce.png uses them.
+   ========================================================================== */
+const SHEET = { W: 1275, H: 1650, LEFT: 120 };
+
+/** The four rows every flyer prints, read once from Settings. */
+function flyerFacts(f) {
+  return [
     [`Order by ${hour12(f.cutoffHour)}`, 'the night before'],
     ['Collect', windowText(f.pickup)],
     [f.deliveryOn ? 'Delivery' : 'Pickup only', f.deliveryOn ? 'across Kitchener & Waterloo' : 'no delivery at present'],
     ['E-transfer or cash', 'no card, no account'],
   ];
+}
+
+/**
+ * The address under the code, the way the business card prints it. A sticker
+ * cannot show you it is wrong; a flyer can, and should — it is the whole
+ * reason a flyer can be proofread before a hundred of them are run off.
+ */
+const addressUnder = (code, left, top, align = 'middle') => label('dinnerbyderek.ca', {
+  /* Centred under the symbol, except where the symbol itself sits on the left
+     margin: centring it there pushes the wider address line out past the
+     margin every other element on the sheet is squared to. */
+  x: align === 'start' ? left : left + code.side / 2,
+  y: top + code.side + 46,
+  size: 26, fill: palette.umber, anchor: align, track: 4,
+});
+
+/* --- A · centred on parchment --------------------------------------------- */
+async function flyerA(facts, code) {
+  const { W, H, LEFT } = SHEET;
+  const MID = W / 2;
+  const seal = await brandmark.stamp({ width: 300, colour: palette.umber });
 
   const factRows = facts.map(([k, v], i) => {
     const y = 900 + i * 92;
@@ -452,20 +491,140 @@ async function flyer(f, url) {
       'every day, every dish, every price.',
     ], { x: LEFT, y: 1348, size: 30, fill: palette['umber-soft'], leading: 44 }),
 
-    /* The address under the code, the way the business card prints it. A
-       sticker cannot show you it is wrong; a flyer can, and should. */
-    label('dinnerbyderek.ca', {
-      x: codeLeft + code.side / 2, y: codeTop + code.side + 48,
-      size: 26, fill: palette.umber, anchor: 'middle', track: 4,
-    }),
+    addressUnder(code, codeLeft, codeTop),
     rule(LEFT, H - 50, W - LEFT, palette.tan, 0.45, 3),
   ].join('');
 
-  return render('flyer.png', W, H, palette.parchment, body, [
+  return render('flyer-a.png', W, H, palette.parchment, body, [
     { input: seal.data, top: 190, left: Math.round(MID - 150) },
     { input: code.data, top: codeTop, left: codeLeft },
   ]);
 }
+
+/* --- B · ranged left on parchment-2 ---------------------------------------
+   Everything on one left axis and the code on the same side, which is the
+   opposite silhouette to A at a glance from across a corridor — the distance
+   these are actually read from before somebody decides to walk over. */
+async function flyerB(facts, code) {
+  const { W, H, LEFT } = SHEET;
+  const seal = await brandmark.stamp({ width: 180, colour: palette.umber });
+
+  /* Label above value rather than beside it: the same four rows, read as a
+     column instead of a table. */
+  const factRows = facts.map(([k, v], i) => {
+    const y = 730 + i * 108;
+    return [
+      label(k, { x: LEFT, y, size: 25, fill: palette['tan-deep'], track: 5 }),
+      text(v, { x: LEFT, y: y + 42, size: 32, fill: palette.espresso }),
+      rule(LEFT, y + 66, W - LEFT, palette.tan, 0.28),
+    ].join('');
+  }).join('');
+
+  const codeTop = 1230;
+  const codeLeft = LEFT;
+  const body = [
+    text('DINNER BY DEREK', { x: LEFT, y: 390, size: 68, fill: palette.umber, font: DISPLAY, track: 3 }),
+    label('Supper club · Kitchener & Waterloo',
+      { x: LEFT, y: 440, size: 24, fill: palette['tan-deep'], track: 7 }),
+    rule(LEFT, 486, W - LEFT, palette.tan, 0.5, 3),
+
+    lines([
+      'A small menu, cooked the day you collect it.',
+      'Pick it up, or have it brought to you.',
+    ], { x: LEFT, y: 566, size: 34, fill: palette.espresso, font: DISPLAY, leading: 52 }),
+
+    factRows,
+
+    lines([
+      'Scan it, or type it in.',
+      'The whole week is on there —',
+      'every day, every dish, every price.',
+    ], { x: LEFT + code.side + 56, y: 1290, size: 29, fill: palette['umber-soft'], leading: 42 }),
+
+    addressUnder(code, codeLeft, codeTop, 'start'),
+    rule(LEFT, H - 50, W - LEFT, palette.tan, 0.45, 3),
+  ].join('');
+
+  return render('flyer-b.png', W, H, palette['parchment-2'], body, [
+    { input: seal.data, top: 110, left: LEFT },
+    { input: code.data, top: codeTop, left: codeLeft },
+  ]);
+}
+
+/* --- C · banded head on parchment -----------------------------------------
+   The one that reads differently from the far end of a hallway, because the
+   top of the sheet is dark. The band is 270 of 1650 — about a sixth — which
+   is the most ink a page printed at home should ask for. */
+async function flyerC(facts, code) {
+  const { W, H, LEFT } = SHEET;
+  const MID = W / 2;
+  const seal = await brandmark.stamp({ width: 200, colour: palette.umber });
+
+  /* Facts on a centred axis: labels ranged right into the middle, values
+     ranged left out of it. A third silhouette again — neither A's table nor
+     B's column. */
+  const factRows = facts.map(([k, v], i) => {
+    const y = 830 + i * 88;
+    return [
+      label(k, { x: MID - 28, y, size: 26, fill: palette['tan-deep'], track: 5, anchor: 'end' }),
+      text(v, { x: MID + 28, y, size: 30, fill: palette.espresso }),
+      rule(LEFT, y + 30, W - LEFT, palette.tan, 0.28),
+    ].join('');
+  }).join('');
+
+  const codeTop = 1290;
+  const codeLeft = Math.round(MID - code.side / 2);
+  const body = [
+    `<rect width="${W}" height="270" fill="${palette.olive}"/>`,
+    text('DINNER BY DEREK', { x: MID, y: 150, size: 62, fill: palette.parchment, anchor: 'middle', font: DISPLAY, track: 4 }),
+    label('Supper club · Kitchener & Waterloo',
+      { x: MID, y: 206, size: 23, fill: palette['tan-lift'], anchor: 'middle', track: 8 }),
+
+    lines([
+      'A small menu, cooked fresh, a few days a week.',
+      'Pick it up, or have it brought to you.',
+    ], { x: MID, y: 620, size: 34, fill: palette.espresso, font: DISPLAY, anchor: 'middle', leading: 50 }),
+
+    rule(MID - 230, 730, MID + 230, palette.tan, 0.6, 2),
+
+    factRows,
+
+    lines([
+      'Scan it, or type it in.',
+      'Every day, every dish, every price.',
+    ], { x: MID, y: 1200, size: 27, fill: palette['umber-soft'], anchor: 'middle', leading: 38 }),
+
+    addressUnder(code, codeLeft, codeTop),
+    rule(LEFT, H - 50, W - LEFT, palette.tan, 0.45, 3),
+  ].join('');
+
+  return render('flyer-c.png', W, H, palette.parchment, body, [
+    { input: seal.data, top: 330, left: Math.round(MID - 100) },
+    { input: code.data, top: codeTop, left: codeLeft },
+  ]);
+}
+
+/**
+ * All three, from one set of facts and one symbol.
+ *
+ * 240 rather than the card's 300. At 150 DPI that is a 40mm symbol, which a
+ * phone reads from arm's length off a noticeboard, and it leaves room under
+ * the code for the address. Encoded once and composited into all three, so
+ * "do the flyers carry the same code" is true by construction rather than by
+ * three call sites happening to agree.
+ */
+async function flyers(f, url) {
+  const code = await qrImage(url, 240);
+  const facts = flyerFacts(f);
+  return [
+    await flyerA(facts, code),
+    await flyerB(facts, code),
+    await flyerC(facts, code),
+  ];
+}
+
+/** Everything the flyers write, for the branch that has to unwrite it. */
+const FLYER_FILES = ['flyer-a.png', 'flyer-b.png', 'flyer-c.png'];
 
 /* --- Generate ------------------------------------------------------------- */
 async function generate() {
@@ -486,10 +645,15 @@ async function generate() {
   const warnings = [];
   let codeNote = null;
 
+  /* The single flyer this set used to draw. Left behind by an older run it is
+     a sheet nothing lists and nobody regenerates, sitting in the same folder
+     as three that are current — exactly the stale-artwork failure the branch
+     below exists to prevent, arriving by rename instead of by refusal. */
+  fs.rmSync(path.join(OUT, 'flyer.png'), { force: true });
+
   if (base) {
     const s = await story(f, base);
-    const fl = await flyer(f, base);
-    files.push(s, fl);
+    files.push(s, ...await flyers(f, base));
     codeNote = `QR: ${base}`;
   } else {
     /* Not a placeholder. The flyer is the one piece here that ends up on
@@ -499,14 +663,14 @@ async function generate() {
        while last week's copy of it sits in the same folder is not a refusal —
        it is a stale flyer that looks freshly generated, which is the failure
        this branch exists to prevent, wearing a different hat. */
-    for (const stale of ['story.png', 'flyer.png']) {
+    for (const stale of ['story.png', ...FLYER_FILES]) {
       fs.rmSync(path.join(OUT, stale), { force: true });
     }
     warnings.push(
-      'BASE_URL is not set, so story.png and flyer.png were NOT written, and any '
-      + 'earlier copies of them were removed — both carry a QR code, and a printed '
-      + 'flyer with a dead code on it cannot be corrected. Set BASE_URL in .env and '
-      + 'run this again. The other four pieces carry no code and are finished.'
+      'BASE_URL is not set, so story.png and the three flyers were NOT written, and '
+      + 'any earlier copies of them were removed — they all carry a QR code, and a '
+      + 'printed flyer with a dead code on it cannot be corrected. Set BASE_URL in '
+      + '.env and run this again. The other four pieces carry no code and are finished.'
     );
   }
 

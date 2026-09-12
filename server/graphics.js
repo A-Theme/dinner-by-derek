@@ -47,7 +47,9 @@ const SETS = {
     urlBase: '/campaign',
     dir: campaign.OUT,
     generate: campaign.generate,
-    blurb: 'The launch set, for the six weeks described in marketing/. Unlike the social '
+    blurb: 'The launch set, for the six weeks described in marketing/. The three flyers are '
+      + 'the same sheet arranged three ways — same facts, same code — so a noticeboard '
+      + 'carrying more than one does not look like the same sheet twice. Unlike the social '
       + 'graphics these say durable things and do not read the published week, so they are '
       + 'generated once and posted over six weeks — there is no reason to press this every '
       + 'Saturday. The pickup window and the cutoff are read from Settings, so fix those '
@@ -58,7 +60,9 @@ const SETS = {
       ['quiet-move.png', 'For the regulars', '1080×1080'],
       ['allergens.png', 'The allergen review', '1080×1080'],
       ['story.png', 'Stories and reels cover', '1080×1920'],
-      ['flyer.png', 'Flyer for community boards', 'US Letter, 150 dpi'],
+      ['flyer-a.png', 'Flyer A — centred', 'US Letter, 150 dpi'],
+      ['flyer-b.png', 'Flyer B — ranged left', 'US Letter, 150 dpi'],
+      ['flyer-c.png', 'Flyer C — banded head', 'US Letter, 150 dpi'],
     ],
   },
   card: {

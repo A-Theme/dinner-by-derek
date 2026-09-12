@@ -253,7 +253,10 @@ dinnerbyderek.ca
 
 ### The flyer
 
-Generated as `flyer.png` with a live QR code. The wording it carries:
+Generated as `flyer-a.png`, `flyer-b.png` and `flyer-c.png` — three
+arrangements of one sheet, each with a live QR code. B opens on "A small menu,
+cooked the day you collect it" instead of the first line below; everything else
+is common to all three:
 
 ```
 DINNER BY DEREK
