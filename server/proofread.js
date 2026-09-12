@@ -526,7 +526,22 @@ const TYPOGRAPHY = [
     why: () => 'Two spaces in a row.',
   },
   {
-    re: /[ \t]+([,;:!?])/g,
+    /* The lookbehind is not part of what this matches — it is what stops the
+       scan being quadratic.
+     *
+     * A global `[ \t]+` is retried at every position of a run of spaces, and at
+     * each one it consumes the rest of the run before discovering there is no
+     * punctuation after it, so the work grows with the square of the run. It is
+     * measurable on text a person can produce: 2,000 spaces cost 3ms, 4,000
+     * cost 13ms, 8,000 cost 53ms and 16,000 cost 209ms, on the one thread that
+     * also serves the customer menu. MAX_TEXT caps the damage at a third of a
+     * second, and this is the endpoint a keystroke calls.
+     *
+     * Anchoring to the START of a run costs nothing in matches. Where a run IS
+     * followed by punctuation the first position already matched the whole of
+     * it and lastIndex moved past, so no later position was ever tried; where
+     * it is not, every one of those positions was wasted work. */
+    re: /(?<![ \t])[ \t]+([,;:!?])/g,
     fix: (m) => m[1],
     kind: 'spacing',
     label: (m) => `space before "${m[1]}"`,
@@ -581,7 +596,24 @@ const ABBREVIATIONS = new Set([
 ]);
 
 function sentenceStarts(text, findings) {
-  const re = /([A-Za-z]*)([.!?])["'’)]?\s+([a-z][a-z']{2,})/g;
+  /* The bound on the first group is the same guard as the one on the
+   * space-before-punctuation rule above, arrived at from the other side.
+   *
+   * `[A-Za-z]*` unanchored and global is retried at every character of a run of
+   * letters, and at each one it swallows the rest of the run before finding no
+   * full stop behind it — so a single long word costs the square of its length.
+   * One 20,000-letter token measured 280ms here, which is most of what
+   * MAX_TEXT allows a request to cost.
+   *
+   * A ceiling rather than a lookbehind, and the difference matters. Anchoring
+   * to a word start would refuse the empty match this relies on: after a
+   * finding, lastIndex lands inside the word it just consumed, and the next
+   * sentence's "!" is then preceded by a letter — so "Wow! there! hello" would
+   * find the first and lose the second. The bound keeps every match and only
+   * caps the work. Forty is far past the longest entry in ABBREVIATIONS, which
+   * is the only thing the group is read for, so a word too long to be bounded
+   * is a word too long to be an abbreviation either way. */
+  const re = /([A-Za-z]{0,40})([.!?])["'’)]?\s+([a-z][a-z']{2,})/g;
   let m;
   while ((m = re.exec(text))) {
     /* Not every full stop ends a sentence. "10 p.m. the night before" and

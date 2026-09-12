@@ -117,8 +117,13 @@ function reReadForm(week, text) {
     </details>`;
 }
 
-function pastePage({ week, rows, text }) {
+function pastePage({ week, rows: read, text }) {
   const weekStart = week.week_start || T.mondayOnOrAfter(T.todayIn(tz()));
+  /* Only as many as the apply step will actually read. Drawing a card for a
+     row that PASTE.rowsFromBody is going to clamp away is how a dish gets
+     ticked, reported as saved, and never written — see MAX_ROWS in paste.js. */
+  const rows = read.slice(0, PASTE.MAX_ROWS);
+  const overflow = read.length - rows.length;
   const body = html`
     <h1>What the post says</h1>
     <p class="also">Draft week of ${T.fmtDayShort(weekStart, tz())} to
@@ -129,6 +134,14 @@ function pastePage({ week, rows, text }) {
         looking at it now. Anything put on it arrives unreviewed, and an unreviewed dish is not
         shown — so replacing a day here takes that day off the menu until you tick its allergen
         box. Move the week back to draft first if you would rather they didn't see the gap.</div>` : ''}
+
+    ${overflow ? html`
+      <div class="notice notice--strong">
+        <strong>That paste was too long for one go.</strong> It read as ${read.length} rows and
+        this page takes ${PASTE.MAX_ROWS} at a time, so the last ${overflow}
+        ${overflow === 1 ? 'is' : 'are'} not shown and will not be written. Save these first,
+        then paste the rest — or go back and paste a shorter piece of the post.
+      </div>` : ''}
 
     ${rows.length ? html`
       <div class="notice notice--strong">

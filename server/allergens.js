@@ -72,6 +72,54 @@ function dictionary() {
 }
 
 /**
+ * The dictionary as compiled expressions, built once and kept until something
+ * is written.
+ *
+ * detect() used to read all 479 rows and build 479 RegExp objects on every
+ * call, and it is called far more often than that sounds. reviewState() goes
+ * through here for every item on a menu, and menuForDay() builds a menu per
+ * day — so one customer week page was ninety-odd of these, about 43,000
+ * expressions compiled to answer a question whose answer had not changed.
+ * Measured on the published week page: 55ms a request, nearly all of it here.
+ *
+ * The stamp is sqlite's own total_changes(), which counts every row this
+ * connection has inserted, updated or deleted since it opened. That is a
+ * deliberately blunt instrument — an order being placed drops the cache along
+ * with a dictionary edit — and blunt is the point: it cannot go stale, because
+ * there is no write anywhere in the app that it fails to notice. A cache the
+ * next route has to remember to clear is a cache that eventually serves a
+ * dismissed allergen back to somebody, and this is not the module to be clever
+ * in. It costs 0.27µs to read, against 740µs to rebuild.
+ *
+ * Rebuilding on an unrelated write is free in the case that matters: rendering
+ * a menu writes nothing, so a page that reads the dictionary ninety times
+ * compiles it once.
+ */
+const changeCount = db.prepare('SELECT total_changes() AS n').pluck();
+let compiled = null;
+let compiledAt = -1;
+
+function compiledDictionary() {
+  const stamp = changeCount.get();
+  if (compiled && compiledAt === stamp) return compiled;
+  compiled = dictionary().map(({ term, allergen }) => {
+    const t = flatten(term).trim();
+    if (!t) return null;
+    // Word-boundary match around every written form of the term — see formsOf.
+    // "Buttered mash" has to match "butter" and "creamed corn" has to match
+    // "cream", or the dish that most needs a milk tag is the one that silently
+    // gets none.
+    return {
+      term,
+      allergen,
+      re: new RegExp(`(?:^|[^a-z0-9])(?:${formsOf(t).join('|')})(?:$|[^a-z0-9])`, 'i'),
+    };
+  }).filter(Boolean);
+  compiledAt = stamp;
+  return compiled;
+}
+
+/**
  * The text an item is reviewed against: its name and its description together.
  *
  * The name is not decoration — it is where the allergen usually is. "Beer-
@@ -98,15 +146,7 @@ function detect(description) {
   if (!text.trim()) return [];
 
   const hits = new Map(); // allergen -> Set(term)
-  for (const { term, allergen } of dictionary()) {
-    const t = flatten(term).trim();
-    if (!t) continue;
-    // Word-boundary match around every written form of the term — see formsOf.
-    // "Buttered mash" has to match "butter" and "creamed corn" has to match
-    // "cream", or the dish that most needs a milk tag is the one that silently
-    // gets none.
-    const re = new RegExp(
-      `(?:^|[^a-z0-9])(?:${formsOf(t).join('|')})(?:$|[^a-z0-9])`, 'i');
+  for (const { term, allergen, re } of compiledDictionary()) {
     if (re.test(text)) {
       if (!hits.has(allergen)) hits.set(allergen, new Set());
       hits.get(allergen).add(term);
@@ -123,13 +163,31 @@ function detect(description) {
 }
 
 /**
+ * What has already been decided about an item, as a set.
+ *
+ * Both arrive as lists everywhere the app writes them — JSON out of the
+ * dashboard's hidden inputs, a parsed column out of storage — and `new Set(5)`
+ * throws, so `new Set(accepted || [])` was a TypeError for anything that was
+ * not one. /admin/api/suggest returned a 500 for `{"accepted": 5}`, and these
+ * same two lines are what reviewState() runs on every item of every menu, so a
+ * row holding valid JSON that is not a list would have been a 500 on the whole
+ * customer menu from a value no screen could explain.
+ *
+ * Anything that is not a list is read as nothing decided, which leaves every
+ * suggestion showing as pending. That is the direction this module errs in
+ * everywhere else: one suggestion too many is one tap to dismiss, and one
+ * missed reaches somebody with an allergy.
+ */
+const decided = (v) => new Set(Array.isArray(v) ? v : []);
+
+/**
  * Split detection into pending suggestions vs already-decided.
  * `text` is the reviewed text — name and description — not the description
  * alone. `accepted` and `dismissed` are the item's stored arrays.
  */
 function pendingFor(text, accepted, dismissed) {
-  const acc = new Set(accepted || []);
-  const dis = new Set(dismissed || []);
+  const acc = decided(accepted);
+  const dis = decided(dismissed);
   return detect(text)
     .filter((d) => !acc.has(d.allergen) && !dis.has(d.allergen));
 }

@@ -62,10 +62,22 @@ function weekSummary(monday) {
 
   /* The menu, for the day headings. A date with a service day and no orders is
      still a day that happened, and printing it as a zero is the answer to "did
-     anyone order on the Tuesday?" — which a missing row does not give. */
+     anyone order on the Tuesday?" — which a missing row does not give.
+
+     Ordered so the row that was actually in front of customers wins. Two weeks
+     can hold the same date — a draft built over a week already gone out is the
+     ordinary way to get there — and the rows were read unordered into a map
+     keyed by date, where the last one silently took the heading. That put a
+     dish nobody cooked above the orders for the dish they did. Published beats
+     retired beats draft, and for a week in the past there is no published row
+     covering it, so the retired one — which is what was live when those orders
+     were taken — wins over any draft. */
   const menu = db.prepare(`
-    SELECT service_date AS date, dish_name, closed
-    FROM service_days WHERE service_date BETWEEN ? AND ?`).all(monday, end);
+    SELECT sd.service_date AS date, sd.dish_name, sd.closed
+    FROM service_days sd JOIN weeks w ON w.id = sd.week_id
+    WHERE sd.service_date BETWEEN ? AND ?
+    ORDER BY CASE w.status WHEN 'published' THEN 2 WHEN 'retired' THEN 1 ELSE 0 END,
+             w.id`).all(monday, end);
 
   const other = db.prepare(`
     SELECT status, COUNT(*) AS n FROM orders

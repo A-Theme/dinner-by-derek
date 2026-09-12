@@ -115,7 +115,15 @@ function flatten(html) {
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
     .replace(/&(?:#39|apos);/gi, "'")
-    .replace(/&#(\d{1,7});/g, (_, d) => String.fromCharCode(Number(d)))
+    /* fromCodePoint, not fromCharCode: the latter takes the low sixteen bits
+       and throws the rest away, so an entity above U+FFFF decoded to a
+       different character rather than to the one written. Guarded, because
+       fromCodePoint throws on anything past U+10FFFF where fromCharCode
+       silently wrapped — and a notification is not worth an exception. */
+    .replace(/&#(\d{1,7});/g, (whole, d) => {
+      const n = Number(d);
+      return n >= 0 && n <= 0x10FFFF ? String.fromCodePoint(n) : whole;
+    })
     /* Spaces are collapsed per line rather than globally, because the parser's
      * patterns are anchored to line starts and ends. The blank line between a
      * label and its value is kept — the grid pattern allows up to four and

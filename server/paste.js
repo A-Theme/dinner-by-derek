@@ -386,8 +386,26 @@ function cents(v) {
   return Math.round(n * 100);
 }
 
+/**
+ * The most rows one paste can carry onto the week.
+ *
+ * Exported because the preview has to honour the same number. It did not: the
+ * page drew a card for every row the parser found and posted back
+ * `rows = rows.length`, while this clamped to 60 — so a paste long enough to
+ * make more than sixty rows showed the owner sixty-one cards, let them tick
+ * the lot, and dropped everything past the sixtieth with nothing anywhere
+ * saying so. A silent drop is the one failure this whole two-step feature
+ * exists to prevent.
+ *
+ * Sixty is far past any real post — three years of them top out around a
+ * dozen rows — so the cap is only ever reached by pasting something that was
+ * never a menu. The page says which rows it can take rather than pretending
+ * there is no limit.
+ */
+const MAX_ROWS = 60;
+
 function rowsFromBody(body) {
-  const n = Math.min(Math.max(Number(body.rows) || 0, 0), 60);
+  const n = Math.min(Math.max(Number(body.rows) || 0, 0), MAX_ROWS);
   const out = [];
   for (let i = 0; i < n; i++) {
     const f = (k) => body[`r${i}_${k}`];
@@ -431,5 +449,6 @@ function summary({ done, skipped }) {
 
 module.exports = {
   read, apply, rowsFromBody, summary, occupantOf, labelOfSlot, dateOfSlot,
-  weekdayKeyOf, cents, WEEK_SLOTS, SLOT_LABELS, SLOT_NOUNS, isWeekSlot, isDaySlot,
+  weekdayKeyOf, cents, MAX_ROWS,
+  WEEK_SLOTS, SLOT_LABELS, SLOT_NOUNS, isWeekSlot, isDaySlot,
 };
