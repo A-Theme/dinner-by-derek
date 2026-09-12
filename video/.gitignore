@@ -4,7 +4,15 @@ dist
 .env
 
 # Ignore the output video from Git but not videos you import into src/.
-out
+# Exception: the two customer-facing launch cuts are committed, so they can be
+# posted from any checkout without a render first — the same reason
+# public/music/lofi-jazz.mp3 is committed. `out/*` rather than `out`, because a
+# file cannot be re-included once its parent directory is excluded.
+# The app tour stays out: it is for whoever runs the app, it is 36 MB, and it is
+# regenerated whenever the app changes.
+out/*
+!out/launch.mp4
+!out/launch-story.mp4
 
 # Remotion bundle, rebuilt by `npx remotion bundle`.
 build
