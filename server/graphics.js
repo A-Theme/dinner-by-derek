@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 
 const social = require('../scripts/social');
+const campaign = require('../scripts/campaign');
 const card = require('../scripts/card');
 const sticker = require('../scripts/sticker');
 
@@ -38,6 +39,26 @@ const SETS = {
       ['menu.png', "This week's menu, as a post", '1080×1350'],
       ['last-call.png', 'Cutoff reminder for the night before', '1080×1080'],
       ['link-preview.png', 'What Facebook shows when the link is pasted', '1200×630'],
+    ],
+  },
+  campaign: {
+    key: 'campaign',
+    title: 'Launch campaign',
+    urlBase: '/campaign',
+    dir: campaign.OUT,
+    generate: campaign.generate,
+    blurb: 'The launch set, for the six weeks described in marketing/. Unlike the social '
+      + 'graphics these say durable things and do not read the published week, so they are '
+      + 'generated once and posted over six weeks — there is no reason to press this every '
+      + 'Saturday. The pickup window and the cutoff are read from Settings, so fix those '
+      + 'first. Where each piece goes is in marketing/PRINT.md.',
+    files: [
+      ['announce.png', 'What this is', '1080×1350'],
+      ['how-it-works.png', 'Four steps, for a stranger', '1080×1350'],
+      ['quiet-move.png', 'For the regulars', '1080×1080'],
+      ['allergens.png', 'The allergen review', '1080×1080'],
+      ['story.png', 'Stories and reels cover', '1080×1920'],
+      ['flyer.png', 'Flyer for community boards', 'US Letter, 150 dpi'],
     ],
   },
   card: {
@@ -164,4 +185,10 @@ function list(key) {
   });
 }
 
-module.exports = { SETS, get, run, list, busy, dirs: { social: social.OUT, card: card.OUT } };
+module.exports = {
+  SETS, get, run, list, busy,
+  /* The directories index.js mounts statically. Keyed by set, but only for the
+   * sets that own a directory: the sticker writes into the card's `print`
+   * folder and so must not mount it a second time. */
+  dirs: { social: social.OUT, campaign: campaign.OUT, card: card.OUT },
+};

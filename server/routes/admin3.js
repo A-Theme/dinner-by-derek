@@ -419,8 +419,10 @@ strict.get('/sheet/week/:date', auth.requiredStrict, (req, res) => {
 router.use(auth.required);
 
 /* =========================== GRAPHICS ==================================
-   The social graphics and the business card, generated from the dashboard
-   instead of from a terminal. The images themselves are served statically
+   The social graphics, the launch campaign set and the business card,
+   generated from the dashboard instead of from a terminal — which is also the
+   only place BASE_URL is reliably set, so it is the only place the codes on
+   the printed pieces can be trusted. The images themselves are served statically
    from GRAPHICS_DIR — see index.js — so this page is a list of links and
    two buttons, and the drawing lives in scripts/ where the command line
    already used it. */
@@ -433,6 +435,13 @@ function graphicsPanel(set) {
     <div class="card">
       <h2>${set.title}</h2>
       <p class="also">${set.blurb}</p>
+      ${set.key === 'campaign' && !process.env.BASE_URL ? html`
+        <div class="notice notice--strong">
+          <strong>Two pieces will be skipped.</strong> BASE_URL isn't set on this server, so the
+          story and the flyer — the two carrying a QR — are not written at all, and any earlier
+          copies are removed. That is deliberate: a printed flyer with a dead code on it cannot
+          be corrected. The other four carry no code and come out finished.
+        </div>` : ''}
       ${set.key === 'card' && !process.env.BASE_URL ? html`
         <div class="notice notice--strong">
           <strong>The QR points at a placeholder.</strong> BASE_URL isn't set on this server,
