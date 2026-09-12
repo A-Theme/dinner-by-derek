@@ -600,7 +600,11 @@ const localClock = (instant) => new Intl.DateTimeFormat('en-CA', {
 {
   const root = path.join(__dirname, '..');
   const offenders = [];
-  const skip = new Set(['node_modules', 'data', '.git', 'brand', 'icons']);
+  /* `build` is bundler output — video/ produces one, and a bundle contains
+     every colour the thing it bundled ever names. This walks the filesystem
+     rather than the index, so an ignored artifact sitting on disk would fail
+     the check for nobody's benefit. The rule is about source. */
+  const skip = new Set(['node_modules', 'data', '.git', 'brand', 'icons', 'build']);
 
   (function walk(dir) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
