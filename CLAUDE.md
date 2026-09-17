@@ -32,6 +32,47 @@ One ask covers the push and the deploy together when they go together. "Deploy
 when done" or "push it" said in advance is that yes — do not re-ask for the
 same change.
 
+### Pushing works — do not "fix" the credential helper
+
+`credential.helper` on this laptop is set, globally and deliberately, to:
+
+```
+C:/PROGRA~1/Git/mingw64/libexec/git-core/GIT-CR~1.EXE
+```
+
+That is `git-credential-wincred.exe` by absolute 8.3 path. **Leave it alone.**
+It looks wrong and is not. Three things on this machine make the obvious
+settings fail, all confirmed 2026-09-17:
+
+- `git --exec-path` returns `/usr/lib/git-core`, a POSIX path Windows cannot
+  follow, so **any helper named by short name** — `manager`, `wincred` — fails
+  with `git: 'credential-x' is not a git command`.
+- **Git Credential Manager crashes** even when found by absolute path
+  (`FileLoadException: System.Memory 4.0.1.1`), so `manager` cannot work here.
+- Git runs the helper through a shell, so **a path containing a space splits**:
+  `C:/Program Files/...` becomes `C:/Program: No such file or directory`. The
+  quoted long-path form does not survive `git config` either.
+
+The 8.3 path is the one form that dodges all three. If a push ever asks for a
+username and password again, that value has been reset — put it back rather
+than reaching for `manager`. Setting it needs `git config --global`, a shell,
+and the value above.
+
+The underlying Git install is damaged and a reinstall would repair the first
+two faults properly. Until someone does that, this is the working state.
+
+### Testing whether auth works
+
+**This repo is public**, so `git ls-remote` succeeds with authentication
+completely broken. It is not a test and reported success twice while pushes
+were failing. Use:
+
+```
+git push --dry-run origin main
+```
+
+which authenticates for write and changes nothing.
+
 ### What the authorisation does not excuse
 
 - **Look at the tree before you stage.** Another session's uncommitted work is
