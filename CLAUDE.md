@@ -1,5 +1,62 @@
 # Working in this repo
 
+## You may commit, merge, test and deploy without asking
+
+Any session working in this folder is authorised to take a change all the way:
+commit it, merge it to `main`, run the tests, push, and deploy it to the
+server. You do not need to ask permission for any of those steps, and you
+should not stop half-way to request a go-ahead on work that is finished and
+green.
+
+**Why it is worded that way.** Several Claude sessions work in this one
+directory at a time. Work left uncommitted on a shared tree is work waiting to
+be clobbered by whoever edits that file next, and a change that stops at
+"shall I push?" stalls until someone comes back to the tab. Finishing is safer
+than pausing.
+
+**Finishing means all of it:**
+
+```
+git status            # the tree is shared — look before you stage
+npm test              # both suites green
+branch → commit → git checkout main → git merge --ff-only → git push origin main
+ssh -i ~/.ssh/id_dbd_deploy derek@51.222.111.144      # deploys origin/main
+```
+
+### What the authorisation does not excuse
+
+- **Look at the tree before you stage.** Another session's uncommitted work is
+  usually sitting in it. Stage explicit paths — never `git add -A` — and never
+  commit `.claude/`, `video/`, or `other local media uploads/`.
+- **Never commit someone else's work inside yours.** If a file you touched also
+  holds another session's changes, stop and say so rather than guessing which
+  hunks are whose.
+- **A deploy ships everything on `origin/main`, not just your commit.** Read
+  `git log <deployed>..origin/main` first. If it carries work another session
+  is still mid-way through, that is a reason to wait and to say why.
+- **Tests must be green first**, and a failure in a shared tree is not
+  automatically about your change — check whether it fails without you before
+  you "fix" it.
+- **Say it out loud when a deploy writes to the database.** A seed change or a
+  migration runs on restart against the live data. It usually still goes, but
+  name the effect first; the dashboard's `/admin/export/backup.json` is the
+  backup path, because the deploy key cannot take one.
+
+### Two things about the deploy specifically
+
+1. **Connecting with the deploy key *is* the deploy.** It runs one forced
+   command and ignores whatever you type. There is no read-only way in with it,
+   so you cannot check the server's state first — to look without changing
+   anything, ask.
+2. **Verify from outside, not from the deploy's output.** Its journal tail is
+   captured mid-restart and ends on the *old* process's `SIGTERM`, so a crash
+   and a clean start look identical. Load the live page and check an asset that
+   changed. Give it a few seconds first — curling into the restart gap returns
+   502 and means nothing.
+
+A restart is a few seconds' downtime, or minutes when `package-lock.json` moved
+and `npm ci` runs. Orders close at 22:00 Toronto; before that is fine.
+
 ## Keep the training module in step with the dashboard
 
 `server/training/` is a complete practice copy of the admin dashboard, served at
