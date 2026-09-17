@@ -1,27 +1,36 @@
 # Working in this repo
 
-## You may commit, merge, test and deploy without asking
+## Take a change all the way — but ask before the final push
 
-Any session working in this folder is authorised to take a change all the way:
-commit it, merge it to `main`, run the tests, push, and deploy it to the
-server. You do not need to ask permission for any of those steps, and you
-should not stop half-way to request a go-ahead on work that is finished and
-green.
+Any session working in this folder is authorised to do the work without asking:
+branch, commit, merge to `main`, and run the tests. Do not stop half-way to
+request a go-ahead on work that is finished and green.
 
-**Why it is worded that way.** Several Claude sessions work in this one
-directory at a time. Work left uncommitted on a shared tree is work waiting to
-be clobbered by whoever edits that file next, and a change that stops at
-"shall I push?" stalls until someone comes back to the tab. Finishing is safer
-than pausing.
+**Then stop and ask, once, before it leaves the laptop** — before
+`git push origin main` and before the deploy. That is the checkpoint. Say what
+is about to go out and wait for a yes.
 
-**Finishing means all of it:**
+**Why both halves.** Several Claude sessions work in this one directory at a
+time. Work left uncommitted on a shared tree is waiting to be clobbered by
+whoever edits that file next, so committing promptly is the safe move and needs
+no permission. But pushing and deploying are the steps that reach a live
+business and cannot be quietly undone, and Demian wants eyes on them — so the
+last step is his, every time, however small the change looks.
+
+**The sequence:**
 
 ```
 git status            # the tree is shared — look before you stage
 npm test              # both suites green
-branch → commit → git checkout main → git merge --ff-only → git push origin main
+branch → commit → git checkout main → git merge --ff-only
+                      # ── ask here ──
+git push origin main
 ssh -i ~/.ssh/id_dbd_deploy derek@51.222.111.144      # deploys origin/main
 ```
+
+One ask covers the push and the deploy together when they go together. "Deploy
+when done" or "push it" said in advance is that yes — do not re-ask for the
+same change.
 
 ### What the authorisation does not excuse
 
