@@ -1,36 +1,41 @@
 # Working in this repo
 
-## Take a change all the way — but ask before the final push
+## Ask before you start, then take it all the way
 
-Any session working in this folder is authorised to do the work without asking:
-branch, commit, merge to `main`, and run the tests. Do not stop half-way to
-request a go-ahead on work that is finished and green.
+**The checkpoint is at the front.** Before starting work that is meant to land,
+say what you are going to change and that you will take it through to deployed.
+Wait for a yes.
 
-**Then stop and ask, once, before it leaves the laptop** — before
-`git push origin main` and before the deploy. That is the checkpoint. Say what
-is about to go out and wait for a yes.
+**After the yes, run the whole thing** — branch, commit, merge to `main`, test,
+push, deploy, verify — and report the SHA. Do not stop in the middle to ask
+again. A go on the work is a go on shipping it: nobody says "commit that" and
+means "and then stop".
 
-**Why both halves.** Several Claude sessions work in this one directory at a
-time. Work left uncommitted on a shared tree is waiting to be clobbered by
-whoever edits that file next, so committing promptly is the safe move and needs
-no permission. But pushing and deploying are the steps that reach a live
-business and cannot be quietly undone, and Demian wants eyes on them — so the
-last step is his, every time, however small the change looks.
+**Why this way round.** The decision worth a human is *should this change
+land*, and that is answerable before the work, when it is cheap to say no. Once
+it is written, merged and green, "shall I push?" has one obvious answer and the
+question only adds a wait. An earlier version of this rule put the gate after
+the merge; it was moved on 2026-09-17 for exactly that reason.
 
-**The sequence:**
+**The sequence, once you have the go:**
 
 ```
 git status            # the tree is shared — look before you stage
-npm test              # both suites green
 branch → commit → git checkout main → git merge --ff-only
-                      # ── ask here ──
+npm test              # both suites green
 git push origin main
 ssh -i ~/.ssh/id_dbd_deploy derek@51.222.111.144      # deploys origin/main
+                      # then verify from outside — see below
 ```
 
-One ask covers the push and the deploy together when they go together. "Deploy
-when done" or "push it" said in advance is that yes — do not re-ask for the
-same change.
+**What still stops you mid-flight**, because these are new information rather
+than a step in the plan: tests that go red, another session's uncommitted work
+in a file you need, or a deploy that turns out to carry someone else's
+half-finished commits. Say what you found and stop. That is not re-asking
+permission, it is reporting a thing the go did not cover.
+
+Small and obvious work — a typo, a comment, a doc line — does not need a
+ceremony. Use judgement: the gate is for changes that alter what the app does.
 
 ### Pushing works — do not "fix" the credential helper
 
