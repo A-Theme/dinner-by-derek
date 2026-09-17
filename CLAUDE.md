@@ -37,46 +37,43 @@ permission, it is reporting a thing the go did not cover.
 Small and obvious work — a typo, a comment, a doc line — does not need a
 ceremony. Use judgement: the gate is for changes that alter what the app does.
 
-### Pushing works — do not "fix" the credential helper
+### If a push asks for a username and password
 
-`credential.helper` on this laptop is set, globally and deliberately, to:
+The working setting on this laptop, confirmed 2026-09-17 after a Git reinstall:
 
 ```
-C:/PROGRA~1/Git/mingw64/libexec/git-core/GIT-CR~1.EXE
+credential.helper = manager
 ```
 
-That is `git-credential-wincred.exe` by absolute 8.3 path. **Leave it alone.**
-It looks wrong and is not. Three things on this machine make the obvious
-settings fail, all confirmed 2026-09-17:
+Git Credential Manager 2.9.1, global scope. A push authenticates with no
+prompt; where it does prompt, it opens a browser and Demian signs in to GitHub
+the normal way. There is no password to type and no token to create — GitHub
+stopped accepting passwords for git in August 2021, so a terminal prompt asking
+for one is always a symptom, never a question to answer.
 
-- `git --exec-path` returns `/usr/lib/git-core`, a POSIX path Windows cannot
-  follow, so **any helper named by short name** — `manager`, `wincred` — fails
-  with `git: 'credential-x' is not a git command`.
-- **Git Credential Manager crashes** even when found by absolute path
-  (`FileLoadException: System.Memory 4.0.1.1`), so `manager` cannot work here.
-- Git runs the helper through a shell, so **a path containing a space splits**:
-  `C:/Program Files/...` becomes `C:/Program: No such file or directory`. The
-  quoted long-path form does not survive `git config` either.
-
-The 8.3 path is the one form that dodges all three. If a push ever asks for a
-username and password again, that value has been reset — put it back rather
-than reaching for `manager`. Setting it needs `git config --global`, a shell,
-and the value above.
-
-The underlying Git install is damaged and a reinstall would repair the first
-two faults properly. Until someone does that, this is the working state.
+**If it breaks again, the history is worth knowing.** The machine shipped GCM
+**2.3.2**, which crashed on startup loading `System.Memory 4.0.1.1` and could
+not work however it was configured. The workaround was
+`git-credential-wincred.exe` pointed at by absolute 8.3 path
+(`C:/PROGRA~1/Git/mingw64/libexec/git-core/GIT-CR~1.EXE`) — native, so it could
+not crash, and short, because **git runs the helper through a shell and a path
+containing a space splits**: `C:/Program Files/...` becomes
+`C:/Program: No such file or directory`. Reinstalling Git took GCM to 2.9.1 and
+fixed it properly. Prefer `manager`; the wincred path is the fallback if GCM
+ever breaks again.
 
 ### Testing whether auth works
 
 **This repo is public**, so `git ls-remote` succeeds with authentication
-completely broken. It is not a test and reported success twice while pushes
-were failing. Use:
+completely broken. It is not a test, and it reported success twice while real
+pushes were failing. Use:
 
 ```
 git push --dry-run origin main
 ```
 
-which authenticates for write and changes nothing.
+which authenticates for write and changes nothing. More generally: a check that
+passes when the thing is broken is not a check.
 
 ### What the authorisation does not excuse
 
